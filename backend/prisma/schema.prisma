@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Stadium {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  location  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  fleet     Fleet[]
+  users     User[]
+}
+
+model Fleet {
+  id              String           @id @default(cuid())
+  unitNumber      String           @unique
+  carType         String           // 2-seater, 4-seater, 6-seater
+  keyId           String           @unique
+  keyColorCode    String           // Color coding per PRD
+  status          String           @default("Ready") // Ready, In-Use, Maintenance, Damaged
+  vapsPermit      String?
+  stadiumId       String
+  stadium         Stadium          @relation(fields: [stadiumId], references: [id])
+  assignedToFA    String?          // LOC Trigram (LOG, MOB, etc.)
+  handoverLogs    HandoverLog[]
+  maintenanceLogs MaintenanceLog[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([stadiumId])
+  @@index([status])
+}
+
+model User {
+  id              String         @id @default(cuid())
+  accreditationId String         @unique
+  name            String
+  email           String         @unique
+  passwordHash    String
+  role            String         // Admin, LCC, FocalPoint, Contractor
+  faTrigram       String?        // LOG, MOB, SPS, VUM, GOP
+  stadiumId       String?
+  stadium         Stadium?       @relation(fields: [stadiumId], references: [id])
+  handoverLogs    HandoverLog[]
+  refreshTokens   RefreshToken[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([stadiumId])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model HandoverLog {
+  id             String   @id @default(cuid())
+  fleetId        String
+  fleet          Fleet    @relation(fields: [fleetId], references: [id])
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  action         String   // CheckOut, CheckIn
+  timestamp      DateTime @default(now())
+  latitude       Float?
+  longitude      Float?
+  conditionNotes String?
+  signatureUrl   String?  // MinIO URL
+  photosUrls     String[] // Array of MinIO URLs
+  createdAt      DateTime @default(now())
+
+  @@index([fleetId])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+model MaintenanceLog {
+  id               String    @id @default(cuid())
+  fleetId          String
+  fleet            Fleet     @relation(fields: [fleetId], references: [id])
+  reportedBy       String    // User ID
+  issueDescription String
+  reportedAt       DateTime  @default(now())
+  contractorId     String?   // User ID of assigned contractor
+  fixDescription   String?
+  fixedAt          DateTime?
+  status           String    @default("Pending") // Pending, InProgress, Fixed
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([fleetId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String   // Fleet, User, Handover, etc.
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([timestamp])
+}
