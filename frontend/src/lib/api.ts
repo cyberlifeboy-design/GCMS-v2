@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = ((import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api/v1') || 'http://localhost:3001/api/v1';
+// Use Vite environment variable with fallback
+const API_URL = (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 export const apiClient = axios.create({
     baseURL: API_URL,

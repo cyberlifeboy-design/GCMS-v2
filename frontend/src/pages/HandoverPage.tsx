@@ -287,6 +287,14 @@ export function HandoverPage() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
+        // Make canvas responsive
+        const container = canvas.parentElement;
+        if (container) {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width - 8; // Account for padding
+            canvas.height = 150;
+        }
+
         // Set up canvas for drawing
         ctx.strokeStyle = 'black';
         ctx.lineWidth = 2;
@@ -297,31 +305,35 @@ export function HandoverPage() {
         let lastX = 0;
         let lastY = 0;
 
-        const startDrawing = (e: MouseEvent | TouchEvent) => {
-            isDrawing = true;
+        const getCoordinates = (e: MouseEvent | TouchEvent) => {
             const rect = canvas.getBoundingClientRect();
             const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
             const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-            lastX = clientX - rect.left;
-            lastY = clientY - rect.top;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        };
+
+        const startDrawing = (e: MouseEvent | TouchEvent) => {
+            isDrawing = true;
+            const coords = getCoordinates(e);
+            lastX = coords.x;
+            lastY = coords.y;
         };
 
         const draw = (e: MouseEvent | TouchEvent) => {
             if (!isDrawing) return;
             e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-            const currentX = clientX - rect.left;
-            const currentY = clientY - rect.top;
+            const coords = getCoordinates(e);
 
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
-            ctx.lineTo(currentX, currentY);
+            ctx.lineTo(coords.x, coords.y);
             ctx.stroke();
 
-            lastX = currentX;
-            lastY = currentY;
+            lastX = coords.x;
+            lastY = coords.y;
         };
 
         const stopDrawing = () => {
@@ -335,8 +347,8 @@ export function HandoverPage() {
         canvas.addEventListener('mouseout', stopDrawing);
 
         // Touch events
-        canvas.addEventListener('touchstart', startDrawing);
-        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchstart', startDrawing, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
         canvas.addEventListener('touchend', stopDrawing);
 
         return () => {
@@ -631,9 +643,7 @@ export function HandoverPage() {
                             <div className="border rounded-md p-1 bg-gray-50">
                                 <canvas
                                     ref={checkoutSigRef}
-                                    width={350}
-                                    height={150}
-                                    className="border border-gray-300 rounded bg-white cursor-crosshair touch-none"
+                                    className="w-full h-[150px] border border-gray-300 rounded bg-white cursor-crosshair touch-none"
                                 />
                             </div>
                         </div>
@@ -716,9 +726,7 @@ export function HandoverPage() {
                             <div className="border rounded-md p-1 bg-gray-50">
                                 <canvas
                                     ref={checkinSigRef}
-                                    width={350}
-                                    height={150}
-                                    className="border border-gray-300 rounded bg-white cursor-crosshair touch-none"
+                                    className="w-full h-[150px] border border-gray-300 rounded bg-white cursor-crosshair touch-none"
                                 />
                             </div>
                         </div>
