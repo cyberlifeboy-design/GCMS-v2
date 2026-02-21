@@ -50,7 +50,7 @@ export function MaintenancePage() {
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
     const { user: currentUser } = useAuthStore();
 
     // Modal states
@@ -90,8 +90,8 @@ export function MaintenancePage() {
                 maintenanceApi.getAll(),
                 fleetApi.getAll(),
             ]);
-            setTasks(tasksRes.data);
-            setFleet(fleetRes.data);
+            setTasks(tasksRes.data.data || []);
+            setFleet(fleetRes.data.data || []);
         } catch (error) {
             console.error('Failed to load data:', error);
         } finally {
@@ -102,7 +102,7 @@ export function MaintenancePage() {
     const loadContractors = async () => {
         try {
             const response = await usersApi.getAll();
-            const contractorUsers = response.data.filter((u: any) => u.role === 'Contractor');
+            const contractorUsers = (response.data.data || []).filter((u: any) => u.role === 'Contractor');
             setContractors(contractorUsers);
         } catch (error) {
             console.error('Failed to load contractors:', error);
@@ -112,7 +112,7 @@ export function MaintenancePage() {
     const loadFleetHistory = async (fleetId: string) => {
         try {
             const response = await maintenanceApi.getHistoryByFleet(fleetId);
-            setSelectedFleetHistory(response.data);
+            setSelectedFleetHistory(response.data.data || []);
         } catch (error) {
             console.error('Failed to load history:', error);
         }
@@ -123,7 +123,7 @@ export function MaintenancePage() {
             t.fleet?.unitNumber?.toLowerCase().includes(search.toLowerCase()) ||
             t.issueDescription?.toLowerCase().includes(search.toLowerCase()) ||
             t.contractor?.name?.toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = !statusFilter || t.status === statusFilter;
+        const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
 
@@ -225,10 +225,10 @@ export function MaintenancePage() {
                         </div>
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
                             <SelectTrigger className="w-40">
-                                <SelectValue placeholder="Filter by status" />
+                                <SelectValue placeholder="All Status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Status</SelectItem>
+                                <SelectItem value="all">All Status</SelectItem>
                                 <SelectItem value="Pending">Pending</SelectItem>
                                 <SelectItem value="InProgress">In Progress</SelectItem>
                                 <SelectItem value="Fixed">Fixed</SelectItem>

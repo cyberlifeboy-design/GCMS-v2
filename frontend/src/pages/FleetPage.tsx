@@ -12,7 +12,7 @@ export function FleetPage() {
     const [fleet, setFleet] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
 
     useEffect(() => {
         loadFleet();
@@ -21,9 +21,9 @@ export function FleetPage() {
     const loadFleet = async () => {
         try {
             setLoading(true);
-            const params = statusFilter ? { status: statusFilter } : {};
+            const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
             const response = await fleetApi.getAll(params);
-            setFleet(response.data);
+            setFleet(response.data.data || []);
         } catch (error) {
             console.error('Failed to load fleet:', error);
         } finally {
@@ -64,10 +64,10 @@ export function FleetPage() {
                         </div>
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
                             <SelectTrigger className="w-40">
-                                <SelectValue placeholder="Filter by status" />
+                                <SelectValue placeholder="All Status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Status</SelectItem>
+                                <SelectItem value="all">All Status</SelectItem>
                                 <SelectItem value="Ready">Ready</SelectItem>
                                 <SelectItem value="In-Use">In-Use</SelectItem>
                                 <SelectItem value="Maintenance">Maintenance</SelectItem>

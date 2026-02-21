@@ -10,7 +10,7 @@ export function DashboardPage() {
 
     useEffect(() => {
         fleetApi.getAll().then(res => {
-            const data = res.data;
+            const data = res.data.data || [];
             setStats({
                 total: data.length,
                 ready: data.filter((v: any) => v.status === 'Ready').length,

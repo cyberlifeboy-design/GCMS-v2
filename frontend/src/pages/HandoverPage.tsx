@@ -96,8 +96,8 @@ export function HandoverPage() {
                 handoverApi.getHistory(),
                 fleetApi.getAll(),
             ]);
-            setHistory(historyRes.data);
-            const allFleet = fleetRes.data;
+            setHistory(historyRes.data.data || []);
+            const allFleet = fleetRes.data.data || [];
             setAvailableFleet(allFleet.filter((v: FleetVehicle) => v.status === 'Ready'));
             setInUseFleet(allFleet.filter((v: FleetVehicle) => v.status === 'In-Use'));
         } catch (error) {

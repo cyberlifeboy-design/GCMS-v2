@@ -35,7 +35,7 @@ export function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [roleFilter, setRoleFilter] = useState('');
+    const [roleFilter, setRoleFilter] = useState('all');
     const { user: currentUser } = useAuthStore();
 
     // Modal states
@@ -52,7 +52,7 @@ export function UsersPage() {
         email: '',
         role: 'FocalPoint',
         accreditationId: '',
-        faTrigram: '',
+        faTrigram: 'none',
         password: '',
     });
     const [bulkData, setBulkData] = useState('');
@@ -67,7 +67,7 @@ export function UsersPage() {
         try {
             setLoading(true);
             const response = await usersApi.getAll();
-            setUsers(response.data);
+            setUsers(response.data.data || []);
         } catch (error) {
             console.error('Failed to load users:', error);
         } finally {
@@ -80,7 +80,7 @@ export function UsersPage() {
             u.name?.toLowerCase().includes(search.toLowerCase()) ||
             u.email?.toLowerCase().includes(search.toLowerCase()) ||
             u.accreditationId?.toLowerCase().includes(search.toLowerCase());
-        const matchesRole = !roleFilter || u.role === roleFilter;
+        const matchesRole = roleFilter === 'all' || u.role === roleFilter;
         return matchesSearch && matchesRole;
     });
 
@@ -93,7 +93,7 @@ export function UsersPage() {
                 email: formData.email,
                 role: formData.role,
                 accreditationId: formData.accreditationId,
-                faTrigram: formData.faTrigram || undefined,
+                faTrigram: formData.faTrigram && formData.faTrigram !== 'none' ? formData.faTrigram : undefined,
                 password: formData.password || 'changeme123',
             }]);
             setIsAddModalOpen(false);
@@ -116,7 +116,7 @@ export function UsersPage() {
                 name: formData.name,
                 email: formData.email,
                 role: formData.role,
-                faTrigram: formData.faTrigram || undefined,
+                faTrigram: formData.faTrigram && formData.faTrigram !== 'none' ? formData.faTrigram : undefined,
             });
             setIsEditModalOpen(false);
             setSelectedUser(null);
@@ -207,7 +207,7 @@ export function UsersPage() {
             email: user.email,
             role: user.role,
             accreditationId: user.accreditationId,
-            faTrigram: user.faTrigram || '',
+            faTrigram: user.faTrigram || 'none',
             password: '',
         });
         setIsEditModalOpen(true);
@@ -224,7 +224,7 @@ export function UsersPage() {
             email: '',
             role: 'FocalPoint',
             accreditationId: '',
-            faTrigram: '',
+            faTrigram: 'none',
             password: '',
         });
     };
@@ -261,10 +261,10 @@ export function UsersPage() {
                         </div>
                         <Select value={roleFilter} onValueChange={setRoleFilter}>
                             <SelectTrigger className="w-40">
-                                <SelectValue placeholder="Filter by role" />
+                                <SelectValue placeholder="All Roles" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Roles</SelectItem>
+                                <SelectItem value="all">All Roles</SelectItem>
                                 <SelectItem value="Admin">Admin</SelectItem>
                                 <SelectItem value="LCC">LCC</SelectItem>
                                 <SelectItem value="FocalPoint">Focal Point</SelectItem>
@@ -403,7 +403,7 @@ export function UsersPage() {
                                     <SelectValue placeholder="Select FA" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
+                                    <SelectItem value="none">None</SelectItem>
                                     {faTrigramOptions.map(fa => (
                                         <SelectItem key={fa} value={fa}>{fa}</SelectItem>
                                     ))}
@@ -485,7 +485,7 @@ export function UsersPage() {
                                     <SelectValue placeholder="Select FA" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
+                                    <SelectItem value="none">None</SelectItem>
                                     {faTrigramOptions.map(fa => (
                                         <SelectItem key={fa} value={fa}>{fa}</SelectItem>
                                     ))}

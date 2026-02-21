@@ -40,12 +40,12 @@ export function ReportsPage() {
             setLoading(true);
             const [statsRes, maintenanceRes, handoverRes] = await Promise.all([
                 reportsApi.getUtilization().catch(() => ({ data: null })),
-                maintenanceApi.getAll().catch(() => ({ data: [] })),
-                handoverApi.getHistory().catch(() => ({ data: [] })),
+                maintenanceApi.getAll().catch(() => ({ data: { data: [] } })),
+                handoverApi.getHistory().catch(() => ({ data: { data: [] } })),
             ]);
             setStats(statsRes.data);
-            setMaintenanceLogs(maintenanceRes.data);
-            setHandoverLogs(handoverRes.data.slice(0, 50)); // Limit to last 50
+            setMaintenanceLogs(maintenanceRes.data.data || []);
+            setHandoverLogs((handoverRes.data.data || []).slice(0, 50)); // Limit to last 50
         } catch (error) {
             console.error('Failed to load report data:', error);
         } finally {
