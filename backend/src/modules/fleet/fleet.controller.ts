@@ -12,11 +12,11 @@ const CART_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
 const CART_STATUSES = ['Available', 'Assigned', 'Dispatched', 'Under Maintenance'] as const;
 
 const createFleetSchema = z.object({
-    carNumber: z.string().min(1),
-    carType: z.enum(CART_TYPES),
+    carNumber: z.string().min(1, 'Car number is required'),
+    carType: z.enum(CART_TYPES, { errorMap: () => ({ message: 'Car type must be one of: Cargo, Accessibility, 6-Seater, 4-Seater' }) }),
     status: z.enum(CART_STATUSES).default('Available'),
     requiresVAP: z.boolean().default(false),
-    stadiumId: z.string().min(1),
+    stadiumId: z.string().min(1, 'Stadium is required'),
     assignedUserId: z.string().optional(),
 });
 

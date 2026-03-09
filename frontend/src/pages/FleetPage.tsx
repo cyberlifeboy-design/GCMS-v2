@@ -161,8 +161,9 @@ export function FleetPage() {
         c.carNumber?.toLowerCase().includes(search.toLowerCase())
     );
 
-    const openCreate = () => {
-        const defaultStadiumId = !isSuperAdmin ? user?.stadiumId || '' : '';
+    const openCreate = async () => {
+        // For non-SuperAdmin, use their assigned stadium
+        const defaultStadiumId = isSuperAdmin ? '' : (user?.stadiumId || '');
         setFormData({ ...EMPTY_FORM, stadiumId: defaultStadiumId });
         setCartModal({ open: true, mode: 'create' });
     };
@@ -186,16 +187,23 @@ export function FleetPage() {
 
     const handleSaveCart = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.stadiumId) {
+
+        // For non-SuperAdmin, ensure stadiumId comes from user's assignment
+        const submitData = {
+            ...formData,
+            stadiumId: isSuperAdmin ? formData.stadiumId : (user?.stadiumId || formData.stadiumId)
+        };
+
+        if (!submitData.stadiumId) {
             alert('Please select a stadium');
             return;
         }
         setSubmitting(true);
         try {
             if (cartModal.mode === 'create') {
-                await fleetApi.create(formData);
+                await fleetApi.create(submitData);
             } else {
-                await fleetApi.update(cartModal.cart!.id, formData);
+                await fleetApi.update(cartModal.cart!.id, submitData);
             }
             setCartModal({ open: false, mode: 'create' });
             loadFleet();
@@ -472,8 +480,9 @@ export function FleetPage() {
                             ) : (
                                 <div className="space-y-2">
                                     <Label>Stadium</Label>
-                                    <Input value="Your assigned venue" disabled className="bg-muted" />
+                                    <Input value={stadiums.find(s => s.id === user?.stadiumId)?.name || 'Your assigned venue'} disabled className="bg-muted" />
                                     <p className="text-xs text-muted-foreground">Carts are created at your assigned venue</p>
+                                    <input type="hidden" name="stadiumId" value={user?.stadiumId || ''} />
                                 </div>
                             )
                         ) : (
