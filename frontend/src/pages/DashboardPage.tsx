@@ -89,25 +89,6 @@ export function DashboardPage() {
                     </Card>
                 ))}
             </div>
-
-            {/* Quick Navigation */}
-            <div>
-                <h2 className="text-lg font-semibold mb-3">Quick Navigation</h2>
-                <div className="flex flex-wrap gap-3">
-                    <Button asChild variant="outline"><Link to="/fleet">Fleet Management</Link></Button>
-                    <Button asChild variant="outline"><Link to="/handover">Handover</Link></Button>
-                    <Button asChild variant="outline"><Link to="/maintenance">Maintenance</Link></Button>
-                    {(user?.role === 'Admin' || user?.role === 'SuperAdmin') && (
-                        <Button asChild variant="outline"><Link to="/users">Users</Link></Button>
-                    )}
-                    {(user?.role === 'Admin' || user?.role === 'SuperAdmin' || user?.role === 'Observer') && (
-                        <Button asChild variant="outline"><Link to="/reports">Reports</Link></Button>
-                    )}
-                    {user?.role === 'SuperAdmin' && (
-                        <Button asChild variant="outline"><Link to="/settings">Settings</Link></Button>
-                    )}
-                </div>
-            </div>
         </div>
     );
 }

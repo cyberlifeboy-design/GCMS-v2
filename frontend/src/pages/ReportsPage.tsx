@@ -13,7 +13,6 @@ interface UtilizationData {
     available?: number;
     dispatched?: number;
     underMaintenance?: number;
-    retired?: number;
     utilizationRate?: number;
 }
 
@@ -122,13 +121,12 @@ export function ReportsPage() {
                             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                         </div>
                     ) : utilization ? (
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {[
                                 { label: 'Total Carts', value: total, color: 'text-blue-600' },
                                 { label: 'Available', value: utilization.available ?? 0, color: 'text-green-600' },
                                 { label: 'Dispatched', value: utilization.dispatched ?? 0, color: 'text-indigo-600' },
                                 { label: 'Maintenance', value: utilization.underMaintenance ?? 0, color: 'text-yellow-600' },
-                                { label: 'Retired', value: utilization.retired ?? 0, color: 'text-gray-600' },
                             ].map(({ label, value, color }) => (
                                 <div key={label} className="text-center p-4 bg-muted rounded-lg">
                                     <p className={`text-4xl font-bold ${color}`}>{value}</p>

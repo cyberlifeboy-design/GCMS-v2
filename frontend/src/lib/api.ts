@@ -65,9 +65,10 @@ export const fleetApi = {
         apiClient.put(`/fleet/${id}`, data),
     delete: (id: string) =>
         apiClient.delete(`/fleet/${id}`),
-    bulkImport: (file: File) => {
+    bulkImport: (file: File, stadiumId: string) => {
         const form = new FormData();
         form.append('file', file);
+        form.append('stadiumId', stadiumId);
         return apiClient.post('/fleet/bulk-import', form, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -104,6 +105,34 @@ export const maintenanceApi = {
         apiClient.patch(`/maintenance/${id}/status`, data),
     exportCsv: () =>
         apiClient.get('/maintenance/export', { responseType: 'blob' }),
+};
+
+// Stadiums
+export const stadiumsApi = {
+    getAll: (params?: Record<string, unknown>) =>
+        apiClient.get('/stadiums', { params }),
+    getById: (id: string) =>
+        apiClient.get(`/stadiums/${id}`),
+    create: (data: Record<string, unknown>) =>
+        apiClient.post('/stadiums', data),
+    update: (id: string, data: Record<string, unknown>) =>
+        apiClient.put(`/stadiums/${id}`, data),
+    delete: (id: string) =>
+        apiClient.delete(`/stadiums/${id}`),
+};
+
+// Departments
+export const departmentsApi = {
+    getAll: (params?: Record<string, unknown>) =>
+        apiClient.get('/departments', { params }),
+    getById: (id: string) =>
+        apiClient.get(`/departments/${id}`),
+    create: (data: Record<string, unknown>) =>
+        apiClient.post('/departments', data),
+    update: (id: string, data: Record<string, unknown>) =>
+        apiClient.put(`/departments/${id}`, data),
+    delete: (id: string) =>
+        apiClient.delete(`/departments/${id}`),
 };
 
 // Users  (roles: SuperAdmin / Admin / FA / Observer)

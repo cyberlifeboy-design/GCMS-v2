@@ -17,6 +17,22 @@ model Stadium {
   updatedAt   DateTime @updatedAt
   fleet       Fleet[]
   users       User[]
+  departments Department[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String?
+  stadiumId String
+  stadium   Stadium  @relation(fields: [stadiumId], references: [id])
+  users     User[]
+  fleet     Fleet[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, stadiumId])
+  @@index([stadiumId])
 }
 
 // Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
@@ -29,6 +45,8 @@ model Fleet {
   requiresVAP     Boolean          @default(false)
   stadiumId       String
   stadium         Stadium          @relation(fields: [stadiumId], references: [id])
+  departmentId    String?
+  department      Department?      @relation(fields: [departmentId], references: [id])
   assignedUserId  String?          // FA user assigned to this cart
   assignedUser    User?            @relation("FleetAssignedUser", fields: [assignedUserId], references: [id])
   handoverLogs    HandoverLog[]
@@ -39,6 +57,7 @@ model Fleet {
   @@index([stadiumId])
   @@index([status])
   @@index([assignedUserId])
+  @@index([departmentId])
 }
 
 // Roles: SuperAdmin, Admin, FA, Observer
@@ -52,6 +71,8 @@ model User {
   isActive        Boolean         @default(true)
   stadiumId       String?
   stadium         Stadium?        @relation(fields: [stadiumId], references: [id])
+  departmentId    String?
+  department      Department?     @relation(fields: [departmentId], references: [id])
   handoverLogs    HandoverLog[]
   refreshTokens   RefreshToken[]
   assignedCarts   Fleet[]         @relation("FleetAssignedUser")
@@ -61,6 +82,7 @@ model User {
 
   @@index([stadiumId])
   @@index([role])
+  @@index([departmentId])
 }
 
 model RefreshToken {

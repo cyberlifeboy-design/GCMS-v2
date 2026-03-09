@@ -11,6 +11,8 @@ const MaintenancePage = lazy(() => import('@/pages/MaintenancePage').then(m => (
 const UsersPage = lazy(() => import('@/pages/UsersPage').then(m => ({ default: m.UsersPage })));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const SystemSettingsPage = lazy(() => import('@/pages/SystemSettingsPage').then(m => ({ default: m.SystemSettingsPage })));
+const StadiumsPage = lazy(() => import('@/pages/StadiumsPage').then(m => ({ default: m.StadiumsPage })));
+const DepartmentsPage = lazy(() => import('@/pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
 
 function AppContent() {
     return (
@@ -31,9 +33,11 @@ function AppContent() {
                                     <Route path="/fleet" element={<FleetPage />} />
                                     <Route path="/handover" element={<HandoverPage />} />
                                     <Route path="/maintenance" element={<MaintenancePage />} />
-                                    <Route path="/users" element={<UsersPage />} />
+                                    <Route path="/stadiums" element={<StadiumsPage />} />
+                                    <Route path="/departments" element={<DepartmentsPage />} />
                                     <Route path="/reports" element={<ReportsPage />} />
                                     <Route path="/settings" element={<SystemSettingsPage />} />
+                                    <Route path="/stadiums" element={<StadiumsPage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>
                             </MainLayout>

@@ -69,11 +69,13 @@ export function FleetPage() {
     const [cartModal, setCartModal] = useState<{ open: boolean; mode: 'create' | 'edit'; cart?: FleetCart }>({ open: false, mode: 'create' });
     const [assignModal, setAssignModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
     const [deleteModal, setDeleteModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
+    const [bulkModal, setBulkModal] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState<CartFormData>(EMPTY_FORM);
     const [assignUserId, setAssignUserId] = useState('');
+    const [bulkStadiumId, setBulkStadiumId] = useState('');
 
     // Bulk import
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -228,13 +230,25 @@ export function FleetPage() {
     const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        const stadiumId = isSuperAdmin ? bulkStadiumId : (user?.stadiumId || '');
+        if (!stadiumId) {
+            alert('Stadium selection is required for bulk import.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
         try {
-            const res = await fleetApi.bulkImport(file);
+            setSubmitting(true);
+            const res = await fleetApi.bulkImport(file, stadiumId);
             const { created, errors } = res.data;
             setImportResult(`Imported ${created} carts. ${errors?.length ? `Errors: ${errors.length}` : ''}`);
             loadFleet();
+            setBulkModal(false);
         } catch (err: any) {
             setImportResult(err.response?.data?.error || 'Import failed');
+        } finally {
+            setSubmitting(false);
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -303,7 +317,13 @@ export function FleetPage() {
                 {isAdmin && (
                     <div className="flex gap-2">
                         <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleBulkImport} className="hidden" />
-                        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                        <Button variant="outline" onClick={() => {
+                            if (isSuperAdmin) {
+                                setBulkModal(true);
+                            } else {
+                                fileInputRef.current?.click();
+                            }
+                        }}>
                             <Upload className="w-4 h-4 mr-2" />Bulk Import
                         </Button>
                         <Button onClick={openCreate}>
@@ -515,6 +535,39 @@ export function FleetPage() {
                             Delete
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Import Modal for SuperAdmin to select stadium */}
+            <Dialog open={bulkModal} onOpenChange={setBulkModal}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Bulk Import Carts</DialogTitle>
+                        <DialogDescription>Select the stadium and upload your .xlsx or .xls file.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Target Stadium *</Label>
+                            <Select value={bulkStadiumId} onValueChange={setBulkStadiumId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select stadium" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {stadiums.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button 
+                            className="w-full" 
+                            disabled={!bulkStadiumId || submitting}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                            Choose File & Upload
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

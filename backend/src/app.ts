@@ -10,6 +10,7 @@ import userRoutes from './modules/users/users.routes';
 import reportRoutes from './modules/reports/reports.routes';
 import stadiumRoutes from './modules/stadiums/stadiums.routes';
 import settingsRoutes from './modules/settings/settings.routes';
+import departmentRoutes from './modules/departments/departments.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import logger from './config/logger';
@@ -75,6 +76,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/stadiums', stadiumRoutes);
 app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/departments', departmentRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2 } from 'lucide-react';
 
 const navItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
@@ -10,6 +10,8 @@ const navItems = [
     { name: 'Handover', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'] },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
     { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'] },
+    { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'] },
+    { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'] },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'] },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin'] },
 ];

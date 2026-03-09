@@ -10,8 +10,8 @@ import { useAuthStore } from '@/stores/authStore';
 interface Settings {
     tournamentName?: string;
     logoUrl?: string;
-    headerImageUrl?: string;
-    footerImageUrl?: string;
+    headerUrl?: string;
+    footerUrl?: string;
 }
 
 export function SystemSettingsPage() {
@@ -38,8 +38,8 @@ export function SystemSettingsPage() {
                 const d: Settings = res.data;
                 setTournamentName(d.tournamentName || '');
                 setLogoPrev(d.logoUrl || '');
-                setHeaderPrev(d.headerImageUrl || '');
-                setFooterPrev(d.footerImageUrl || '');
+                setHeaderPrev(d.headerUrl || '');
+                setFooterPrev(d.footerUrl || '');
             } catch (e) {
                 console.error(e);
             } finally {
@@ -58,8 +58,8 @@ export function SystemSettingsPage() {
             const fd = new FormData();
             fd.append('tournamentName', tournamentName);
             if (logoFile) fd.append('logo', logoFile);
-            if (headerFile) fd.append('headerImage', headerFile);
-            if (footerFile) fd.append('footerImage', footerFile);
+            if (headerFile) fd.append('header', headerFile);
+            if (footerFile) fd.append('footer', footerFile);
             await settingsApi.update(fd);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
