@@ -105,7 +105,15 @@ export class UsersController {
             // Admin can only update FA at own venue
             if (req.user?.role === 'Admin') {
                 const target = await usersService.getById(id);
-                if (!target || target.role !== 'FA' || target.stadiumId !== req.user.stadiumId) {
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only edit FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
                     res.status(403).json({ error: 'You can only edit FA users at your venue' });
                     return;
                 }
@@ -135,7 +143,15 @@ export class UsersController {
             // Admin can only deactivate FA at own venue
             if (req.user?.role === 'Admin') {
                 const target = await usersService.getById(id);
-                if (!target || target.role !== 'FA' || target.stadiumId !== req.user.stadiumId) {
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only manage FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
                     res.status(403).json({ error: 'You can only manage FA users at your venue' });
                     return;
                 }
@@ -159,7 +175,15 @@ export class UsersController {
             // Admin can only delete FA at own venue
             if (req.user?.role === 'Admin') {
                 const target = await usersService.getById(id);
-                if (!target || target.role !== 'FA' || target.stadiumId !== req.user.stadiumId) {
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only delete FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
                     res.status(403).json({ error: 'You can only delete FA users at your venue' });
                     return;
                 }

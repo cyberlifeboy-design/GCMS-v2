@@ -200,7 +200,16 @@ export function FleetPage() {
             setCartModal({ open: false, mode: 'create' });
             loadFleet();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to save cart');
+            const errorData = err.response?.data;
+            if (errorData?.details?.length) {
+                const messages = errorData.details.map((d: any) => {
+                    const field = d.path?.join('.') || 'Field';
+                    return `${field}: ${d.message}`;
+                }).join('\n');
+                alert(messages);
+            } else {
+                alert(errorData?.error || 'Failed to save cart');
+            }
         } finally {
             setSubmitting(false);
         }
@@ -214,7 +223,16 @@ export function FleetPage() {
             setDeleteModal({ open: false });
             loadFleet();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete cart');
+            const errorData = err.response?.data;
+            if (errorData?.details?.length) {
+                const messages = errorData.details.map((d: any) => {
+                    const field = d.path?.join('.') || 'Field';
+                    return `${field}: ${d.message}`;
+                }).join('\n');
+                alert(messages);
+            } else {
+                alert(errorData?.error || 'Failed to delete cart');
+            }
         } finally {
             setSubmitting(false);
         }
@@ -229,7 +247,16 @@ export function FleetPage() {
             setAssignModal({ open: false });
             loadFleet();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to assign user');
+            const errorData = err.response?.data;
+            if (errorData?.details?.length) {
+                const messages = errorData.details.map((d: any) => {
+                    const field = d.path?.join('.') || 'Field';
+                    return `${field}: ${d.message}`;
+                }).join('\n');
+                alert(messages);
+            } else {
+                alert(errorData?.error || 'Failed to assign user');
+            }
         } finally {
             setSubmitting(false);
         }

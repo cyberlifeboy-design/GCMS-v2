@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/lib/api';
+import { Loader2 } from 'lucide-react';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, logout, user } = useAuthStore();
@@ -27,8 +28,14 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
             });
     }, [isAuthenticated, user, logout]);
 
-    // Show nothing while checking (avoids flash of content)
-    if (verified === null) return null;
+    // Show loading spinner while checking auth
+    if (verified === null) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return verified ? <>{children}</> : <Navigate to="/login" replace />;
 }

@@ -102,7 +102,7 @@ model RefreshToken {
 model HandoverLog {
   id             String   @id @default(cuid())
   fleetId        String
-  fleet          Fleet    @relation(fields: [fleetId], references: [id])
+  fleet          Fleet    @relation(fields: [fleetId], references: [id], onDelete: Cascade)
   userId         String
   user           User     @relation(fields: [userId], references: [id])
   action         String   // CheckedIn, CheckedOut, IssueReported
@@ -120,7 +120,7 @@ model HandoverLog {
 model MaintenanceLog {
   id               String    @id @default(cuid())
   fleetId          String
-  fleet            Fleet     @relation(fields: [fleetId], references: [id])
+  fleet            Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
   reportedById     String
   reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
   issueDescription String

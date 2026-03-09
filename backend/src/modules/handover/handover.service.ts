@@ -14,17 +14,13 @@ export class HandoverService {
             throw new Error(`Vehicle is not available for check-in (Current status: ${vehicle.status})`);
         }
 
-        return prisma.$transaction(async (tx) => {
-            const log = await tx.handoverLog.create({
+        await prisma.$transaction(async (tx) => {
+            await tx.handoverLog.create({
                 data: {
                     fleetId: data.fleetId,
                     userId: data.userId,
                     action: 'CheckedIn',
                     conditionNotes: data.conditionNotes,
-                },
-                include: {
-                    fleet: { select: { carNumber: true, carType: true } },
-                    user: { select: { name: true } },
                 },
             });
 
@@ -32,9 +28,23 @@ export class HandoverService {
                 where: { id: data.fleetId },
                 data: { status: 'Dispatched' },
             });
-
-            return log;
         });
+
+        // Fetch the created log with relations after transaction completes
+        const log = await prisma.handoverLog.findFirst({
+            where: {
+                fleetId: data.fleetId,
+                userId: data.userId,
+                action: 'CheckedIn',
+            },
+            orderBy: { timestamp: 'desc' },
+            include: {
+                fleet: { select: { id: true, carNumber: true, carType: true, status: true } },
+                user: { select: { id: true, name: true, email: true } },
+            },
+        });
+
+        return log;
     }
 
     async checkOut(data: {
