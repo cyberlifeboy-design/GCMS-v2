@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Search, Download, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
+import { Pagination } from '@/components/shared/Pagination';
 
 interface MaintenanceLog {
     id: string;
@@ -19,10 +20,11 @@ interface MaintenanceLog {
     issueDescription: string;
     status: 'Open' | 'InProgress' | 'Resolved';
     photosUrls?: string[];
-    reportedBy?: { name: string };
+    reportedBy?: { name: string; phone?: string; role: string; email: string };
     resolutionNotes?: string;
     resolvedAt?: string;
     createdAt: string;
+    reportedAt?: string;
 }
 
 const statusColors: Record<string, string> = {
@@ -46,9 +48,17 @@ export function MaintenancePage() {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
 
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
+
     // Modals
     const [reportOpen, setReportOpen] = useState(false);
     const [statusOpen, setStatusOpen] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyFleet, setHistoryFleet] = useState<{ id: string; carNumber: string } | null>(null);
+    const [cartHistory, setCartHistory] = useState<MaintenanceLog[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const [selectedIssue, setSelectedIssue] = useState<MaintenanceLog | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [exporting, setExporting] = useState(false);
@@ -61,12 +71,19 @@ export function MaintenancePage() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const params = statusFilter !== 'all' ? { status: statusFilter } : {};
+            const params = {
+                ...(statusFilter !== 'all' && { status: statusFilter }),
+                page,
+                limit: pagination.limit
+            };
             const [issuesRes, fleetRes] = await Promise.all([
                 maintenanceApi.getAll(params),
                 fleetApi.getAll(),
             ]);
             setIssues(issuesRes.data.data || []);
+            if (issuesRes.data.pagination) {
+                setPagination(prev => ({ ...prev, ...issuesRes.data.pagination }));
+            }
             setFleet(fleetRes.data.data || []);
         } catch (e) {
             console.error(e);
@@ -75,7 +92,21 @@ export function MaintenancePage() {
         }
     };
 
-    useEffect(() => { loadData(); }, [statusFilter]);
+    useEffect(() => { loadData(); }, [statusFilter, page]);
+
+    const loadCartHistory = async (fleetId: string, carNumber: string) => {
+        setHistoryFleet({ id: fleetId, carNumber });
+        setHistoryOpen(true);
+        setHistoryLoading(true);
+        try {
+            const res = await maintenanceApi.getByFleet(fleetId);
+            setCartHistory(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
 
     const filtered = issues.filter(i =>
         i.fleet?.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
@@ -176,7 +207,7 @@ export function MaintenancePage() {
                                 className="pl-10"
                             />
                         </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
                             <SelectTrigger className="w-44"><SelectValue placeholder="All Statuses" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Statuses</SelectItem>
@@ -185,7 +216,7 @@ export function MaintenancePage() {
                         </Select>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -197,16 +228,16 @@ export function MaintenancePage() {
                                 <TableHead>Reported At</TableHead>
                                 <TableHead>Photos</TableHead>
                                 <TableHead>Resolution</TableHead>
-                                {canUpdateStatus && <TableHead className="text-right">Actions</TableHead>}
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={canUpdateStatus ? 9 : 8} className="text-center py-8">
+                                <TableRow><TableCell colSpan={9} className="text-center py-8">
                                     <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                                 </TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={canUpdateStatus ? 9 : 8} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
                             ) : filtered.map(issue => (
                                 <TableRow key={issue.id}>
                                     <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
@@ -217,12 +248,17 @@ export function MaintenancePage() {
                                     </TableCell>
                                     <TableCell className="max-w-xs truncate">{issue.issueDescription}</TableCell>
                                     <TableCell><Badge className={statusColors[issue.status]}>{issue.status}</Badge></TableCell>
-                                    <TableCell>{issue.reportedBy?.name || '—'}</TableCell>
-                                    <TableCell className="text-sm">{new Date(issue.createdAt).toLocaleDateString()}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">{issue.reportedBy?.name || '—'}</span>
+                                            {issue.reportedBy?.phone && <span className="text-[10px] text-muted-foreground">{issue.reportedBy.phone} ({issue.reportedBy.role})</span>}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-sm">{new Date(issue.reportedAt || issue.createdAt).toLocaleDateString()}</TableCell>
                                     <TableCell>
                                         <div className="flex gap-1">
                                             {issue.photosUrls?.map((url, idx) => (
-                                                <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-8 h-8 border rounded overflow-hidden flex-shrink-0 bg-muted">
+                                                <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-8 h-8 border rounded overflow-hidden flex-shrink-0 bg-muted hover:opacity-80 transition-opacity">
                                                     <img src={url} alt="issue" className="w-full h-full object-cover" />
                                                 </a>
                                             )) || '—'}
@@ -231,19 +267,25 @@ export function MaintenancePage() {
                                     <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
                                         {issue.resolutionNotes || '—'}
                                     </TableCell>
-                                    {canUpdateStatus && (
-                                        <TableCell className="text-right">
-                                            {issue.status !== 'Resolved' && (
-                                                <Button variant="ghost" size="sm" onClick={() => openStatusModal(issue)}>
-                                                    Update Status
-                                                </Button>
+                                    <TableCell className="text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <Button variant="outline" size="sm" onClick={() => loadCartHistory(issue.fleetId, issue.fleet.carNumber)}>History</Button>
+                                            {canUpdateStatus && issue.status !== 'Resolved' && (
+                                                <Button variant="ghost" size="sm" onClick={() => openStatusModal(issue)}>Update</Button>
                                             )}
-                                        </TableCell>
-                                    )}
+                                        </div>
+                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
+                    <Pagination
+                        page={page}
+                        totalPages={pagination.totalPages}
+                        onPageChange={setPage}
+                        total={pagination.total}
+                        limit={pagination.limit}
+                    />
                 </CardContent>
             </Card>
 
@@ -268,33 +310,16 @@ export function MaintenancePage() {
                         </div>
                         <div className="space-y-2">
                             <Label>Issue Description *</Label>
-                            <textarea
-                                className="w-full min-h-[100px] p-3 border rounded-md text-sm"
-                                value={reportForm.issueDescription}
-                                onChange={e => setReportForm(f => ({ ...f, issueDescription: e.target.value }))}
-                                placeholder="Describe the issue in detail…"
-                                required
-                            />
+                            <textarea className="w-full min-h-[100px] p-3 border rounded-md text-sm" value={reportForm.issueDescription} onChange={e => setReportForm(f => ({ ...f, issueDescription: e.target.value }))} placeholder="Describe the issue in detail…" required />
                         </div>
                         <div className="space-y-2">
                             <Label>Photos (optional, max 5)</Label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={e => setPhotoFiles(Array.from(e.target.files || []).slice(0, 5))}
-                                className="w-full text-sm"
-                            />
-                            {photoFiles.length > 0 && (
-                                <p className="text-xs text-muted-foreground">{photoFiles.length} file(s) selected</p>
-                            )}
+                            <Input type="file" accept="image/*" multiple onChange={e => setPhotoFiles(Array.from(e.target.files || []).slice(0, 5))} />
+                            {photoFiles.length > 0 && <p className="text-xs text-muted-foreground">{photoFiles.length} file(s) selected</p>}
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setReportOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Report Issue
-                            </Button>
+                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Report Issue</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -312,30 +337,72 @@ export function MaintenancePage() {
                             <Label>New Status *</Label>
                             <Select value={statusForm.status} onValueChange={v => setStatusForm(f => ({ ...f, status: v }))}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                </SelectContent>
+                                <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         {statusForm.status === 'Resolved' && (
                             <div className="space-y-2">
                                 <Label>Resolution Notes</Label>
-                                <textarea
-                                    className="w-full min-h-[80px] p-3 border rounded-md text-sm"
-                                    value={statusForm.resolutionNotes}
-                                    onChange={e => setStatusForm(f => ({ ...f, resolutionNotes: e.target.value }))}
-                                    placeholder="Describe what was done to resolve the issue…"
-                                />
+                                <textarea className="w-full min-h-[80px] p-3 border rounded-md text-sm" value={statusForm.resolutionNotes} onChange={e => setStatusForm(f => ({ ...f, resolutionNotes: e.target.value }))} placeholder="Describe what was done to resolve the issue…" />
                             </div>
                         )}
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setStatusOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Save Status
-                            </Button>
+                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Status</Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Issue History Modal */}
+            <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Issue History: {historyFleet?.carNumber}</DialogTitle>
+                        <DialogDescription>Full chronological history of maintenance for this cart.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        {historyLoading ? (
+                            <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+                        ) : cartHistory.length === 0 ? (
+                            <p className="text-center py-8 text-muted-foreground">No history found for this cart.</p>
+                        ) : (
+                            <div className="space-y-6 relative before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-0.5 before:bg-muted">
+                                {cartHistory.map((h, _i) => (
+                                    <div key={h.id} className="relative pl-10">
+                                        <div className={`absolute left-0 top-1 w-9 h-9 rounded-full border-4 border-background flex items-center justify-center ${statusColors[h.status]}`}>
+                                            <div className="w-2 h-2 rounded-full bg-white" />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm font-semibold">{h.issueDescription}</span>
+                                                <Badge variant="outline" className="text-[10px]">{new Date(h.reportedAt || h.createdAt).toLocaleDateString()}</Badge>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Reported by {h.reportedBy?.name} ({h.reportedBy?.role})</p>
+                                            {h.photosUrls && h.photosUrls.length > 0 && (
+                                                <div className="flex gap-2 mt-2">
+                                                    {h.photosUrls.map((url, idx) => (
+                                                        <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-12 h-12 rounded border overflow-hidden">
+                                                            <img src={url} alt="issue" className="w-full h-full object-cover" />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {h.status === 'Resolved' && (
+                                                <div className="mt-2 p-2 bg-green-50 border border-green-100 rounded text-xs text-green-800">
+                                                    <strong>Resolved:</strong> {h.resolutionNotes}
+                                                    <div className="mt-1 text-[10px] text-green-600">Date: {h.resolvedAt ? new Date(h.resolvedAt).toLocaleDateString() : '—'}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setHistoryOpen(false)}>Close</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

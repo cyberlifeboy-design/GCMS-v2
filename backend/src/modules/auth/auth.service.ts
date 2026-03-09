@@ -2,6 +2,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database';
 import { authConfig } from '../../config/auth';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
 
@@ -170,6 +172,70 @@ export class AuthService {
         } else {
             await prisma.refreshToken.deleteMany({ where: { userId } });
         }
+    }
+
+    static async forgotPassword(email: string) {
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) throw new Error('User not found');
+
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = new Date(Date.now() + 3600000); // 1 hour
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                resetPasswordToken: token,
+                resetPasswordExpires: expires,
+            },
+        });
+
+        // Send email (Mock or real depending on env)
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST || 'localhost',
+            port: Number(process.env.SMTP_PORT) || 1025,
+            secure: false,
+        });
+
+        const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+        try {
+            await transporter.sendMail({
+                from: '"GCMS Admin" <admin@gcms.local>',
+                to: user.email,
+                subject: 'Password Reset Request',
+                text: `You requested a password reset. Please click here: ${resetUrl}`,
+                html: `<p>You requested a password reset. Please click <a href="${resetUrl}">here</a> to reset your password.</p>`,
+            });
+        } catch (error) {
+            console.error('Failed to send email:', error);
+            // Don't throw error to prevent user enumeration or just inform them
+        }
+
+        return { message: 'Password reset email sent' };
+    }
+
+    static async resetPassword(token: string, newPassword: string) {
+        const user = await prisma.user.findFirst({
+            where: {
+                resetPasswordToken: token,
+                resetPasswordExpires: { gte: new Date() },
+            },
+        });
+
+        if (!user) throw new Error('Invalid or expired token');
+
+        const passwordHash = await bcrypt.hash(newPassword, authConfig.bcrypt.saltRounds);
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordHash,
+                resetPasswordToken: null,
+                resetPasswordExpires: null,
+            },
+        });
+
+        return { message: 'Password reset successful' };
     }
 
     static async cleanupExpiredTokens() {

@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database';
 
 export class HandoverService {
-    async checkOut(data: {
+    async checkIn(data: {
         fleetId: string;
         userId: string;
         conditionNotes?: string;
@@ -11,7 +11,7 @@ export class HandoverService {
 
         const allowedStatuses = ['Available', 'Assigned'];
         if (!allowedStatuses.includes(vehicle.status)) {
-            throw new Error(`Vehicle is not available for checkout (Current status: ${vehicle.status})`);
+            throw new Error(`Vehicle is not available for check-in (Current status: ${vehicle.status})`);
         }
 
         return prisma.$transaction(async (tx) => {
@@ -19,7 +19,7 @@ export class HandoverService {
                 data: {
                     fleetId: data.fleetId,
                     userId: data.userId,
-                    action: 'CheckedOut',
+                    action: 'CheckedIn',
                     conditionNotes: data.conditionNotes,
                 },
                 include: {
@@ -37,7 +37,7 @@ export class HandoverService {
         });
     }
 
-    async checkIn(data: {
+    async checkOut(data: {
         fleetId: string;
         userId: string;
         conditionNotes?: string;
@@ -56,7 +56,7 @@ export class HandoverService {
                 data: {
                     fleetId: data.fleetId,
                     userId: data.userId,
-                    action: 'CheckedIn',
+                    action: 'CheckedOut',
                     conditionNotes: data.conditionNotes,
                     photosUrls: data.photosUrls || [],
                 },
@@ -98,12 +98,12 @@ export class HandoverService {
         });
     }
 
-    async bulkCheckOut(fleetIds: string[], userId: string) {
+    async bulkCheckIn(fleetIds: string[], userId: string) {
         const results = { success: [] as string[], failed: [] as { id: string; reason: string }[] };
 
         for (const fleetId of fleetIds) {
             try {
-                await this.checkOut({ fleetId, userId });
+                await this.checkIn({ fleetId, userId });
                 results.success.push(fleetId);
             } catch (err: any) {
                 results.failed.push({ id: fleetId, reason: err.message });
@@ -112,12 +112,12 @@ export class HandoverService {
         return results;
     }
 
-    async bulkCheckIn(fleetIds: string[], userId: string, conditionNotes?: string) {
+    async bulkCheckOut(fleetIds: string[], userId: string, conditionNotes?: string) {
         const results = { success: [] as string[], failed: [] as { id: string; reason: string }[] };
 
         for (const fleetId of fleetIds) {
             try {
-                await this.checkIn({ fleetId, userId, conditionNotes });
+                await this.checkOut({ fleetId, userId, conditionNotes });
                 results.success.push(fleetId);
             } catch (err: any) {
                 results.failed.push({ id: fleetId, reason: err.message });

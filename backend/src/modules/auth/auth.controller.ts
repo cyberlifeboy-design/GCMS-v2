@@ -20,6 +20,15 @@ const refreshTokenSchema = z.object({
     refreshToken: z.string().min(1),
 });
 
+const forgotPasswordSchema = z.object({
+    email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+    token: z.string().min(1),
+    password: z.string().min(8).max(100),
+});
+
 export class AuthController {
     static async register(req: Request, res: Response): Promise<void> {
         try {
@@ -40,18 +49,14 @@ export class AuthController {
     static async login(req: Request, res: Response): Promise<void> {
         try {
             const validatedData = loginSchema.parse(req.body);
-            console.log(`[AUTH] Login attempt for email: ${validatedData.email}`);
             const result = await AuthService.login(validatedData);
-            console.log(`[AUTH] Login successful for: ${validatedData.email} (Role: ${result.user.role})`);
             res.status(200).json({ message: 'Login successful', ...result });
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else if (error instanceof Error) {
-                console.warn(`[AUTH] Login failed for email: ${req.body?.email} - Reason: ${error.message}`);
                 res.status(401).json({ error: error.message });
             } else {
-                console.error(`[AUTH] Unexpected login error:`, error);
                 res.status(500).json({ error: 'Login failed' });
             }
         }
@@ -98,6 +103,39 @@ export class AuthController {
             res.status(200).json({ user });
         } catch (error) {
             res.status(500).json({ error: 'Failed to get user info' });
+        }
+    }
+
+    static async forgotPassword(req: Request, res: Response): Promise<void> {
+        try {
+            const validatedData = forgotPasswordSchema.parse(req.body);
+            const result = await AuthService.forgotPassword(validatedData.email);
+            res.status(200).json(result);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error) {
+                // Return success even if user not found to prevent enumeration
+                res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
+            } else {
+                res.status(500).json({ error: 'Password reset request failed' });
+            }
+        }
+    }
+
+    static async resetPassword(req: Request, res: Response): Promise<void> {
+        try {
+            const validatedData = resetPasswordSchema.parse(req.body);
+            const result = await AuthService.resetPassword(validatedData.token, validatedData.password);
+            res.status(200).json(result);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: 'Password reset failed' });
+            }
         }
     }
 }

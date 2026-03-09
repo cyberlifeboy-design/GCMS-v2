@@ -26,7 +26,7 @@ const updateUserSchema = z.object({
 export class UsersController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
-            const { role, isActive } = req.query as any;
+            const { role, isActive, page, limit } = req.query as any;
 
             let filterStadiumId: string | undefined;
 
@@ -39,6 +39,9 @@ export class UsersController {
                 role,
                 stadiumId: filterStadiumId,
                 isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+            }, {
+                page: page ? parseInt(page) : undefined,
+                limit: limit ? parseInt(limit) : undefined,
             });
 
             // Admin sees only FA users and themselves

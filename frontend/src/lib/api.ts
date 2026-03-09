@@ -49,6 +49,10 @@ export const authApi = {
     refresh: (refreshToken: string) =>
         apiClient.post('/auth/refresh', { refreshToken }),
     me: () => apiClient.get('/auth/me'),
+    forgotPassword: (email: string) =>
+        apiClient.post('/auth/forgot-password', { email }),
+    resetPassword: (data: Record<string, string>) =>
+        apiClient.post('/auth/reset-password', data),
 };
 
 // Fleet  (carNumber, requiresVAP, assignedUserId, statuses: Available/Dispatched/Under Maintenance/Retired)
@@ -79,8 +83,10 @@ export const fleetApi = {
 
 // Handover  (actions: CheckedOut / CheckedIn / IssueReported)
 export const handoverApi = {
-    checkOut: (data: Record<string, unknown>) =>
-        apiClient.post('/handover/checkout', data),
+    checkOut: (data: FormData) =>
+        apiClient.post('/handover/checkout', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
     checkIn: (data: Record<string, unknown>) =>
         apiClient.post('/handover/checkin', data),
     bulkCheckOut: (data: Record<string, unknown>) =>
@@ -167,14 +173,6 @@ export const settingsApi = {
         apiClient.put('/settings', data, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
-};
-
-// Stadiums
-export const stadiumsApi = {
-    getAll: () =>
-        apiClient.get('/stadiums'),
-    getById: (id: string) =>
-        apiClient.get(`/stadiums/${id}`),
 };
 
 export default apiClient;

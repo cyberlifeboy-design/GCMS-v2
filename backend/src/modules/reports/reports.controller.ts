@@ -34,7 +34,14 @@ export class ReportsController {
 
     static async getUtilization(req: AuthRequest, res: Response) {
         try {
-            const stats = await reportsService.getUtilizationStats();
+            const { stadiumId } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const stats = await reportsService.getDashboardStats({ stadiumId: filterStadiumId });
             res.status(200).json(stats);
         } catch (error) {
             res.status(500).json({ error: 'Failed to get utilization stats' });

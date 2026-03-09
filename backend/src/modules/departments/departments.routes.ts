@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { DepartmentsController } from './departments.controller';
-import { authenticate, requireRole } from '../../middleware/auth.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
+import { requireRole } from '../../middleware/rbac.middleware';
 
 const router = Router();
 

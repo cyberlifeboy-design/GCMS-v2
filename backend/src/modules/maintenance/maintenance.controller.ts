@@ -21,7 +21,7 @@ export class MaintenanceController {
 
     static async getAll(req: AuthRequest, res: Response) {
         try {
-            const { status, fleetId } = req.query as any;
+            const { status, fleetId, page, limit } = req.query as any;
 
             // RBAC scoping  
             let stadiumId: string | undefined;
@@ -29,7 +29,10 @@ export class MaintenanceController {
                 stadiumId = req.user.stadiumId;
             }
 
-            const logs = await maintenanceService.getAll({ stadiumId, status, fleetId });
+            const logs = await maintenanceService.getAll({ stadiumId, status, fleetId }, {
+                page: page ? parseInt(page) : undefined,
+                limit: limit ? parseInt(limit) : undefined,
+            });
             res.status(200).json(logs);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch maintenance logs' });

@@ -1,28 +1,8 @@
 import { prisma } from '../../config/database';
-
-export interface PaginationParams {
-    page?: number;
-    limit?: number;
-}
-
-export interface PaginatedResult<T> {
-    data: T[];
-    pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-    };
-}
+import { FleetFilters, PaginatedResult, PaginationParams } from '../../types';
 
 export class FleetService {
-    async getAll(filters: {
-        stadiumId?: string;
-        assignedUserId?: string;
-        status?: string;
-        carType?: string;
-        requiresVAP?: boolean;
-    }, pagination?: PaginationParams): Promise<PaginatedResult<any>> {
+    async getAll(filters: FleetFilters, pagination?: PaginationParams): Promise<PaginatedResult<any>> {
         const page = pagination?.page || 1;
         const limit = pagination?.limit || 100;
         const skip = (page - 1) * limit;

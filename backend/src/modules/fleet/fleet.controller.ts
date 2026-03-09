@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
+import { FleetFilters, PaginationParams } from '../../types';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -24,29 +25,34 @@ const updateFleetSchema = createFleetSchema.partial();
 export class FleetController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, assignedUserId, status, carType, requiresVAP } = req.query as any;
+            const query = req.query as any;
+            const { stadiumId, assignedUserId, status, carType, requiresVAP, page, limit } = query;
 
             // RBAC scoping
-            let filterStadiumId = stadiumId;
-            let filterAssignedUserId = assignedUserId;
+            let filterStadiumId = stadiumId as string | undefined;
+            let filterAssignedUserId = assignedUserId as string | undefined;
 
             if (req.user?.role === 'Admin') {
-                // Admin sees own venue only
                 filterStadiumId = req.user.stadiumId;
             } else if (req.user?.role === 'FA') {
-                // FA only sees their assigned carts
                 filterAssignedUserId = req.user.userId;
                 filterStadiumId = req.user.stadiumId;
             }
-            // SuperAdmin and Observer see all — no filtering
 
-            const fleet = await fleetService.getAll({
+            const filters: FleetFilters = {
                 stadiumId: filterStadiumId,
                 assignedUserId: filterAssignedUserId,
-                status,
-                carType,
+                status: status as string,
+                carType: carType as string,
                 requiresVAP: requiresVAP === 'true' ? true : requiresVAP === 'false' ? false : undefined,
-            });
+            };
+
+            const pagination: PaginationParams = {
+                page: page ? parseInt(page as string) : undefined,
+                limit: limit ? parseInt(limit as string) : undefined,
+            };
+
+            const fleet = await fleetService.getAll(filters, pagination);
 
             res.status(200).json(fleet);
         } catch (error) {

@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { LogOut, LogIn, History, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
+import { Pagination } from '@/components/shared/Pagination';
 
 interface HandoverLog {
     id: string;
@@ -20,7 +21,7 @@ interface HandoverLog {
     fleet: { carNumber: string; carType: string };
     userId: string;
     user?: { name: string };
-    action: 'CheckedOut' | 'CheckedIn' | 'IssueReported';
+    action: 'CheckedIn' | 'CheckedOut' | 'IssueReported';
     createdAt: string;
     conditionNotes?: string;
     issueDescription?: string;
@@ -34,14 +35,14 @@ interface FleetCart {
 }
 
 const actionColors: Record<string, string> = {
-    'CheckedOut': 'bg-blue-500 text-white',
-    'CheckedIn': 'bg-green-500 text-white',
+    'CheckedIn': 'bg-blue-500 text-white',
+    'CheckedOut': 'bg-green-500 text-white',
     'IssueReported': 'bg-red-500 text-white',
 };
 
 const actionLabels: Record<string, string> = {
-    'CheckedOut': 'Check-Out',
     'CheckedIn': 'Check-In',
+    'CheckedOut': 'Check-Out',
     'IssueReported': 'Issue',
 };
 
@@ -57,13 +58,23 @@ export function HandoverPage() {
     const [search, setSearch] = useState('');
     const [actionFilter, setActionFilter] = useState('all');
 
-    const [checkoutOpen, setCheckoutOpen] = useState(false);
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
+
     const [checkinOpen, setCheckinOpen] = useState(false);
+    const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    const [checkoutForm, setCheckoutForm] = useState({ fleetId: '', conditionNotes: '' });
-    const [checkinForm, setCheckinForm] = useState({
-        fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '',
+    const [checkinForm, setCheckinForm] = useState({ fleetId: '', conditionNotes: '' });
+    const [checkoutForm, setCheckoutForm] = useState<{
+        fleetId: string;
+        conditionNotes: string;
+        hasIssue: boolean;
+        issueDescription: string;
+        photos: File[];
+    }>({
+        fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: []
     });
 
     // Bulk selection state
@@ -73,13 +84,21 @@ export function HandoverPage() {
     const loadData = async () => {
         try {
             setLoading(true);
+            const params = {
+                ...(actionFilter !== 'all' && { action: actionFilter }),
+                page,
+                limit: pagination.limit
+            };
             const [histRes, fleetRes] = await Promise.all([
-                handoverApi.getHistory(),
+                handoverApi.getHistory(params),
                 fleetApi.getAll(),
             ]);
             setHistory(histRes.data.data || []);
+            if (histRes.data.pagination) {
+                setPagination(prev => ({ ...prev, ...histRes.data.pagination }));
+            }
             const all: FleetCart[] = fleetRes.data.data || [];
-            setAvailableFleet(all.filter(v => v.status === 'Available'));
+            setAvailableFleet(all.filter(v => v.status === 'Available' || v.status === 'Assigned'));
             setDispatchedFleet(all.filter(v => v.status === 'Dispatched'));
         } catch (e) {
             console.error(e);
@@ -88,37 +107,16 @@ export function HandoverPage() {
         }
     };
 
-    useEffect(() => { loadData(); }, []);
-
-    const handleCheckout = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!checkoutForm.fleetId) { alert('Select a cart'); return; }
-        setSubmitting(true);
-        try {
-            await handoverApi.checkOut({ fleetId: checkoutForm.fleetId, conditionNotes: checkoutForm.conditionNotes });
-            setCheckoutOpen(false);
-            setCheckoutForm({ fleetId: '', conditionNotes: '' });
-            loadData();
-        } catch (err: any) {
-            alert(err.response?.data?.error || 'Check-out failed');
-        } finally {
-            setSubmitting(false);
-        }
-    };
+    useEffect(() => { loadData(); }, [actionFilter, page]);
 
     const handleCheckin = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!checkinForm.fleetId) { alert('Select a cart'); return; }
         setSubmitting(true);
         try {
-            await handoverApi.checkIn({
-                fleetId: checkinForm.fleetId,
-                conditionNotes: checkinForm.conditionNotes,
-                hasIssue: checkinForm.hasIssue,
-                issueDescription: checkinForm.hasIssue ? checkinForm.issueDescription : undefined,
-            });
+            await handoverApi.checkIn({ fleetId: checkinForm.fleetId, conditionNotes: checkinForm.conditionNotes });
             setCheckinOpen(false);
-            setCheckinForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '' });
+            setCheckinForm({ fleetId: '', conditionNotes: '' });
             loadData();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Check-in failed');
@@ -127,60 +125,74 @@ export function HandoverPage() {
         }
     };
 
-    // Bulk selection handlers
-    const toggleAvailableSelection = (id: string) => {
-        setSelectedAvailable(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
-    };
-
-    const toggleDispatchedSelection = (id: string) => {
-        setSelectedDispatched(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
-    };
-
-    const toggleAllAvailable = () => {
-        if (selectedAvailable.length === availableFleet.length) {
-            setSelectedAvailable([]);
-        } else {
-            setSelectedAvailable(availableFleet.map(v => v.id));
-        }
-    };
-
-    const toggleAllDispatched = () => {
-        if (selectedDispatched.length === dispatchedFleet.length) {
-            setSelectedDispatched([]);
-        } else {
-            setSelectedDispatched(dispatchedFleet.map(v => v.id));
-        }
-    };
-
-    const handleBulkCheckout = async () => {
-        if (selectedAvailable.length === 0) return;
-        if (!confirm(`Check out ${selectedAvailable.length} selected cart(s)?`)) return;
+    const handleCheckout = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!checkoutForm.fleetId) { alert('Select a cart'); return; }
         setSubmitting(true);
         try {
-            await handoverApi.bulkCheckOut({ fleetIds: selectedAvailable });
-            setSelectedAvailable([]);
+            const fd = new FormData();
+            fd.append('fleetId', checkoutForm.fleetId);
+            fd.append('conditionNotes', checkoutForm.conditionNotes);
+            fd.append('hasIssue', String(checkoutForm.hasIssue));
+            if (checkoutForm.hasIssue && checkoutForm.issueDescription) {
+                fd.append('issueDescription', checkoutForm.issueDescription);
+            }
+            checkoutForm.photos.forEach(p => fd.append('photos', p));
+
+            await handoverApi.checkOut(fd);
+            setCheckoutOpen(false);
+            setCheckoutForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] });
             loadData();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Bulk check-out failed');
+            alert(err.response?.data?.error || 'Check-out failed');
         } finally {
             setSubmitting(false);
         }
     };
 
+    const toggleAvailableSelection = (id: string) => {
+        setSelectedAvailable(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const toggleDispatchedSelection = (id: string) => {
+        setSelectedDispatched(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const toggleAllAvailable = () => {
+        if (selectedAvailable.length === availableFleet.length) setSelectedAvailable([]);
+        else setSelectedAvailable(availableFleet.map(v => v.id));
+    };
+
+    const toggleAllDispatched = () => {
+        if (selectedDispatched.length === dispatchedFleet.length) setSelectedDispatched([]);
+        else setSelectedDispatched(dispatchedFleet.map(v => v.id));
+    };
+
     const handleBulkCheckin = async () => {
-        if (selectedDispatched.length === 0) return;
-        if (!confirm(`Check in ${selectedDispatched.length} selected cart(s)?`)) return;
+        if (selectedAvailable.length === 0) return;
+        if (!confirm(`Check in ${selectedAvailable.length} selected cart(s)?`)) return;
         setSubmitting(true);
         try {
-            await handoverApi.bulkCheckIn({ fleetIds: selectedDispatched });
-            setSelectedDispatched([]);
+            await handoverApi.bulkCheckIn({ fleetIds: selectedAvailable });
+            setSelectedAvailable([]);
             loadData();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Bulk check-in failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleBulkCheckout = async () => {
+        if (selectedDispatched.length === 0) return;
+        if (!confirm(`Check out ${selectedDispatched.length} selected cart(s)?`)) return;
+        setSubmitting(true);
+        try {
+            await handoverApi.bulkCheckOut({ fleetIds: selectedDispatched });
+            setSelectedDispatched([]);
+            loadData();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Bulk check-out failed');
         } finally {
             setSubmitting(false);
         }
@@ -190,8 +202,7 @@ export function HandoverPage() {
         const matchSearch =
             h.fleet?.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
             h.user?.name?.toLowerCase().includes(search.toLowerCase());
-        const matchAction = actionFilter === 'all' || h.action === actionFilter;
-        return matchSearch && matchAction;
+        return matchSearch;
     });
 
     return (
@@ -200,10 +211,10 @@ export function HandoverPage() {
                 <h1 className="text-3xl font-bold">Handover Management</h1>
                 {canHandover && (
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => { setCheckinForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '' }); setCheckinOpen(true); }}>
+                        <Button variant="outline" onClick={() => { setCheckinForm({ fleetId: '', conditionNotes: '' }); setCheckinOpen(true); }}>
                             <LogIn className="w-4 h-4 mr-2" />Check In
                         </Button>
-                        <Button onClick={() => { setCheckoutForm({ fleetId: '', conditionNotes: '' }); setCheckoutOpen(true); }}>
+                        <Button onClick={() => { setCheckoutForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] }); setCheckoutOpen(true); }}>
                             <LogOut className="w-4 h-4 mr-2" />Check Out
                         </Button>
                     </div>
@@ -232,20 +243,20 @@ export function HandoverPage() {
                                         onChange={e => setSearch(e.target.value)}
                                     />
                                 </div>
-                                <Select value={actionFilter} onValueChange={setActionFilter}>
+                                <Select value={actionFilter} onValueChange={v => { setActionFilter(v); setPage(1); }}>
                                     <SelectTrigger className="w-44">
                                         <SelectValue placeholder="All Actions" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Actions</SelectItem>
-                                        <SelectItem value="CheckedOut">Check-Out</SelectItem>
                                         <SelectItem value="CheckedIn">Check-In</SelectItem>
+                                        <SelectItem value="CheckedOut">Check-Out</SelectItem>
                                         <SelectItem value="IssueReported">Issue Reported</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-0">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -278,6 +289,13 @@ export function HandoverPage() {
                                     ))}
                                 </TableBody>
                             </Table>
+                            <Pagination
+                                page={page}
+                                totalPages={pagination.totalPages}
+                                onPageChange={setPage}
+                                total={pagination.total}
+                                limit={pagination.limit}
+                            />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -288,31 +306,20 @@ export function HandoverPage() {
                             <Card>
                                 <CardHeader>
                                     <div className="flex items-center justify-between">
-                                        <h3 className="font-semibold">Available Carts — Ready for Check-Out</h3>
+                                        <h3 className="font-semibold">Available Carts — Ready for Check-In</h3>
                                         {selectedAvailable.length > 0 && (
-                                            <Button
-                                                size="sm"
-                                                onClick={handleBulkCheckout}
-                                                disabled={submitting}
-                                            >
+                                            <Button size="sm" onClick={handleBulkCheckin} disabled={submitting}>
                                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                                <LogOut className="w-4 h-4 mr-1" />
-                                                Check Out Selected ({selectedAvailable.length})
+                                                <LogIn className="w-4 h-4 mr-1" /> Check In ({selectedAvailable.length})
                                             </Button>
                                         )}
                                     </div>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="p-0">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead className="w-12">
-                                                    <Checkbox
-                                                        checked={availableFleet.length > 0 && selectedAvailable.length === availableFleet.length}
-                                                        onCheckedChange={toggleAllAvailable}
-                                                        aria-label="Select all available carts"
-                                                    />
-                                                </TableHead>
+                                                <TableHead className="w-12"><Checkbox checked={availableFleet.length > 0 && selectedAvailable.length === availableFleet.length} onCheckedChange={toggleAllAvailable} /></TableHead>
                                                 <TableHead>Cart #</TableHead>
                                                 <TableHead>Type</TableHead>
                                                 <TableHead className="text-right">Action</TableHead>
@@ -322,25 +329,12 @@ export function HandoverPage() {
                                             {availableFleet.length === 0 ? (
                                                 <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No available carts</TableCell></TableRow>
                                             ) : availableFleet.map(v => (
-                                                <TableRow
-                                                    key={v.id}
-                                                    className={selectedAvailable.includes(v.id) ? 'bg-blue-50' : ''}
-                                                >
-                                                    <TableCell>
-                                                        <Checkbox
-                                                            checked={selectedAvailable.includes(v.id)}
-                                                            onCheckedChange={() => toggleAvailableSelection(v.id)}
-                                                            aria-label={`Select ${v.carNumber}`}
-                                                        />
-                                                    </TableCell>
+                                                <TableRow key={v.id} className={selectedAvailable.includes(v.id) ? 'bg-blue-50' : ''}>
+                                                    <TableCell><Checkbox checked={selectedAvailable.includes(v.id)} onCheckedChange={() => toggleAvailableSelection(v.id)} /></TableCell>
                                                     <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
-                                                    <TableCell>
-                                                        <Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge>
-                                                    </TableCell>
+                                                    <TableCell><Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge></TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button size="sm" onClick={() => { setCheckoutForm({ fleetId: v.id, conditionNotes: '' }); setCheckoutOpen(true); }}>
-                                                            <LogOut className="w-4 h-4 mr-1" />Check Out
-                                                        </Button>
+                                                        <Button size="sm" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '' }); setCheckinOpen(true); }}><LogIn className="w-4 h-4 mr-1" />Check In</Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -354,32 +348,20 @@ export function HandoverPage() {
                             <Card>
                                 <CardHeader>
                                     <div className="flex items-center justify-between">
-                                        <h3 className="font-semibold">Dispatched Carts — Ready for Check-In</h3>
+                                        <h3 className="font-semibold">Dispatched Carts — Ready for Check-Out</h3>
                                         {selectedDispatched.length > 0 && (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={handleBulkCheckin}
-                                                disabled={submitting}
-                                            >
+                                            <Button size="sm" variant="outline" onClick={handleBulkCheckout} disabled={submitting}>
                                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                                <LogIn className="w-4 h-4 mr-1" />
-                                                Check In Selected ({selectedDispatched.length})
+                                                <LogOut className="w-4 h-4 mr-1" /> Check Out ({selectedDispatched.length})
                                             </Button>
                                         )}
                                     </div>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="p-0">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead className="w-12">
-                                                    <Checkbox
-                                                        checked={dispatchedFleet.length > 0 && selectedDispatched.length === dispatchedFleet.length}
-                                                        onCheckedChange={toggleAllDispatched}
-                                                        aria-label="Select all dispatched carts"
-                                                    />
-                                                </TableHead>
+                                                <TableHead className="w-12"><Checkbox checked={dispatchedFleet.length > 0 && selectedDispatched.length === dispatchedFleet.length} onCheckedChange={toggleAllDispatched} /></TableHead>
                                                 <TableHead>Cart #</TableHead>
                                                 <TableHead>Type</TableHead>
                                                 <TableHead className="text-right">Action</TableHead>
@@ -389,25 +371,12 @@ export function HandoverPage() {
                                             {dispatchedFleet.length === 0 ? (
                                                 <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No dispatched carts</TableCell></TableRow>
                                             ) : dispatchedFleet.map(v => (
-                                                <TableRow
-                                                    key={v.id}
-                                                    className={selectedDispatched.includes(v.id) ? 'bg-green-50' : ''}
-                                                >
-                                                    <TableCell>
-                                                        <Checkbox
-                                                            checked={selectedDispatched.includes(v.id)}
-                                                            onCheckedChange={() => toggleDispatchedSelection(v.id)}
-                                                            aria-label={`Select ${v.carNumber}`}
-                                                        />
-                                                    </TableCell>
+                                                <TableRow key={v.id} className={selectedDispatched.includes(v.id) ? 'bg-green-50' : ''}>
+                                                    <TableCell><Checkbox checked={selectedDispatched.includes(v.id)} onCheckedChange={() => toggleDispatchedSelection(v.id)} /></TableCell>
                                                     <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
-                                                    <TableCell>
-                                                        <Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge>
-                                                    </TableCell>
+                                                    <TableCell><Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge></TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button size="sm" variant="outline" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '', hasIssue: false, issueDescription: '' }); setCheckinOpen(true); }}>
-                                                            <LogIn className="w-4 h-4 mr-1" />Check In
-                                                        </Button>
+                                                        <Button size="sm" variant="outline" onClick={() => { setCheckoutForm({ fleetId: v.id, conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] }); setCheckoutOpen(true); }}><LogOut className="w-4 h-4 mr-1" />Check Out</Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -420,17 +389,17 @@ export function HandoverPage() {
                 )}
             </Tabs>
 
-            {/* Check-Out Modal */}
-            <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+            {/* Check-In Modal */}
+            <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Check Out Cart</DialogTitle>
+                        <DialogTitle>Check In Cart</DialogTitle>
                         <DialogDescription>Select a cart and confirm condition before dispatching.</DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleCheckout} className="space-y-4">
+                    <form onSubmit={handleCheckin} className="space-y-4">
                         <div className="space-y-2">
                             <Label>Cart *</Label>
-                            <Select value={checkoutForm.fleetId} onValueChange={v => setCheckoutForm(f => ({ ...f, fleetId: v }))}>
+                            <Select value={checkinForm.fleetId} onValueChange={v => setCheckinForm(f => ({ ...f, fleetId: v }))}>
                                 <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>
                                     {availableFleet.map(v => (
@@ -441,35 +410,27 @@ export function HandoverPage() {
                         </div>
                         <div className="space-y-2">
                             <Label>Condition Notes</Label>
-                            <textarea
-                                className="w-full min-h-[80px] p-3 border rounded-md text-sm"
-                                value={checkoutForm.conditionNotes}
-                                onChange={e => setCheckoutForm(f => ({ ...f, conditionNotes: e.target.value }))}
-                                placeholder="Any existing damage or observations…"
-                            />
+                            <textarea className="w-full min-h-[80px] p-3 border rounded-md text-sm" value={checkinForm.conditionNotes} onChange={e => setCheckinForm(f => ({ ...f, conditionNotes: e.target.value }))} placeholder="Any existing damage or observations…" />
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Check Out
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setCheckinOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Check In</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Check-In Modal */}
-            <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
+            {/* Check-Out Modal */}
+            <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Check In Cart</DialogTitle>
+                        <DialogTitle>Check Out Cart</DialogTitle>
                         <DialogDescription>Return a cart and note any issues found.</DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleCheckin} className="space-y-4">
+                    <form onSubmit={handleCheckout} className="space-y-4">
                         <div className="space-y-2">
                             <Label>Cart *</Label>
-                            <Select value={checkinForm.fleetId} onValueChange={v => setCheckinForm(f => ({ ...f, fleetId: v }))}>
+                            <Select value={checkoutForm.fleetId} onValueChange={v => setCheckoutForm(f => ({ ...f, fleetId: v }))}>
                                 <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>
                                     {dispatchedFleet.map(v => (
@@ -480,39 +441,30 @@ export function HandoverPage() {
                         </div>
                         <div className="space-y-2">
                             <Label>Condition Notes</Label>
-                            <textarea
-                                className="w-full min-h-[80px] p-3 border rounded-md text-sm"
-                                value={checkinForm.conditionNotes}
-                                onChange={e => setCheckinForm(f => ({ ...f, conditionNotes: e.target.value }))}
-                                placeholder="Return condition observations…"
-                            />
+                            <textarea className="w-full min-h-[80px] p-3 border rounded-md text-sm" value={checkoutForm.conditionNotes} onChange={e => setCheckoutForm(f => ({ ...f, conditionNotes: e.target.value }))} placeholder="Return condition observations…" />
                         </div>
                         <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
-                            <input type="checkbox" id="hasIssue" checked={checkinForm.hasIssue}
-                                onChange={e => setCheckinForm(f => ({ ...f, hasIssue: e.target.checked }))}
-                                className="w-4 h-4 rounded" />
+                            <input type="checkbox" id="hasIssue" checked={checkoutForm.hasIssue} onChange={e => setCheckoutForm(f => ({ ...f, hasIssue: e.target.checked }))} className="w-4 h-4 rounded" />
                             <Label htmlFor="hasIssue" className="cursor-pointer flex items-center gap-2 text-amber-800">
                                 <AlertTriangle className="w-4 h-4" />Report an Issue (will set cart to Maintenance)
                             </Label>
                         </div>
-                        {checkinForm.hasIssue && (
-                            <div className="space-y-2">
-                                <Label>Issue Description *</Label>
-                                <textarea
-                                    className="w-full min-h-[80px] p-3 border rounded-md text-sm"
-                                    value={checkinForm.issueDescription}
-                                    onChange={e => setCheckinForm(f => ({ ...f, issueDescription: e.target.value }))}
-                                    placeholder="Describe the issue in detail…"
-                                    required={checkinForm.hasIssue}
-                                />
-                            </div>
+                        {checkoutForm.hasIssue && (
+                            <>
+                                <div className="space-y-2">
+                                    <Label>Issue Description *</Label>
+                                    <textarea className="w-full min-h-[80px] p-3 border rounded-md text-sm" value={checkoutForm.issueDescription} onChange={e => setCheckoutForm(f => ({ ...f, issueDescription: e.target.value }))} placeholder="Describe the issue in detail…" required={checkoutForm.hasIssue} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Photos (optional, max 5)</Label>
+                                    <Input type="file" accept="image/*" multiple onChange={e => { const files = Array.from(e.target.files || []); setCheckoutForm(f => ({ ...f, photos: files.slice(0, 5) })); }} />
+                                    {checkoutForm.photos.length > 0 && <p className="text-xs text-muted-foreground">{checkoutForm.photos.length} files selected</p>}
+                                </div>
+                            </>
                         )}
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setCheckinOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Check In
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Check Out</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

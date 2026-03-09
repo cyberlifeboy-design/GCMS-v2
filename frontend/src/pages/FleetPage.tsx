@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
+import { Pagination } from '@/components/shared/Pagination';
 
 interface FleetCart {
     id: string;
@@ -65,6 +66,10 @@ export function FleetPage() {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
 
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
+
     // Modal states
     const [cartModal, setCartModal] = useState<{ open: boolean; mode: 'create' | 'edit'; cart?: FleetCart }>({ open: false, mode: 'create' });
     const [assignModal, setAssignModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
@@ -84,9 +89,16 @@ export function FleetPage() {
     const loadFleet = async () => {
         try {
             setLoading(true);
-            const params = statusFilter !== 'all' ? { status: statusFilter } : {};
+            const params = {
+                ...(statusFilter !== 'all' && { status: statusFilter }),
+                page,
+                limit: pagination.limit
+            };
             const res = await fleetApi.getAll(params);
             setFleet(res.data.data || []);
+            if (res.data.pagination) {
+                setPagination(prev => ({ ...prev, ...res.data.pagination }));
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -130,11 +142,11 @@ export function FleetPage() {
         } else {
             loadFleet();
         }
-    }, [statusFilter]);
+    }, [statusFilter, page]);
 
     // Load stadiums for SuperAdmin (to select venue when creating carts)
     useEffect(() => {
-        if (isSuperAdmin) {
+        if (isSuperAdmin && stadiums.length === 0) {
             loadStadiums();
         }
     }, [isSuperAdmin]);
@@ -150,7 +162,6 @@ export function FleetPage() {
     );
 
     const openCreate = () => {
-        // For Admin users, auto-populate with their stadiumId
         const defaultStadiumId = !isSuperAdmin ? user?.stadiumId || '' : '';
         setFormData({ ...EMPTY_FORM, stadiumId: defaultStadiumId });
         setCartModal({ open: true, mode: 'create' });
@@ -175,13 +186,10 @@ export function FleetPage() {
 
     const handleSaveCart = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Validate stadiumId is present (required by backend)
         if (!formData.stadiumId) {
             alert('Please select a stadium');
             return;
         }
-
         setSubmitting(true);
         try {
             if (cartModal.mode === 'create') {
@@ -230,14 +238,12 @@ export function FleetPage() {
     const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         const stadiumId = isSuperAdmin ? bulkStadiumId : (user?.stadiumId || '');
         if (!stadiumId) {
             alert('Stadium selection is required for bulk import.');
             if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
-
         try {
             setSubmitting(true);
             const res = await fleetApi.bulkImport(file, stadiumId);
@@ -254,60 +260,71 @@ export function FleetPage() {
     };
 
     const CartTable = ({ data }: { data: FleetCart[] }) => (
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>Car #</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>VAP</TableHead>
-                    <TableHead>Assigned FA</TableHead>
-                    <TableHead>Stadium</TableHead>
-                    {isAdmin && <TableHead className="text-right">Actions</TableHead>}
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {loading ? (
-                    <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                    </TableCell></TableRow>
-                ) : data.length === 0 ? (
-                    <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">
-                        No carts found
-                    </TableCell></TableRow>
-                ) : data.map(cart => (
-                    <TableRow key={cart.id}>
-                        <TableCell className="font-mono font-semibold">{cart.carNumber}</TableCell>
-                        <TableCell>
-                            <Badge className={carTypeColors[cart.carType]} variant="secondary">{cart.carType}</Badge>
-                        </TableCell>
-                        <TableCell>
-                            <Badge className={statusColors[cart.status]}>{cart.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                            {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
-                        </TableCell>
-                        <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                        <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                        {isAdmin && (
-                            <TableCell className="text-right">
-                                <div className="flex justify-end gap-1">
-                                    <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
-                                        <UserCheck className="w-4 h-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
-                                        <Edit2 className="w-4 h-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </TableCell>
-                        )}
+        <div className="flex flex-col">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Car #</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>VAP</TableHead>
+                        <TableHead>Assigned FA</TableHead>
+                        <TableHead>Stadium</TableHead>
+                        {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                     </TableRow>
-                ))}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                    {loading ? (
+                        <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                        </TableCell></TableRow>
+                    ) : data.length === 0 ? (
+                        <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                            No carts found
+                        </TableCell></TableRow>
+                    ) : data.map(cart => (
+                        <TableRow key={cart.id}>
+                            <TableCell className="font-mono font-semibold">{cart.carNumber}</TableCell>
+                            <TableCell>
+                                <Badge className={carTypeColors[cart.carType]} variant="secondary">{cart.carType}</Badge>
+                            </TableCell>
+                            <TableCell>
+                                <Badge className={statusColors[cart.status]}>{cart.status}</Badge>
+                            </TableCell>
+                            <TableCell>
+                                {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
+                            </TableCell>
+                            <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                            <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                            {isAdmin && (
+                                <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                        <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
+                                            <UserCheck className="w-4 h-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
+                                            <Edit2 className="w-4 h-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </TableCell>
+                            )}
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+            {!isFA && (
+                <Pagination
+                    page={page}
+                    totalPages={pagination.totalPages}
+                    onPageChange={setPage}
+                    total={pagination.total}
+                    limit={pagination.limit}
+                />
+            )}
+        </div>
     );
 
     return (
@@ -345,35 +362,33 @@ export function FleetPage() {
                 )}
 
                 {!isFA && (
-                    <>
-                        <Card>
-                            <CardHeader>
-                                <div className="flex gap-4">
-                                    <div className="relative flex-1">
-                                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            placeholder="Search by car number, type, or stadium…"
-                                            value={search}
-                                            onChange={e => setSearch(e.target.value)}
-                                            className="pl-10"
-                                        />
-                                    </div>
-                                    <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); }}>
-                                        <SelectTrigger className="w-48">
-                                            <SelectValue placeholder="All Statuses" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Statuses</SelectItem>
-                                            {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                    <Card>
+                        <CardHeader>
+                            <div className="flex gap-4">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search by car number, type, or stadium…"
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        className="pl-10"
+                                    />
                                 </div>
-                            </CardHeader>
-                            <CardContent>
-                                <CartTable data={filteredFleet} />
-                            </CardContent>
-                        </Card>
-                    </>
+                                <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+                                    <SelectTrigger className="w-48">
+                                        <SelectValue placeholder="All Statuses" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Statuses</SelectItem>
+                                        {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <CartTable data={filteredFleet} />
+                        </CardContent>
+                    </Card>
                 )}
 
                 {isFA && (
@@ -390,7 +405,7 @@ export function FleetPage() {
                                     />
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="p-0">
                                 <CartTable data={filteredMyCarts} />
                             </CardContent>
                         </Card>
@@ -408,7 +423,6 @@ export function FleetPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleSaveCart} className="space-y-4">
-                        {/* Stadium Selector - Visible for SuperAdmin, read-only for Admin */}
                         {cartModal.mode === 'create' ? (
                             isSuperAdmin ? (
                                 <div className="space-y-2">
@@ -431,22 +445,14 @@ export function FleetPage() {
                             ) : (
                                 <div className="space-y-2">
                                     <Label>Stadium</Label>
-                                    <Input
-                                        value="Your assigned venue"
-                                        disabled
-                                        className="bg-muted"
-                                    />
+                                    <Input value="Your assigned venue" disabled className="bg-muted" />
                                     <p className="text-xs text-muted-foreground">Carts are created at your assigned venue</p>
                                 </div>
                             )
                         ) : (
                             <div className="space-y-2">
                                 <Label>Stadium</Label>
-                                <Input
-                                    value={cartModal.cart?.stadium?.name || 'Unknown'}
-                                    disabled
-                                    className="bg-muted"
-                                />
+                                <Input value={cartModal.cart?.stadium?.name || 'Unknown'} disabled className="bg-muted" />
                             </div>
                         )}
                         <div className="space-y-2">
@@ -538,7 +544,7 @@ export function FleetPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Bulk Import Modal for SuperAdmin to select stadium */}
+            {/* Bulk Import Modal */}
             <Dialog open={bulkModal} onOpenChange={setBulkModal}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
@@ -549,21 +555,13 @@ export function FleetPage() {
                         <div className="space-y-2">
                             <Label>Target Stadium *</Label>
                             <Select value={bulkStadiumId} onValueChange={setBulkStadiumId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select stadium" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                 <SelectContent>
-                                    {stadiums.map(s => (
-                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                    ))}
+                                    {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button 
-                            className="w-full" 
-                            disabled={!bulkStadiumId || submitting}
-                            onClick={() => fileInputRef.current?.click()}
-                        >
+                        <Button className="w-full" disabled={!bulkStadiumId || submitting} onClick={() => fileInputRef.current?.click()}>
                             {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
                             Choose File & Upload
                         </Button>

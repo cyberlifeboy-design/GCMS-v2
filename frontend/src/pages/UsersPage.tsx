@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { Pagination } from '@/components/shared/Pagination';
 
 interface User {
     id: string;
@@ -55,6 +56,10 @@ export function UsersPage() {
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
 
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
+
     // Modals
     const [createOpen, setCreateOpen] = useState(false);
     const [bulkOpen, setBulkOpen] = useState(false);
@@ -69,8 +74,16 @@ export function UsersPage() {
     const loadUsers = async () => {
         try {
             setLoading(true);
-            const res = await usersApi.getAll();
+            const params = {
+                ...(roleFilter !== 'all' && { role: roleFilter }),
+                page,
+                limit: pagination.limit
+            };
+            const res = await usersApi.getAll(params);
             setUsers(res.data.data || []);
+            if (res.data.pagination) {
+                setPagination(prev => ({ ...prev, ...res.data.pagination }));
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -78,15 +91,14 @@ export function UsersPage() {
         }
     };
 
-    useEffect(() => { loadUsers(); }, []);
+    useEffect(() => { loadUsers(); }, [roleFilter, page]);
 
     const filtered = users.filter(u => {
         const matchSearch =
             u.name?.toLowerCase().includes(search.toLowerCase()) ||
             u.email?.toLowerCase().includes(search.toLowerCase()) ||
             u.phone?.includes(search);
-        const matchRole = roleFilter === 'all' || u.role === roleFilter;
-        return matchSearch && matchRole;
+        return matchSearch;
     });
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -185,7 +197,7 @@ export function UsersPage() {
                                 className="pl-10"
                             />
                         </div>
-                        <Select value={roleFilter} onValueChange={setRoleFilter}>
+                        <Select value={roleFilter} onValueChange={v => { setRoleFilter(v); setPage(1); }}>
                             <SelectTrigger className="w-44"><SelectValue placeholder="All Roles" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Roles</SelectItem>
@@ -194,7 +206,7 @@ export function UsersPage() {
                         </Select>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -246,6 +258,13 @@ export function UsersPage() {
                             ))}
                         </TableBody>
                     </Table>
+                    <Pagination
+                        page={page}
+                        totalPages={pagination.totalPages}
+                        onPageChange={setPage}
+                        total={pagination.total}
+                        limit={pagination.limit}
+                    />
                 </CardContent>
             </Card>
 
@@ -274,7 +293,6 @@ export function UsersPage() {
                             <Select value={formData.role} onValueChange={v => setFormData(f => ({ ...f, role: v }))}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {/* Admin can only create FA users */}
                                     {isSuperAdmin ? ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>) : (
                                         <SelectItem value="FA">FA (Fleet Attendant)</SelectItem>
                                     )}

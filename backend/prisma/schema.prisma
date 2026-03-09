@@ -69,6 +69,8 @@ model User {
   role            String          // SuperAdmin, Admin, FA, Observer
   phone           String?
   isActive        Boolean         @default(true)
+  resetPasswordToken   String?    @unique
+  resetPasswordExpires DateTime?
   stadiumId       String?
   stadium         Stadium?        @relation(fields: [stadiumId], references: [id])
   departmentId    String?

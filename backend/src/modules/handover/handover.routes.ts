@@ -9,7 +9,7 @@ const router = Router();
 router.use(authenticate);
 
 // POST /checkout — FA and Admin can check out
-router.post('/checkout', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.checkOut);
+router.post('/checkout', requireRole('FA', 'Admin', 'SuperAdmin'), HandoverController.uploadMiddleware, auditLog(), HandoverController.checkOut);
 
 // POST /checkin — FA and Admin can check in
 router.post('/checkin', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.checkIn);
