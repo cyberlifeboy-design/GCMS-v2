@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { maintenanceApi, fleetApi, usersApi } from '@/lib/api';
+import { maintenanceApi, fleetApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,207 +8,159 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, CheckCircle, UserCheck, History, Loader2 } from 'lucide-react';
+import { Plus, Search, Download, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 interface MaintenanceLog {
     id: string;
     fleetId: string;
-    fleet: {
-        unitNumber: string;
-        carType: string;
-    };
+    fleet: { carNumber: string; carType: string };
     issueDescription: string;
-    reportedBy: string;
-    reporter?: {
-        name: string;
-    };
-    reportedAt: string;
-    contractorId?: string;
-    contractor?: {
-        name: string;
-    };
-    fixDescription?: string;
-    fixedAt?: string;
-    status: 'Pending' | 'InProgress' | 'Fixed';
-}
-
-interface Contractor {
-    id: string;
-    name: string;
+    status: 'Open' | 'InProgress' | 'Resolved';
+    photosUrls?: string[];
+    reportedBy?: { name: string };
+    resolutionNotes?: string;
+    resolvedAt?: string;
+    createdAt: string;
 }
 
 const statusColors: Record<string, string> = {
-    'Pending': 'bg-yellow-500',
-    'InProgress': 'bg-blue-500',
-    'Fixed': 'bg-green-500',
+    'Open': 'bg-red-500 text-white',
+    'InProgress': 'bg-yellow-500 text-white',
+    'Resolved': 'bg-green-500 text-white',
 };
 
+const STATUSES = ['Open', 'InProgress', 'Resolved'] as const;
+
 export function MaintenancePage() {
-    const [tasks, setTasks] = useState<MaintenanceLog[]>([]);
-    const [fleet, setFleet] = useState<any[]>([]);
-    const [contractors, setContractors] = useState<Contractor[]>([]);
+    const { user: currentUser } = useAuthStore();
+    const role = currentUser?.role;
+    const canReport = role === 'FA' || role === 'Admin' || role === 'SuperAdmin';
+    const canUpdateStatus = role === 'Admin' || role === 'SuperAdmin';
+    const canExport = role === 'Admin' || role === 'SuperAdmin' || role === 'Observer';
+
+    const [issues, setIssues] = useState<MaintenanceLog[]>([]);
+    const [fleet, setFleet] = useState<Array<{ id: string; carNumber: string; carType: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const { user: currentUser } = useAuthStore();
 
-    // Modal states
-    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-    const [isFixModalOpen, setIsFixModalOpen] = useState(false);
-    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    const [selectedTask, setSelectedTask] = useState<MaintenanceLog | null>(null);
-    const [selectedFleetHistory, setSelectedFleetHistory] = useState<MaintenanceLog[]>([]);
+    // Modals
+    const [reportOpen, setReportOpen] = useState(false);
+    const [statusOpen, setStatusOpen] = useState(false);
+    const [selectedIssue, setSelectedIssue] = useState<MaintenanceLog | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
-    // Form states
-    const [reportForm, setReportForm] = useState({
-        fleetId: '',
-        issueDescription: '',
-    });
-    const [assignForm, setAssignForm] = useState({
-        contractorId: '',
-    });
-    const [fixForm, setFixForm] = useState({
-        fixDescription: '',
-    });
-
-    const userRole = currentUser?.role;
-    const isAdmin = userRole === 'Admin';
-    const isContractor = userRole === 'Contractor';
-    const isFocalPoint = userRole === 'FocalPoint';
-
-    useEffect(() => {
-        loadData();
-    }, []);
+    // Forms
+    const [reportForm, setReportForm] = useState({ fleetId: '', issueDescription: '' });
+    const [statusForm, setStatusForm] = useState({ status: '', resolutionNotes: '' });
+    const [photoFiles, setPhotoFiles] = useState<File[]>([]);
 
     const loadData = async () => {
         try {
             setLoading(true);
-            const [tasksRes, fleetRes] = await Promise.all([
-                maintenanceApi.getAll(),
+            const params = statusFilter !== 'all' ? { status: statusFilter } : {};
+            const [issuesRes, fleetRes] = await Promise.all([
+                maintenanceApi.getAll(params),
                 fleetApi.getAll(),
             ]);
-            setTasks(tasksRes.data.data || []);
+            setIssues(issuesRes.data.data || []);
             setFleet(fleetRes.data.data || []);
-        } catch (error) {
-            console.error('Failed to load data:', error);
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
-    const loadContractors = async () => {
-        try {
-            const response = await usersApi.getAll();
-            const contractorUsers = (response.data.data || []).filter((u: any) => u.role === 'Contractor');
-            setContractors(contractorUsers);
-        } catch (error) {
-            console.error('Failed to load contractors:', error);
-        }
-    };
+    useEffect(() => { loadData(); }, [statusFilter]);
 
-    const loadFleetHistory = async (fleetId: string) => {
-        try {
-            const response = await maintenanceApi.getHistoryByFleet(fleetId);
-            setSelectedFleetHistory(response.data.data || []);
-        } catch (error) {
-            console.error('Failed to load history:', error);
-        }
-    };
+    const filtered = issues.filter(i =>
+        i.fleet?.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
+        i.issueDescription?.toLowerCase().includes(search.toLowerCase()) ||
+        i.reportedBy?.name?.toLowerCase().includes(search.toLowerCase())
+    );
 
-    const filteredTasks = tasks.filter(t => {
-        const matchesSearch =
-            t.fleet?.unitNumber?.toLowerCase().includes(search.toLowerCase()) ||
-            t.issueDescription?.toLowerCase().includes(search.toLowerCase()) ||
-            t.contractor?.name?.toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    });
-
-    const handleReportIssue = async (e: React.FormEvent) => {
+    const handleReport = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
         try {
-            await maintenanceApi.reportIssue(reportForm);
-            setIsReportModalOpen(false);
+            const fd = new FormData();
+            fd.append('fleetId', reportForm.fleetId);
+            fd.append('issueDescription', reportForm.issueDescription);
+            photoFiles.forEach(f => fd.append('photos', f));
+            await maintenanceApi.report(fd);
+            setReportOpen(false);
             setReportForm({ fleetId: '', issueDescription: '' });
+            setPhotoFiles([]);
             loadData();
-        } catch (error) {
-            console.error('Failed to report issue:', error);
-            alert('Failed to report issue. Please try again.');
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to report issue');
         } finally {
             setSubmitting(false);
         }
     };
 
-    const handleAssignContractor = async (e: React.FormEvent) => {
+    const handleUpdateStatus = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedTask) return;
+        if (!selectedIssue) return;
         setSubmitting(true);
         try {
-            await maintenanceApi.assignContractor(selectedTask.id, assignForm.contractorId);
-            setIsAssignModalOpen(false);
-            setSelectedTask(null);
-            setAssignForm({ contractorId: '' });
+            await maintenanceApi.updateStatus(selectedIssue.id, {
+                status: statusForm.status,
+                resolutionNotes: statusForm.resolutionNotes || undefined,
+            });
+            setStatusOpen(false);
+            setSelectedIssue(null);
             loadData();
-        } catch (error) {
-            console.error('Failed to assign contractor:', error);
-            alert('Failed to assign contractor. Please try again.');
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update status');
         } finally {
             setSubmitting(false);
         }
     };
 
-    const handleReportFix = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedTask) return;
-        setSubmitting(true);
+    const handleExport = async () => {
+        setExporting(true);
         try {
-            await maintenanceApi.reportFix(selectedTask.id, fixForm);
-            setIsFixModalOpen(false);
-            setSelectedTask(null);
-            setFixForm({ fixDescription: '' });
-            loadData();
-        } catch (error) {
-            console.error('Failed to report fix:', error);
-            alert('Failed to report fix. Please try again.');
+            const res = await maintenanceApi.exportCsv();
+            const url = window.URL.createObjectURL(res.data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `maintenance_export_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (err: any) {
+            alert('Export failed');
         } finally {
-            setSubmitting(false);
+            setExporting(false);
         }
     };
 
-    const openAssignModal = (task: MaintenanceLog) => {
-        setSelectedTask(task);
-        loadContractors();
-        setIsAssignModalOpen(true);
+    const openStatusModal = (issue: MaintenanceLog) => {
+        setSelectedIssue(issue);
+        setStatusForm({ status: issue.status, resolutionNotes: issue.resolutionNotes || '' });
+        setStatusOpen(true);
     };
-
-    const openFixModal = (task: MaintenanceLog) => {
-        setSelectedTask(task);
-        setIsFixModalOpen(true);
-    };
-
-    const openHistoryModal = async (task: MaintenanceLog) => {
-        setSelectedTask(task);
-        await loadFleetHistory(task.fleetId);
-        setIsHistoryModalOpen(true);
-    };
-
-    const canReportIssue = isAdmin || isFocalPoint;
-    const canAssignContractor = isAdmin;
-    const canReportFix = isContractor || isAdmin;
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold">Maintenance Management</h1>
-                {canReportIssue && (
-                    <Button onClick={() => setIsReportModalOpen(true)}>
-                        <Plus className="w-4 h-4 mr-2" />Report Issue
-                    </Button>
-                )}
+                <h1 className="text-3xl font-bold">Maintenance</h1>
+                <div className="flex gap-2">
+                    {canExport && (
+                        <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                            Export CSV
+                        </Button>
+                    )}
+                    {canReport && (
+                        <Button onClick={() => { setReportForm({ fleetId: '', issueDescription: '' }); setPhotoFiles([]); setReportOpen(true); }}>
+                            <Plus className="w-4 h-4 mr-2" />Report Issue
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <Card>
@@ -217,21 +169,17 @@ export function MaintenancePage() {
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by vehicle, issue, or contractor..."
+                                placeholder="Search by cart, issue, or reporter…"
                                 value={search}
-                                onChange={(e) => setSearch(e.target.value)}
+                                onChange={e => setSearch(e.target.value)}
                                 className="pl-10"
                             />
                         </div>
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-40">
-                                <SelectValue placeholder="All Status" />
-                            </SelectTrigger>
+                            <SelectTrigger className="w-44"><SelectValue placeholder="All Statuses" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="Pending">Pending</SelectItem>
-                                <SelectItem value="InProgress">In Progress</SelectItem>
-                                <SelectItem value="Fixed">Fixed</SelectItem>
+                                <SelectItem value="all">All Statuses</SelectItem>
+                                {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     </div>
@@ -240,129 +188,102 @@ export function MaintenancePage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Vehicle</TableHead>
-                                <TableHead>Issue Description</TableHead>
+                                <TableHead>Cart #</TableHead>
+                                <TableHead>Issue</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Reported By</TableHead>
                                 <TableHead>Reported At</TableHead>
-                                <TableHead>Contractor</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
+                                <TableHead>Photos</TableHead>
+                                <TableHead>Resolution</TableHead>
+                                {canUpdateStatus && <TableHead className="text-right">Actions</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-8">
-                                        <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                <TableRow><TableCell colSpan={canUpdateStatus ? 8 : 7} className="text-center py-8">
+                                    <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                </TableCell></TableRow>
+                            ) : filtered.length === 0 ? (
+                                <TableRow><TableCell colSpan={canUpdateStatus ? 8 : 7} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
+                            ) : filtered.map(issue => (
+                                <TableRow key={issue.id}>
+                                    <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
+                                    <TableCell className="max-w-xs truncate">{issue.issueDescription}</TableCell>
+                                    <TableCell><Badge className={statusColors[issue.status]}>{issue.status}</Badge></TableCell>
+                                    <TableCell>{issue.reportedBy?.name || '—'}</TableCell>
+                                    <TableCell className="text-sm">{new Date(issue.createdAt).toLocaleDateString()}</TableCell>
+                                    <TableCell>
+                                        <div className="flex gap-1">
+                                            {issue.photosUrls?.map((url, idx) => (
+                                                <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-8 h-8 border rounded overflow-hidden flex-shrink-0 bg-muted">
+                                                    <img src={url} alt="issue" className="w-full h-full object-cover" />
+                                                </a>
+                                            )) || '—'}
+                                        </div>
                                     </TableCell>
-                                </TableRow>
-                            ) : filteredTasks.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                        No maintenance tasks found
+                                    <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
+                                        {issue.resolutionNotes || '—'}
                                     </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredTasks.map((task) => (
-                                    <TableRow key={task.id}>
-                                        <TableCell className="font-medium">
-                                            {task.fleet?.unitNumber} ({task.fleet?.carType})
-                                        </TableCell>
-                                        <TableCell className="max-w-xs truncate">
-                                            {task.issueDescription}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge className={statusColors[task.status]}>
-                                                {task.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>{task.reporter?.name || '-'}</TableCell>
-                                        <TableCell>
-                                            {new Date(task.reportedAt).toLocaleDateString()}
-                                        </TableCell>
-                                        <TableCell>{task.contractor?.name || '-'}</TableCell>
+                                    {canUpdateStatus && (
                                         <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {task.status === 'Pending' && canAssignContractor && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => openAssignModal(task)}
-                                                    >
-                                                        <UserCheck className="w-4 h-4 mr-1" />
-                                                        Assign
-                                                    </Button>
-                                                )}
-                                                {task.status === 'InProgress' && canReportFix && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => openFixModal(task)}
-                                                    >
-                                                        <CheckCircle className="w-4 h-4 mr-1" />
-                                                        Mark Fixed
-                                                    </Button>
-                                                )}
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => openHistoryModal(task)}
-                                                >
-                                                    <History className="w-4 h-4" />
+                                            {issue.status !== 'Resolved' && (
+                                                <Button variant="ghost" size="sm" onClick={() => openStatusModal(issue)}>
+                                                    Update Status
                                                 </Button>
-                                            </div>
+                                            )}
                                         </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
+                                    )}
+                                </TableRow>
+                            ))}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
 
             {/* Report Issue Modal */}
-            <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
+            <Dialog open={reportOpen} onOpenChange={setReportOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Report Maintenance Issue</DialogTitle>
-                        <DialogDescription>
-                            Report a new issue for a vehicle.
-                        </DialogDescription>
+                        <DialogDescription>Report a problem with a golf cart.</DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleReportIssue} className="space-y-4">
+                    <form onSubmit={handleReport} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="fleetId">Vehicle *</Label>
-                            <Select
-                                value={reportForm.fleetId}
-                                onValueChange={(value) => setReportForm({ ...reportForm, fleetId: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select vehicle" />
-                                </SelectTrigger>
+                            <Label>Cart *</Label>
+                            <Select value={reportForm.fleetId} onValueChange={v => setReportForm(f => ({ ...f, fleetId: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>
-                                    {fleet.filter(v => v.status !== 'Maintenance').map((v) => (
-                                        <SelectItem key={v.id} value={v.id}>
-                                            {v.unitNumber} ({v.carType}) - {v.status}
-                                        </SelectItem>
+                                    {fleet.map(v => (
+                                        <SelectItem key={v.id} value={v.id}>{v.carNumber} ({v.carType})</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="issueDescription">Issue Description *</Label>
+                            <Label>Issue Description *</Label>
                             <textarea
-                                id="issueDescription"
-                                className="w-full min-h-[100px] p-3 border rounded-md"
+                                className="w-full min-h-[100px] p-3 border rounded-md text-sm"
                                 value={reportForm.issueDescription}
-                                onChange={(e) => setReportForm({ ...reportForm, issueDescription: e.target.value })}
-                                placeholder="Describe the issue in detail..."
+                                onChange={e => setReportForm(f => ({ ...f, issueDescription: e.target.value }))}
+                                placeholder="Describe the issue in detail…"
                                 required
                             />
                         </div>
+                        <div className="space-y-2">
+                            <Label>Photos (optional, max 5)</Label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={e => setPhotoFiles(Array.from(e.target.files || []).slice(0, 5))}
+                                className="w-full text-sm"
+                            />
+                            {photoFiles.length > 0 && (
+                                <p className="text-xs text-muted-foreground">{photoFiles.length} file(s) selected</p>
+                            )}
+                        </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsReportModalOpen(false)}>
-                                Cancel
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setReportOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={submitting}>
                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Report Issue
@@ -372,131 +293,42 @@ export function MaintenancePage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Assign Contractor Modal */}
-            <Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
+            {/* Update Status Modal */}
+            <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Assign Contractor</DialogTitle>
-                        <DialogDescription>
-                            Assign a contractor to fix: {selectedTask?.issueDescription}
-                        </DialogDescription>
+                        <DialogTitle>Update Issue Status</DialogTitle>
+                        <DialogDescription>Cart: {selectedIssue?.fleet?.carNumber} — {selectedIssue?.issueDescription}</DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleAssignContractor} className="space-y-4">
+                    <form onSubmit={handleUpdateStatus} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="contractorId">Contractor *</Label>
-                            <Select
-                                value={assignForm.contractorId}
-                                onValueChange={(value) => setAssignForm({ contractorId: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select contractor" />
-                                </SelectTrigger>
+                            <Label>New Status *</Label>
+                            <Select value={statusForm.status} onValueChange={v => setStatusForm(f => ({ ...f, status: v }))}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {contractors.map((c) => (
-                                        <SelectItem key={c.id} value={c.id}>
-                                            {c.name}
-                                        </SelectItem>
-                                    ))}
+                                    {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsAssignModalOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Assign Contractor
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Report Fix Modal */}
-            <Dialog open={isFixModalOpen} onOpenChange={setIsFixModalOpen}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Report Fix</DialogTitle>
-                        <DialogDescription>
-                            Report the fix for: {selectedTask?.issueDescription}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleReportFix} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="fixDescription">Fix Description *</Label>
-                            <textarea
-                                id="fixDescription"
-                                className="w-full min-h-[100px] p-3 border rounded-md"
-                                value={fixForm.fixDescription}
-                                onChange={(e) => setFixForm({ fixDescription: e.target.value })}
-                                placeholder="Describe what was fixed..."
-                                required
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsFixModalOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Mark as Fixed
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* History Modal */}
-            <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Maintenance History</DialogTitle>
-                        <DialogDescription>
-                            Vehicle: {selectedTask?.fleet?.unitNumber}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="max-h-[400px] overflow-y-auto">
-                        {selectedFleetHistory.length === 0 ? (
-                            <p className="text-center py-4 text-muted-foreground">No maintenance history found</p>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Issue</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Fix</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {selectedFleetHistory.map((log) => (
-                                        <TableRow key={log.id}>
-                                            <TableCell>
-                                                {new Date(log.reportedAt).toLocaleDateString()}
-                                            </TableCell>
-                                            <TableCell className="max-w-xs truncate">
-                                                {log.issueDescription}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge className={statusColors[log.status]}>
-                                                    {log.status}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="max-w-xs truncate">
-                                                {log.fixDescription || '-'}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                        {statusForm.status === 'Resolved' && (
+                            <div className="space-y-2">
+                                <Label>Resolution Notes</Label>
+                                <textarea
+                                    className="w-full min-h-[80px] p-3 border rounded-md text-sm"
+                                    value={statusForm.resolutionNotes}
+                                    onChange={e => setStatusForm(f => ({ ...f, resolutionNotes: e.target.value }))}
+                                    placeholder="Describe what was done to resolve the issue…"
+                                />
+                            </div>
                         )}
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setIsHistoryModalOpen(false)}>
-                            Close
-                        </Button>
-                    </DialogFooter>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setStatusOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Save Status
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

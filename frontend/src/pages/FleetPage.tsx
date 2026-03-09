@@ -1,115 +1,448 @@
-import { useState, useEffect } from 'react';
-import { fleetApi } from '@/lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { fleetApi, usersApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
+
+interface FleetCart {
+    id: string;
+    carNumber: string;
+    carType: 'Cargo' | 'Accessibility' | '6-Seater' | '4-Seater';
+    status: 'Available' | 'Assigned' | 'Dispatched' | 'Under Maintenance';
+    requiresVAP: boolean;
+    stadium?: { id: string; name: string };
+    assignedUser?: { id: string; name: string; email: string };
+}
+
+const statusColors: Record<string, string> = {
+    'Available': 'bg-green-500 text-white',
+    'Assigned': 'bg-purple-500 text-white',
+    'Dispatched': 'bg-blue-500 text-white',
+    'Under Maintenance': 'bg-red-500 text-white',
+};
+
+const carTypeColors: Record<string, string> = {
+    'Cargo': 'bg-red-600 text-white',
+    'Accessibility': 'bg-yellow-400 text-black',
+    '6-Seater': 'bg-green-600 text-white',
+    '4-Seater': 'bg-blue-600 text-white',
+};
+
+const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
+const STATUSES = ['Available', 'Assigned', 'Dispatched', 'Under Maintenance'] as const;
+
+type CartFormData = {
+    carNumber: string;
+    carType: string;
+    status: string;
+    requiresVAP: boolean;
+};
+
+const EMPTY_FORM: CartFormData = {
+    carNumber: '',
+    carType: '4-Seater',
+    status: 'Available',
+    requiresVAP: false,
+};
 
 export function FleetPage() {
-    const [fleet, setFleet] = useState<any[]>([]);
+    const { user } = useAuthStore();
+    const role = user?.role;
+    const isAdmin = role === 'SuperAdmin' || role === 'Admin';
+    const isFA = role === 'FA';
+
+    const [fleet, setFleet] = useState<FleetCart[]>([]);
+    const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
+    const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
 
-    useEffect(() => {
-        loadFleet();
-    }, [statusFilter]);
+    // Modal states
+    const [cartModal, setCartModal] = useState<{ open: boolean; mode: 'create' | 'edit'; cart?: FleetCart }>({ open: false, mode: 'create' });
+    const [assignModal, setAssignModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
+    const [deleteModal, setDeleteModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
+    const [submitting, setSubmitting] = useState(false);
+
+    // Form state
+    const [formData, setFormData] = useState<CartFormData>(EMPTY_FORM);
+    const [assignUserId, setAssignUserId] = useState('');
+
+    // Bulk import
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [importResult, setImportResult] = useState<string>('');
 
     const loadFleet = async () => {
         try {
             setLoading(true);
-            const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
-            const response = await fleetApi.getAll(params);
-            setFleet(response.data.data || []);
-        } catch (error) {
-            console.error('Failed to load fleet:', error);
+            const params = statusFilter !== 'all' ? { status: statusFilter } : {};
+            const res = await fleetApi.getAll(params);
+            setFleet(res.data.data || []);
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
-    const filteredFleet = fleet.filter(v =>
-        v.unitNumber?.toLowerCase().includes(search.toLowerCase()) ||
-        v.carType?.toLowerCase().includes(search.toLowerCase())
+    const loadMyCarts = async () => {
+        try {
+            const res = await fleetApi.getMyCarts();
+            setMyCarts(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const loadFAUsers = async () => {
+        try {
+            const res = await usersApi.getAll({ role: 'FA' });
+            setFaUsers(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    useEffect(() => {
+        if (isFA) {
+            loadMyCarts();
+        } else {
+            loadFleet();
+        }
+    }, [statusFilter]);
+
+    const filteredFleet = fleet.filter(c =>
+        c.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
+        c.carType?.toLowerCase().includes(search.toLowerCase()) ||
+        c.stadium?.name?.toLowerCase().includes(search.toLowerCase())
     );
 
-    const statusColors: Record<string, string> = {
-        'Ready': 'bg-green-500',
-        'In-Use': 'bg-blue-500',
-        'Maintenance': 'bg-yellow-500',
-        'Damaged': 'bg-red-500',
+    const filteredMyCarts = myCarts.filter(c =>
+        c.carNumber?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const openCreate = () => {
+        setFormData(EMPTY_FORM);
+        setCartModal({ open: true, mode: 'create' });
     };
+
+    const openEdit = (cart: FleetCart) => {
+        setFormData({ carNumber: cart.carNumber, carType: cart.carType, status: cart.status, requiresVAP: cart.requiresVAP });
+        setCartModal({ open: true, mode: 'edit', cart });
+    };
+
+    const openAssign = async (cart: FleetCart) => {
+        await loadFAUsers();
+        setAssignUserId(cart.assignedUser?.id || '');
+        setAssignModal({ open: true, cart });
+    };
+
+    const handleSaveCart = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            if (cartModal.mode === 'create') {
+                await fleetApi.create(formData);
+            } else {
+                await fleetApi.update(cartModal.cart!.id, formData);
+            }
+            setCartModal({ open: false, mode: 'create' });
+            loadFleet();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to save cart');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!deleteModal.cart) return;
+        setSubmitting(true);
+        try {
+            await fleetApi.delete(deleteModal.cart.id);
+            setDeleteModal({ open: false });
+            loadFleet();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to delete cart');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleAssign = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!assignModal.cart) return;
+        setSubmitting(true);
+        try {
+            await fleetApi.assignUser(assignModal.cart.id, assignUserId || null);
+            setAssignModal({ open: false });
+            loadFleet();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to assign user');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const res = await fleetApi.bulkImport(file);
+            const { created, errors } = res.data;
+            setImportResult(`Imported ${created} carts. ${errors?.length ? `Errors: ${errors.length}` : ''}`);
+            loadFleet();
+        } catch (err: any) {
+            setImportResult(err.response?.data?.error || 'Import failed');
+        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const CartTable = ({ data }: { data: FleetCart[] }) => (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>Car #</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>VAP</TableHead>
+                    <TableHead>Assigned FA</TableHead>
+                    <TableHead>Stadium</TableHead>
+                    {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {loading ? (
+                    <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                    </TableCell></TableRow>
+                ) : data.length === 0 ? (
+                    <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                        No carts found
+                    </TableCell></TableRow>
+                ) : data.map(cart => (
+                    <TableRow key={cart.id}>
+                        <TableCell className="font-mono font-semibold">{cart.carNumber}</TableCell>
+                        <TableCell>
+                            <Badge className={carTypeColors[cart.carType]} variant="secondary">{cart.carType}</Badge>
+                        </TableCell>
+                        <TableCell>
+                            <Badge className={statusColors[cart.status]}>{cart.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                            {cart.requiresVAP && <Shield className="w-4 h-4 text-amber-500" title="Requires VAP" />}
+                        </TableCell>
+                        <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                        {isAdmin && (
+                            <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                    <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
+                                        <UserCheck className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
+                                        <Edit2 className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </TableCell>
+                        )}
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+    );
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">Fleet Management</h1>
-                <Button><Plus className="w-4 h-4 mr-2" />Add Vehicle</Button>
+                {isAdmin && (
+                    <div className="flex gap-2">
+                        <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleBulkImport} className="hidden" />
+                        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                            <Upload className="w-4 h-4 mr-2" />Bulk Import
+                        </Button>
+                        <Button onClick={openCreate}>
+                            <Plus className="w-4 h-4 mr-2" />Add Cart
+                        </Button>
+                    </div>
+                )}
             </div>
 
-            <Card>
-                <CardHeader>
-                    <div className="flex gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search vehicles..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="pl-10"
-                            />
+            {importResult && (
+                <div className="text-sm text-muted-foreground bg-muted rounded p-3">{importResult}</div>
+            )}
+
+            <Tabs defaultValue={isFA ? 'my-carts' : 'all'}>
+                {isFA && (
+                    <TabsList>
+                        <TabsTrigger value="my-carts">My Assigned Carts</TabsTrigger>
+                    </TabsList>
+                )}
+
+                {!isFA && (
+                    <>
+                        <Card>
+                            <CardHeader>
+                                <div className="flex gap-4">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search by car number, type, or stadium…"
+                                            value={search}
+                                            onChange={e => setSearch(e.target.value)}
+                                            className="pl-10"
+                                        />
+                                    </div>
+                                    <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); }}>
+                                        <SelectTrigger className="w-48">
+                                            <SelectValue placeholder="All Statuses" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Statuses</SelectItem>
+                                            {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <CartTable data={filteredFleet} />
+                            </CardContent>
+                        </Card>
+                    </>
+                )}
+
+                {isFA && (
+                    <TabsContent value="my-carts">
+                        <Card>
+                            <CardHeader>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search my carts…"
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        className="pl-10"
+                                    />
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <CartTable data={filteredMyCarts} />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                )}
+            </Tabs>
+
+            {/* Create / Edit Cart Modal */}
+            <Dialog open={cartModal.open} onOpenChange={o => setCartModal(m => ({ ...m, open: o }))}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{cartModal.mode === 'create' ? 'Add New Cart' : 'Edit Cart'}</DialogTitle>
+                        <DialogDescription>
+                            {cartModal.mode === 'create' ? 'Enter cart details below.' : `Editing cart ${cartModal.cart?.carNumber}`}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSaveCart} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="carNumber">Car Number *</Label>
+                            <Input id="carNumber" value={formData.carNumber}
+                                onChange={e => setFormData(d => ({ ...d, carNumber: e.target.value }))}
+                                placeholder="e.g. GC-001" required />
                         </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-40">
-                                <SelectValue placeholder="All Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="Ready">Ready</SelectItem>
-                                <SelectItem value="In-Use">In-Use</SelectItem>
-                                <SelectItem value="Maintenance">Maintenance</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Unit Number</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Key ID</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Assigned FA</TableHead>
-                                <TableHead>Stadium</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
-                            ) : filteredFleet.length === 0 ? (
-                                <TableRow><TableCell colSpan={6} className="text-center py-8">No vehicles found</TableCell></TableRow>
-                            ) : (
-                                filteredFleet.map((v) => (
-                                    <TableRow key={v.id}>
-                                        <TableCell className="font-medium">{v.unitNumber}</TableCell>
-                                        <TableCell>{v.carType}</TableCell>
-                                        <TableCell>{v.keyId}</TableCell>
-                                        <TableCell>
-                                            <Badge className={statusColors[v.status]}>{v.status}</Badge>
-                                        </TableCell>
-                                        <TableCell>{v.assignedToFA || '-'}</TableCell>
-                                        <TableCell>{v.stadium?.name || '-'}</TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                        <div className="space-y-2">
+                            <Label htmlFor="carType">Car Type *</Label>
+                            <Select value={formData.carType} onValueChange={v => setFormData(d => ({ ...d, carType: v }))}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {CAR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="status">Status *</Label>
+                            <Select value={formData.status} onValueChange={v => setFormData(d => ({ ...d, status: v }))}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <input type="checkbox" id="requiresVAP" checked={formData.requiresVAP}
+                                onChange={e => setFormData(d => ({ ...d, requiresVAP: e.target.checked }))}
+                                className="w-4 h-4 rounded" />
+                            <Label htmlFor="requiresVAP" className="cursor-pointer">Requires VAP (VIP Access Pass)</Label>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setCartModal(m => ({ ...m, open: false }))}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                {cartModal.mode === 'create' ? 'Add Cart' : 'Save Changes'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Assign FA Modal */}
+            <Dialog open={assignModal.open} onOpenChange={o => setAssignModal(m => ({ ...m, open: o }))}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Assign FA User</DialogTitle>
+                        <DialogDescription>Cart: {assignModal.cart?.carNumber}</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleAssign} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Fleet Attendant</Label>
+                            <Select value={assignUserId} onValueChange={setAssignUserId}>
+                                <SelectTrigger><SelectValue placeholder="Select FA user" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="">— Unassign —</SelectItem>
+                                    {faUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setAssignModal(m => ({ ...m, open: false }))}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Save
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirm Modal */}
+            <Dialog open={deleteModal.open} onOpenChange={o => setDeleteModal(m => ({ ...m, open: o }))}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Delete Cart</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete cart <strong>{deleteModal.cart?.carNumber}</strong>? This cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteModal(m => ({ ...m, open: false }))}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+                            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
