@@ -238,7 +238,7 @@ export function FleetPage() {
                             <Badge className={statusColors[cart.status]}>{cart.status}</Badge>
                         </TableCell>
                         <TableCell>
-                            {cart.requiresVAP && <Shield className="w-4 h-4 text-amber-500" title="Requires VAP" />}
+                            {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
                         </TableCell>
                         <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                         <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>

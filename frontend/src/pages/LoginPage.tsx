@@ -56,9 +56,11 @@ export function LoginPage() {
                             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</> : 'Sign In'}
                         </Button>
                     </form>
-                    <div className="mt-4 text-sm text-muted-foreground text-center">
-                        <p>Test: admin@gcms.com / admin123456</p>
-                    </div>
+                    {import.meta.env.DEV && (
+                        <div className="mt-4 text-sm text-muted-foreground text-center">
+                            <p>Dev: admin@gcms.com / Admin@2024!</p>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

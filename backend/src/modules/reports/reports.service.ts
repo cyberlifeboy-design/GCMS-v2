@@ -38,16 +38,18 @@ export class ReportsService {
 
     async getUtilizationStats() {
         const totalFleet = await this.prisma.fleet.count();
-        const inUse = await this.prisma.fleet.count({ where: { status: 'In-Use' } });
-        const maintenance = await this.prisma.fleet.count({ where: { status: 'Maintenance' } });
-        const ready = await this.prisma.fleet.count({ where: { status: 'Ready' } });
+        const available = await this.prisma.fleet.count({ where: { status: 'Available' } });
+        const assigned = await this.prisma.fleet.count({ where: { status: 'Assigned' } });
+        const dispatched = await this.prisma.fleet.count({ where: { status: 'Dispatched' } });
+        const underMaintenance = await this.prisma.fleet.count({ where: { status: 'Under Maintenance' } });
 
         return {
             total: totalFleet,
-            inUse,
-            maintenance,
-            ready,
-            utilizationRate: totalFleet > 0 ? (inUse / totalFleet) * 100 : 0,
+            available,
+            assigned,
+            dispatched,
+            underMaintenance,
+            utilizationRate: totalFleet > 0 ? ((dispatched + assigned) / totalFleet) * 100 : 0,
         };
     }
 }
