@@ -1,9 +1,35 @@
 import { prisma } from '../../config/database';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 export interface PaginationParams {
     page?: number;
     limit?: number;
+}
+
+function generateSecurePassword(): string {
+    // Generate a secure random password: 12 chars, mixed case, numbers, symbols
+    const length = 16;
+    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numbers = '0123456789';
+    const symbols = '!@#$%^&*';
+    const all = lowercase + uppercase + numbers + symbols;
+
+    let password = '';
+    // Ensure at least one of each type
+    password += lowercase[crypto.randomInt(0, lowercase.length)];
+    password += uppercase[crypto.randomInt(0, uppercase.length)];
+    password += numbers[crypto.randomInt(0, numbers.length)];
+    password += symbols[crypto.randomInt(0, symbols.length)];
+
+    // Fill the rest randomly
+    for (let i = password.length; i < length; i++) {
+        password += all[crypto.randomInt(0, all.length)];
+    }
+
+    // Shuffle the password
+    return password.split('').sort(() => crypto.randomInt(0, 2) - 1).join('');
 }
 
 export class UsersService {
@@ -69,7 +95,7 @@ export class UsersService {
     async create(data: {
         name: string;
         email: string;
-        password: string;
+        password?: string;
         role: string;
         phone?: string;
         stadiumId?: string;
@@ -77,7 +103,9 @@ export class UsersService {
         const exists = await prisma.user.findUnique({ where: { email: data.email } });
         if (exists) throw new Error('User with this email already exists');
 
-        const passwordHash = await bcrypt.hash(data.password || 'changeme123', 10);
+        // Use provided password or generate a secure random one
+        const password = data.password || generateSecurePassword();
+        const passwordHash = await bcrypt.hash(password, 10);
         return prisma.user.create({
             data: {
                 name: data.name,
@@ -149,7 +177,8 @@ export class UsersService {
         const results = { created: 0, skipped: 0, errors: [] as string[] };
         for (const u of users) {
             try {
-                await this.create({ ...u, password: u.password || 'changeme123' });
+                // create() now auto-generates secure password if not provided
+                await this.create(u);
                 results.created++;
             } catch (err: any) {
                 if (err.message.includes('already exists')) {

@@ -161,6 +161,12 @@ export const reportsApi = {
         apiClient.get('/reports/handover/export', { responseType: 'blob' }),
     exportMaintenance: () =>
         apiClient.get('/reports/maintenance/export', { responseType: 'blob' }),
+    exportFleet: () =>
+        apiClient.get('/reports/fleet/export', { responseType: 'blob' }),
+    exportActivity: () =>
+        apiClient.get('/reports/activity/export', { responseType: 'blob' }),
+    exportFull: () =>
+        apiClient.get('/reports/full', { responseType: 'blob' }),
     getAuditLog: () =>
         apiClient.get('/reports/audit'),
 };

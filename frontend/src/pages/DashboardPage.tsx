@@ -6,6 +6,17 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 
+const downloadBlob = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+};
+
 interface DashboardStats {
     fleetByType: Array<{ type: string, count: number }>;
     fleetByStatus: Array<{ status: string, count: number }>;
@@ -49,8 +60,34 @@ export function DashboardPage() {
 
     const statusData = stats?.fleetByStatus.map(s => ({ name: s.status, value: s.count })) || [];
 
-    const handleExport = (type: string) => {
-        alert(`Exporting ${type} report... (Feature implementation in progress)`);
+    const handleExport = async (type: string) => {
+        try {
+            let blob: Blob;
+            let filename: string;
+
+            switch (type) {
+                case 'Fleet Overview':
+                    blob = await reportsApi.exportFleet();
+                    filename = 'fleet_overview.xlsx';
+                    break;
+                case 'Activity Timeline':
+                    blob = await reportsApi.exportActivity();
+                    filename = 'activity_timeline.xlsx';
+                    break;
+                case 'Full System':
+                    blob = await reportsApi.exportFull();
+                    filename = 'gcms_full_report.xlsx';
+                    break;
+                default:
+                    blob = await reportsApi.exportFull();
+                    filename = 'gcms_report.xlsx';
+            }
+
+            downloadBlob(blob, filename);
+        } catch (err) {
+            console.error('Export failed:', err);
+            alert('Failed to export report. Please try again.');
+        }
     };
 
     if (loading) {

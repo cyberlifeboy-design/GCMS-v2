@@ -20,4 +20,13 @@ router.get('/handover/export', requireRole('SuperAdmin', 'Admin', 'Observer'), a
 // Export maintenance logs
 router.get('/maintenance/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportMaintenanceLogs);
 
+// Export fleet overview
+router.get('/fleet/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportFleetOverview);
+
+// Export activity timeline
+router.get('/activity/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportActivityTimeline);
+
+// Export full system report
+router.get('/full', requireRole('SuperAdmin', 'Admin'), auditLog(), ReportsController.exportFullReport);
+
 export default router;

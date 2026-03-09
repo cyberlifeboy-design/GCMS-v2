@@ -119,4 +119,175 @@ export class ReportsController {
             res.status(500).json({ error: 'Failed to export maintenance logs' });
         }
     }
+
+    static async exportFleetOverview(req: AuthRequest, res: Response) {
+        try {
+            const stats = await reportsService.getDashboardStats({});
+            const fleet = await reportsService.getFleetList({});
+
+            const workbook = new ExcelJS.Workbook();
+            const summarySheet = workbook.addWorksheet('Summary');
+            const fleetSheet = workbook.addWorksheet('Fleet');
+
+            // Summary sheet
+            summarySheet.columns = [
+                { header: 'Metric', key: 'metric', width: 25 },
+                { header: 'Value', key: 'value', width: 15 },
+            ];
+            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc: number, s: any) => acc + s.count, 0) });
+            summarySheet.addRow({ metric: 'Available', value: stats.fleetByStatus.find((s: any) => s.status === 'Available')?.count || 0 });
+            summarySheet.addRow({ metric: 'Assigned', value: stats.fleetByStatus.find((s: any) => s.status === 'Assigned')?.count || 0 });
+            summarySheet.addRow({ metric: 'Dispatched', value: stats.fleetByStatus.find((s: any) => s.status === 'Dispatched')?.count || 0 });
+            summarySheet.addRow({ metric: 'Under Maintenance', value: stats.fleetByStatus.find((s: any) => s.status === 'Under Maintenance')?.count || 0 });
+            summarySheet.addRow({ metric: 'VAP Required', value: stats.vapCartsCount });
+            summarySheet.addRow({ metric: 'Active Users', value: stats.activeUsersCount });
+            summarySheet.addRow({ metric: 'Open Issues', value: stats.openIssuesCount });
+
+            // Fleet sheet
+            fleetSheet.columns = [
+                { header: 'Car Number', key: 'carNumber', width: 15 },
+                { header: 'Type', key: 'carType', width: 15 },
+                { header: 'Status', key: 'status', width: 18 },
+                { header: 'VAP Required', key: 'requiresVAP', width: 12 },
+                { header: 'Stadium', key: 'stadium', width: 20 },
+                { header: 'Assigned User', key: 'assignedUser', width: 20 },
+            ];
+            fleet.forEach((cart: any) => {
+                fleetSheet.addRow({
+                    carNumber: cart.carNumber,
+                    carType: cart.carType,
+                    status: cart.status,
+                    requiresVAP: cart.requiresVAP ? 'Yes' : 'No',
+                    stadium: cart.stadium?.name || '',
+                    assignedUser: cart.assignedUser?.name || '',
+                });
+            });
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=fleet_overview.xlsx');
+            await workbook.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export fleet overview' });
+        }
+    }
+
+    static async exportActivityTimeline(req: AuthRequest, res: Response) {
+        try {
+            const logs = await reportsService.getHandoverReports({});
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Activity Timeline');
+
+            sheet.columns = [
+                { header: 'Date', key: 'date', width: 15 },
+                { header: 'Time', key: 'time', width: 12 },
+                { header: 'Car Number', key: 'carNumber', width: 15 },
+                { header: 'User', key: 'userName', width: 20 },
+                { header: 'Action', key: 'action', width: 15 },
+                { header: 'Condition Notes', key: 'conditionNotes', width: 40 },
+            ];
+
+            logs.forEach((log: any) => {
+                const timestamp = new Date(log.timestamp);
+                sheet.addRow({
+                    date: timestamp.toLocaleDateString(),
+                    time: timestamp.toLocaleTimeString(),
+                    carNumber: log.fleet?.carNumber || '',
+                    userName: log.user?.name || '',
+                    action: log.action,
+                    conditionNotes: log.conditionNotes || '',
+                });
+            });
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=activity_timeline.xlsx');
+            await workbook.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export activity timeline' });
+        }
+    }
+
+    static async exportFullReport(req: AuthRequest, res: Response) {
+        try {
+            const [stats, fleet, handoverLogs, maintenanceLogs] = await Promise.all([
+                reportsService.getDashboardStats({}),
+                reportsService.getFleetList({}),
+                reportsService.getHandoverReports({}),
+                reportsService.getMaintenanceReports({}),
+            ]);
+
+            const workbook = new ExcelJS.Workbook();
+
+            // Summary sheet
+            const summarySheet = workbook.addWorksheet('Summary');
+            summarySheet.columns = [
+                { header: 'Metric', key: 'metric', width: 25 },
+                { header: 'Value', key: 'value', width: 15 },
+            ];
+            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc: number, s: any) => acc + s.count, 0) });
+            summarySheet.addRow({ metric: 'Active Users', value: stats.activeUsersCount });
+            summarySheet.addRow({ metric: 'Open Issues', value: stats.openIssuesCount });
+            summarySheet.addRow({ metric: 'VAP Required', value: stats.vapCartsCount });
+
+            // Fleet sheet
+            const fleetSheet = workbook.addWorksheet('Fleet');
+            fleetSheet.columns = [
+                { header: 'Car Number', key: 'carNumber', width: 15 },
+                { header: 'Type', key: 'carType', width: 15 },
+                { header: 'Status', key: 'status', width: 18 },
+                { header: 'Stadium', key: 'stadium', width: 20 },
+            ];
+            fleet.forEach((cart: any) => {
+                fleetSheet.addRow({
+                    carNumber: cart.carNumber,
+                    carType: cart.carType,
+                    status: cart.status,
+                    stadium: cart.stadium?.name || '',
+                });
+            });
+
+            // Handover sheet
+            const handoverSheet = workbook.addWorksheet('Handover Logs');
+            handoverSheet.columns = [
+                { header: 'Timestamp', key: 'timestamp', width: 20 },
+                { header: 'Car Number', key: 'carNumber', width: 15 },
+                { header: 'User', key: 'userName', width: 20 },
+                { header: 'Action', key: 'action', width: 15 },
+            ];
+            handoverLogs.forEach((log: any) => {
+                handoverSheet.addRow({
+                    timestamp: log.timestamp,
+                    carNumber: log.fleet?.carNumber || '',
+                    userName: log.user?.name || '',
+                    action: log.action,
+                });
+            });
+
+            // Maintenance sheet
+            const maintenanceSheet = workbook.addWorksheet('Maintenance');
+            maintenanceSheet.columns = [
+                { header: 'Reported', key: 'reportedAt', width: 20 },
+                { header: 'Car Number', key: 'carNumber', width: 15 },
+                { header: 'Issue', key: 'issueDescription', width: 40 },
+                { header: 'Status', key: 'status', width: 15 },
+            ];
+            maintenanceLogs.forEach((log: any) => {
+                maintenanceSheet.addRow({
+                    reportedAt: log.reportedAt,
+                    carNumber: log.fleet?.carNumber || '',
+                    issueDescription: log.issueDescription,
+                    status: log.status,
+                });
+            });
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=gcms_full_report.xlsx');
+            await workbook.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export full report' });
+        }
+    }
 }

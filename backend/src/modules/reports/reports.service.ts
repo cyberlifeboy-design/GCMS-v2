@@ -138,7 +138,7 @@ export class ReportsService {
 
     private processActivityTimeline(logs: ActivityLog[]) {
         const timeline: Record<string, { checkIn: number, checkOut: number }> = {};
-        
+
         // Initialize last 7 days
         for (let i = 6; i >= 0; i--) {
             const d = new Date();
@@ -156,6 +156,19 @@ export class ReportsService {
         });
 
         return Object.entries(timeline).map(([date, counts]) => ({ date, ...counts }));
+    }
+
+    async getFleetList(filters: { stadiumId?: string } = {}) {
+        const where = filters.stadiumId ? { stadiumId: filters.stadiumId } : {};
+
+        return this.prisma.fleet.findMany({
+            where,
+            include: {
+                stadium: { select: { id: true, name: true } },
+                assignedUser: { select: { id: true, name: true } },
+            },
+            orderBy: { carNumber: 'asc' },
+        });
     }
 }
 
