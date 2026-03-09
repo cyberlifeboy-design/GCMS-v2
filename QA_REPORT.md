@@ -17,15 +17,16 @@ Comprehensive QA scan of the Golf Cart Management System (GCMS) covering authent
 
 ---
 
-## Issues Found (12 total)
+## Issues Found (17 total)
 
-### Critical (3)
+### Critical (4)
 
 | # | Issue | Status |
 |---|-------|--------|
 | [#31](https://github.com/O96a/GCMS/issues/31) | Password reset routes return 404 | Open |
 | [#40](https://github.com/O96a/GCMS/issues/40) | Handover check-in returns null fields | Open |
 | [#42](https://github.com/O96a/GCMS/issues/42) | Backend not deployed - code mismatch | Open |
+| [#46](https://github.com/O96a/GCMS/issues/46) | Admin can create stadiums - RBAC bypass | Open |
 
 ### High (3)
 
@@ -44,12 +45,25 @@ Comprehensive QA scan of the Golf Cart Management System (GCMS) covering authent
 | [#35](https://github.com/O96a/GCMS/issues/35) | Dev mode exposes test credentials | Open |
 | [#36](https://github.com/O96a/GCMS/issues/36) | Validation errors not user-friendly | Open |
 
-### Low (2)
+### Low (3)
 
 | # | Issue | Status |
 |---|-------|--------|
 | [#37](https://github.com/O96a/GCMS/issues/37) | Settings hidden from Admin nav | Open |
 | [#38](https://github.com/O96a/GCMS/issues/38) | Dashboard export buttons placeholder | Open |
+| [#44](https://github.com/O96a/GCMS/issues/44) | Handover status flow confusing | Open |
+
+### Cleanup (1)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#47](https://github.com/O96a/GCMS/issues/47) | Remove test stadiums from QA | Open |
+
+### Investigation (1)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#45](https://github.com/O96a/GCMS/issues/45) | Admin cannot delete FA users | Open |
 
 ---
 
