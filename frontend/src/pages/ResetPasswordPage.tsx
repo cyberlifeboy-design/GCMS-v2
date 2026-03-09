@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowLeft, CheckCircle2, Check, X } from 'lucide-react';
 
 export function ResetPasswordPage() {
     const [password, setPassword] = useState('');
@@ -18,6 +18,21 @@ export function ResetPasswordPage() {
     const navigate = useNavigate();
     const token = searchParams.get('token');
 
+    // Password requirements
+    const hasMinLength = password.length >= 8;
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const passwordsMatch = password === confirmPassword && confirmPassword !== '';
+    const allValid = hasMinLength && hasUpperCase && hasLowerCase && hasNumber && passwordsMatch;
+
+    const Requirement = ({ met, text }: { met: boolean; text: string }) => (
+        <div className={`flex items-center gap-2 text-sm ${met ? 'text-green-600' : 'text-muted-foreground'}`}>
+            {met ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+            <span>{text}</span>
+        </div>
+    );
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -27,13 +42,8 @@ export function ResetPasswordPage() {
             return;
         }
 
-        if (password !== confirmPassword) {
-            setError('Passwords do not match.');
-            return;
-        }
-
-        if (password.length < 8) {
-            setError('Password must be at least 8 characters long.');
+        if (!allValid) {
+            setError('Please meet all password requirements.');
             return;
         }
 
@@ -120,7 +130,18 @@ export function ResetPasswordPage() {
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 placeholder="••••••••" required />
                         </div>
-                        <Button type="submit" className="w-full" disabled={isLoading}>
+
+                        {/* Password requirements */}
+                        <div className="space-y-1 p-3 bg-muted rounded-md">
+                            <p className="text-sm font-medium mb-2">Password requirements:</p>
+                            <Requirement met={hasMinLength} text="At least 8 characters" />
+                            <Requirement met={hasUpperCase} text="At least one uppercase letter" />
+                            <Requirement met={hasLowerCase} text="At least one lowercase letter" />
+                            <Requirement met={hasNumber} text="At least one number" />
+                            <Requirement met={passwordsMatch} text="Passwords match" />
+                        </div>
+
+                        <Button type="submit" className="w-full" disabled={isLoading || !allValid}>
                             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Resetting...</> : 'Reset Password'}
                         </Button>
                     </form>

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { reportsService } from './reports.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import * as ExcelJS from 'exceljs';
+import { HandoverLog, MaintenanceLog, Fleet, DashboardStats } from '../../types';
 
 export class ReportsController {
     static async exportAuditLogs(req: AuthRequest, res: Response) {
@@ -20,7 +21,7 @@ export class ReportsController {
                 { header: 'IP Address', key: 'ipAddress', width: 15 },
             ];
 
-            logs.forEach((log: any) => sheet.addRow(log));
+            logs.forEach((log) => sheet.addRow(log));
 
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             res.setHeader('Content-Disposition', 'attachment; filename=audit_logs.xlsx');
@@ -50,7 +51,7 @@ export class ReportsController {
 
     static async exportHandoverLogs(req: AuthRequest, res: Response) {
         try {
-            const logs = await reportsService.getHandoverReports({});
+            const logs: HandoverLog[] = await reportsService.getHandoverReports({});
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Handover Logs');
@@ -63,7 +64,7 @@ export class ReportsController {
                 { header: 'Condition', key: 'conditionNotes', width: 30 },
             ];
 
-            logs.forEach((log: any) => {
+            logs.forEach((log) => {
                 sheet.addRow({
                     timestamp: log.timestamp,
                     carNumber: log.fleet?.carNumber || '',
@@ -85,7 +86,7 @@ export class ReportsController {
 
     static async exportMaintenanceLogs(req: AuthRequest, res: Response) {
         try {
-            const logs = await reportsService.getMaintenanceReports({});
+            const logs: MaintenanceLog[] = await reportsService.getMaintenanceReports({});
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Maintenance Logs');
@@ -99,7 +100,7 @@ export class ReportsController {
                 { header: 'Resolution Notes', key: 'resolutionNotes', width: 30 },
             ];
 
-            logs.forEach((log: any) => {
+            logs.forEach((log) => {
                 sheet.addRow({
                     reportedAt: log.reportedAt,
                     carNumber: log.fleet?.carNumber || '',
@@ -122,8 +123,8 @@ export class ReportsController {
 
     static async exportFleetOverview(req: AuthRequest, res: Response) {
         try {
-            const stats = await reportsService.getDashboardStats({});
-            const fleet = await reportsService.getFleetList({});
+            const stats: DashboardStats = await reportsService.getDashboardStats({});
+            const fleet: Fleet[] = await reportsService.getFleetList({});
 
             const workbook = new ExcelJS.Workbook();
             const summarySheet = workbook.addWorksheet('Summary');
@@ -134,11 +135,11 @@ export class ReportsController {
                 { header: 'Metric', key: 'metric', width: 25 },
                 { header: 'Value', key: 'value', width: 15 },
             ];
-            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc: number, s: any) => acc + s.count, 0) });
-            summarySheet.addRow({ metric: 'Available', value: stats.fleetByStatus.find((s: any) => s.status === 'Available')?.count || 0 });
-            summarySheet.addRow({ metric: 'Assigned', value: stats.fleetByStatus.find((s: any) => s.status === 'Assigned')?.count || 0 });
-            summarySheet.addRow({ metric: 'Dispatched', value: stats.fleetByStatus.find((s: any) => s.status === 'Dispatched')?.count || 0 });
-            summarySheet.addRow({ metric: 'Under Maintenance', value: stats.fleetByStatus.find((s: any) => s.status === 'Under Maintenance')?.count || 0 });
+            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc, s) => acc + s.count, 0) });
+            summarySheet.addRow({ metric: 'Available', value: stats.fleetByStatus.find(s => s.status === 'Available')?.count || 0 });
+            summarySheet.addRow({ metric: 'Assigned', value: stats.fleetByStatus.find(s => s.status === 'Assigned')?.count || 0 });
+            summarySheet.addRow({ metric: 'Dispatched', value: stats.fleetByStatus.find(s => s.status === 'Dispatched')?.count || 0 });
+            summarySheet.addRow({ metric: 'Under Maintenance', value: stats.fleetByStatus.find(s => s.status === 'Under Maintenance')?.count || 0 });
             summarySheet.addRow({ metric: 'VAP Required', value: stats.vapCartsCount });
             summarySheet.addRow({ metric: 'Active Users', value: stats.activeUsersCount });
             summarySheet.addRow({ metric: 'Open Issues', value: stats.openIssuesCount });
@@ -152,7 +153,7 @@ export class ReportsController {
                 { header: 'Stadium', key: 'stadium', width: 20 },
                 { header: 'Assigned User', key: 'assignedUser', width: 20 },
             ];
-            fleet.forEach((cart: any) => {
+            fleet.forEach((cart) => {
                 fleetSheet.addRow({
                     carNumber: cart.carNumber,
                     carType: cart.carType,
@@ -174,7 +175,7 @@ export class ReportsController {
 
     static async exportActivityTimeline(req: AuthRequest, res: Response) {
         try {
-            const logs = await reportsService.getHandoverReports({});
+            const logs: HandoverLog[] = await reportsService.getHandoverReports({});
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Activity Timeline');
@@ -188,7 +189,7 @@ export class ReportsController {
                 { header: 'Condition Notes', key: 'conditionNotes', width: 40 },
             ];
 
-            logs.forEach((log: any) => {
+            logs.forEach((log) => {
                 const timestamp = new Date(log.timestamp);
                 sheet.addRow({
                     date: timestamp.toLocaleDateString(),
@@ -211,7 +212,7 @@ export class ReportsController {
 
     static async exportFullReport(req: AuthRequest, res: Response) {
         try {
-            const [stats, fleet, handoverLogs, maintenanceLogs] = await Promise.all([
+            const [stats, fleet, handoverLogs, maintenanceLogs]: [DashboardStats, Fleet[], HandoverLog[], MaintenanceLog[]] = await Promise.all([
                 reportsService.getDashboardStats({}),
                 reportsService.getFleetList({}),
                 reportsService.getHandoverReports({}),
@@ -226,7 +227,7 @@ export class ReportsController {
                 { header: 'Metric', key: 'metric', width: 25 },
                 { header: 'Value', key: 'value', width: 15 },
             ];
-            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc: number, s: any) => acc + s.count, 0) });
+            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc, s) => acc + s.count, 0) });
             summarySheet.addRow({ metric: 'Active Users', value: stats.activeUsersCount });
             summarySheet.addRow({ metric: 'Open Issues', value: stats.openIssuesCount });
             summarySheet.addRow({ metric: 'VAP Required', value: stats.vapCartsCount });
@@ -239,7 +240,7 @@ export class ReportsController {
                 { header: 'Status', key: 'status', width: 18 },
                 { header: 'Stadium', key: 'stadium', width: 20 },
             ];
-            fleet.forEach((cart: any) => {
+            fleet.forEach((cart) => {
                 fleetSheet.addRow({
                     carNumber: cart.carNumber,
                     carType: cart.carType,
@@ -256,7 +257,7 @@ export class ReportsController {
                 { header: 'User', key: 'userName', width: 20 },
                 { header: 'Action', key: 'action', width: 15 },
             ];
-            handoverLogs.forEach((log: any) => {
+            handoverLogs.forEach((log) => {
                 handoverSheet.addRow({
                     timestamp: log.timestamp,
                     carNumber: log.fleet?.carNumber || '',
@@ -273,7 +274,7 @@ export class ReportsController {
                 { header: 'Issue', key: 'issueDescription', width: 40 },
                 { header: 'Status', key: 'status', width: 15 },
             ];
-            maintenanceLogs.forEach((log: any) => {
+            maintenanceLogs.forEach((log) => {
                 maintenanceSheet.addRow({
                     reportedAt: log.reportedAt,
                     carNumber: log.fleet?.carNumber || '',
