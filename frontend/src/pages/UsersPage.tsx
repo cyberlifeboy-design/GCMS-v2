@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usersApi } from '@/lib/api';
+import { usersApi, stadiumsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight, Edit2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
 
@@ -62,9 +62,13 @@ export function UsersPage() {
 
     // Modals
     const [createOpen, setCreateOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
+    const [editUser, setEditUser] = useState<User | null>(null);
     const [bulkOpen, setBulkOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
+    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', stadiumId: '' });
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
 
     // Bulk
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +96,22 @@ export function UsersPage() {
     };
 
     useEffect(() => { loadUsers(); }, [roleFilter, page]);
+
+    // Load stadiums for SuperAdmin
+    useEffect(() => {
+        if (isSuperAdmin && stadiums.length === 0) {
+            loadStadiums();
+        }
+    }, [isSuperAdmin]);
+
+    const loadStadiums = async () => {
+        try {
+            const res = await stadiumsApi.getAll();
+            setStadiums(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const filtered = users.filter(u => {
         const matchSearch =
@@ -128,6 +148,46 @@ export function UsersPage() {
             setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to update status');
+        }
+    };
+
+    const openEdit = (u: User) => {
+        setEditUser(u);
+        setEditData({
+            name: u.name || '',
+            email: u.email || '',
+            phone: u.phone || '',
+            role: u.role || 'FA',
+            stadiumId: u.stadium?.id || '',
+        });
+        setEditOpen(true);
+    };
+
+    const handleEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editUser) return;
+        setSubmitting(true);
+        try {
+            await usersApi.update(editUser.id, {
+                name: editData.name,
+                email: editData.email,
+                phone: editData.phone || undefined,
+                role: editData.role as any,
+                stadiumId: isSuperAdmin ? editData.stadiumId || undefined : undefined,
+            });
+            setEditOpen(false);
+            setEditUser(null);
+            loadUsers();
+        } catch (err: any) {
+            const errorData = err.response?.data;
+            if (errorData?.details?.length) {
+                const messages = errorData.details.map((d: any) => `${d.path?.join('.')}: ${d.message}`).join('\n');
+                alert(messages);
+            } else {
+                alert(errorData?.error || 'Failed to update user');
+            }
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -240,18 +300,28 @@ export function UsersPage() {
                                     </TableCell>
                                     {canManage && (
                                         <TableCell className="text-right">
-                                            {u.id !== currentUser?.id && (
+                                            <div className="flex gap-1 justify-end">
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => handleToggleActive(u)}
-                                                    title={u.isActive ? 'Deactivate' : 'Activate'}
+                                                    onClick={() => openEdit(u)}
+                                                    title="Edit user"
                                                 >
-                                                    {u.isActive
-                                                        ? <ToggleRight className="w-5 h-5 text-green-600" />
-                                                        : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                                    <Edit2 className="w-4 h-4" />
                                                 </Button>
-                                            )}
+                                                {u.id !== currentUser?.id && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleToggleActive(u)}
+                                                        title={u.isActive ? 'Deactivate' : 'Activate'}
+                                                    >
+                                                        {u.isActive
+                                                            ? <ToggleRight className="w-5 h-5 text-green-600" />
+                                                            : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     )}
                                 </TableRow>
@@ -335,6 +405,72 @@ export function UsersPage() {
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => { setBulkOpen(false); setBulkData(''); setBulkError(''); }}>Cancel</Button>
                             <Button type="submit">Upload</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit User Modal */}
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Edit User</DialogTitle>
+                        <DialogDescription>Update user details for {editUser?.name || editUser?.email}.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleEdit} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Full Name</Label>
+                            <Input value={editData.name} onChange={e => setEditData(d => ({ ...d, name: e.target.value }))} placeholder="John Doe" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Email</Label>
+                            <Input type="email" value={editData.email} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="john@example.com" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Phone</Label>
+                            <Input value={editData.phone} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} placeholder="+1 555 0100" />
+                        </div>
+                        {isSuperAdmin && (
+                            <>
+                                <div className="space-y-2">
+                                    <Label>Role</Label>
+                                    <Select value={editData.role} onValueChange={v => setEditData(d => ({ ...d, role: v }))}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Stadium</Label>
+                                    <Select value={editData.stadiumId} onValueChange={v => setEditData(d => ({ ...d, stadiumId: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="">No Stadium</SelectItem>
+                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </>
+                        )}
+                        {isAdmin && !isSuperAdmin && (
+                            <div className="space-y-2">
+                                <Label>Role</Label>
+                                <Select value={editData.role} onValueChange={v => setEditData(d => ({ ...d, role: v }))}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="FA">FA</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">Admin can only edit FA users at their venue</p>
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Save Changes
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

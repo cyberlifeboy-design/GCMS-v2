@@ -145,8 +145,12 @@ export const departmentsApi = {
 export const usersApi = {
     getAll: (params?: Record<string, unknown>) =>
         apiClient.get('/users', { params }),
+    getById: (id: string) =>
+        apiClient.get(`/users/${id}`),
     create: (data: Record<string, unknown>) =>
         apiClient.post('/users', data),
+    update: (id: string, data: Record<string, unknown>) =>
+        apiClient.put(`/users/${id}`, data),
     bulkCreate: (users: Record<string, unknown>[]) =>
         apiClient.post('/users/bulk', users),
     setStatus: (id: string, isActive: boolean) =>
