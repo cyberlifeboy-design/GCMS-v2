@@ -3,6 +3,49 @@ import { AuthRequest } from './auth.middleware';
 import { prisma } from '../config/database';
 
 /**
+ * Sensitive fields that should never be stored in audit logs
+ */
+const SENSITIVE_FIELDS = [
+    'password',
+    'passwordHash',
+    'token',
+    'secret',
+    'refreshToken',
+    'accessToken',
+    'currentPassword',
+    'newPassword',
+    'confirmPassword',
+    'apiKey',
+    'apiSecret',
+    'privateKey',
+    'authorization',
+];
+
+/**
+ * Recursively sanitize an object by removing sensitive fields
+ */
+const sanitizeBody = (body: any): any => {
+    if (!body || typeof body !== 'object') return body;
+
+    // Handle arrays
+    if (Array.isArray(body)) {
+        return body.map(item => sanitizeBody(item));
+    }
+
+    // Handle objects
+    const sanitized: any = {};
+    for (const key of Object.keys(body)) {
+        // Skip sensitive fields entirely
+        if (SENSITIVE_FIELDS.some(field => key.toLowerCase() === field.toLowerCase())) {
+            continue;
+        }
+        // Recursively sanitize nested objects
+        sanitized[key] = sanitizeBody(body[key]);
+    }
+    return sanitized;
+};
+
+/**
  * Middleware to log all API requests to the audit log
  */
 export const auditLog = () => {
@@ -43,7 +86,7 @@ export const auditLog = () => {
                             entityType: entityType || 'Unknown',
                             entityId: entityId || 'N/A',
                             oldValue: undefined, // For updates, this should be populated before the change
-                            newValue: req.method === 'POST' || req.method === 'PUT' ? req.body : undefined,
+                            newValue: req.method === 'POST' || req.method === 'PUT' ? sanitizeBody(req.body) : undefined,
                             ipAddress,
                             userAgent,
                         },

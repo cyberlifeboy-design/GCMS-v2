@@ -2,19 +2,22 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authApi } from '@/lib/api';
 
-interface User {
+export interface AuthUser {
     id: string;
     name: string;
     email: string;
-    role: string;
+    role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
+    phone?: string;
+    stadiumId?: string;
+    isActive: boolean;
 }
 
 interface AuthState {
-    user: User | null;
+    user: AuthUser | null;
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
-    logout: () => Promise<void>;
+    logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -36,10 +39,7 @@ export const useAuthStore = create<AuthState>()(
                     throw error;
                 }
             },
-            logout: async () => {
-                try {
-                    await authApi.logout();
-                } catch {}
+            logout: () => {
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
                 set({ user: null, isAuthenticated: false });

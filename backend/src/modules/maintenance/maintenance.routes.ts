@@ -8,44 +8,30 @@ const router = Router();
 
 router.use(authenticate);
 
-// POST /api/v1/maintenance - Report issue (FocalPoint/Admin)
+// GET /api/v1/maintenance — SuperAdmin/Admin/Observer can view
+router.get('/', requireRole('SuperAdmin', 'Admin', 'Observer'), MaintenanceController.getAll);
+
+// GET /api/v1/maintenance/export — CSV export
+router.get('/export', requireRole('SuperAdmin', 'Admin', 'Observer'), MaintenanceController.exportCsv);
+
+// GET /api/v1/maintenance/fleet/:fleetId — history per cart
+router.get('/fleet/:fleetId', requireRole('SuperAdmin', 'Admin', 'Observer'), MaintenanceController.getByFleet);
+
+// POST /api/v1/maintenance — report issue with optional photo upload
 router.post(
     '/',
-    requireRole('FocalPoint', 'Admin'),
+    requireRole('SuperAdmin', 'Admin', 'FA'),
+    MaintenanceController.uploadMiddleware,
     auditLog(),
     MaintenanceController.reportIssue
 );
 
-// GET /api/v1/maintenance - List pending tasks (Contractor/Admin/LCC)
-router.get(
-    '/',
-    requireRole('Contractor', 'Admin', 'LCC'),
+// PATCH /api/v1/maintenance/:id/status — update status (Open→InProgress→Resolved)
+router.patch(
+    '/:id/status',
+    requireRole('SuperAdmin', 'Admin'),
     auditLog(),
-    MaintenanceController.getPendingTasks
-);
-
-// PUT /api/v1/maintenance/:id/assign - Assign to contractor (Admin)
-router.put(
-    '/:id/assign',
-    requireRole('Admin'),
-    auditLog(),
-    MaintenanceController.assignToContractor
-);
-
-// PUT /api/v1/maintenance/:id/fix - Contractor report fix
-router.put(
-    '/:id/fix',
-    requireRole('Contractor', 'Admin'),
-    auditLog(),
-    MaintenanceController.reportFix
-);
-
-// GET /api/v1/maintenance/history/:fleetId - History per vehicle
-router.get(
-    '/history/:fleetId',
-    requireRole('Admin', 'LCC', 'FocalPoint'),
-    auditLog(),
-    MaintenanceController.getHistoryByFleet
+    MaintenanceController.updateStatus
 );
 
 export default router;

@@ -140,4 +140,12 @@ export const settingsApi = {
         }),
 };
 
+// Stadiums
+export const stadiumsApi = {
+    getAll: () =>
+        apiClient.get('/stadiums'),
+    getById: (id: string) =>
+        apiClient.get(`/stadiums/${id}`),
+};
+
 export default apiClient;

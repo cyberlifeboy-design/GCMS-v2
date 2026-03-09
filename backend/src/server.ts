@@ -2,7 +2,7 @@ import app from './app';
 import { initializeMinIO } from './config/storage';
 import { checkDatabaseConnection } from './config/database';
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 
 async function startServer() {
     try {

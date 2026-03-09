@@ -1,70 +1,36 @@
-import { PrismaClient, HandoverLog } from '@prisma/client';
 import { prisma } from '../../config/database';
-import { uploadSignature } from '../../config/storage';
-
-export interface PaginationParams {
-    page?: number;
-    limit?: number;
-}
-
-export interface PaginatedResult<T> {
-    data: T[];
-    pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-    };
-}
 
 export class HandoverService {
-    private prisma: PrismaClient;
-
-    constructor() {
-        this.prisma = prisma;
-    }
-
     async checkOut(data: {
         fleetId: string;
         userId: string;
-        latitude?: number;
-        longitude?: number;
         conditionNotes?: string;
-        signatureBase64?: string;
     }) {
-        // 1. Verify car exists and is Ready
-        const vehicle = await this.prisma.fleet.findUnique({
-            where: { id: data.fleetId },
-        });
-
+        const vehicle = await prisma.fleet.findUnique({ where: { id: data.fleetId } });
         if (!vehicle) throw new Error('Vehicle not found');
-        if (vehicle.status !== 'Ready') throw new Error(`Vehicle is not Ready (Current status: ${vehicle.status})`);
 
-        // 2. Handle signature if provided
-        let signatureUrl: string | undefined;
-        if (data.signatureBase64) {
-            const fileName = `sig_out_${data.fleetId}_${Date.now()}.png`;
-            const buffer = Buffer.from(data.signatureBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-            signatureUrl = await uploadSignature(fileName, buffer);
+        const allowedStatuses = ['Available', 'Assigned'];
+        if (!allowedStatuses.includes(vehicle.status)) {
+            throw new Error(`Vehicle is not available for checkout (Current status: ${vehicle.status})`);
         }
 
-        // 3. Create HandoverLog and update Fleet status
-        return this.prisma.$transaction(async (tx) => {
+        return prisma.$transaction(async (tx) => {
             const log = await tx.handoverLog.create({
                 data: {
                     fleetId: data.fleetId,
                     userId: data.userId,
-                    action: 'CheckOut',
-                    latitude: data.latitude,
-                    longitude: data.longitude,
+                    action: 'CheckedOut',
                     conditionNotes: data.conditionNotes,
-                    signatureUrl,
+                },
+                include: {
+                    fleet: { select: { carNumber: true, carType: true } },
+                    user: { select: { name: true } },
                 },
             });
 
             await tx.fleet.update({
                 where: { id: data.fleetId },
-                data: { status: 'In-Use' },
+                data: { status: 'Dispatched' },
             });
 
             return log;
@@ -74,120 +40,131 @@ export class HandoverService {
     async checkIn(data: {
         fleetId: string;
         userId: string;
-        latitude?: number;
-        longitude?: number;
         conditionNotes?: string;
-        signatureBase64?: string;
-        isMaintenanceRequired?: boolean;
+        hasIssue?: boolean;
+        issueDescription?: string;
+        photosUrls?: string[];
     }) {
-        // 1. Verify car exists and is In-Use
-        const vehicle = await this.prisma.fleet.findUnique({
-            where: { id: data.fleetId },
-        });
-
+        const vehicle = await prisma.fleet.findUnique({ where: { id: data.fleetId } });
         if (!vehicle) throw new Error('Vehicle not found');
-        if (vehicle.status !== 'In-Use') throw new Error(`Vehicle is not In-Use (Current status: ${vehicle.status})`);
-
-        // 2. Handle signature
-        let signatureUrl: string | undefined;
-        if (data.signatureBase64) {
-            const fileName = `sig_in_${data.fleetId}_${Date.now()}.png`;
-            const buffer = Buffer.from(data.signatureBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-            signatureUrl = await uploadSignature(fileName, buffer);
+        if (vehicle.status !== 'Dispatched') {
+            throw new Error(`Vehicle is not Dispatched (Current status: ${vehicle.status})`);
         }
 
-        // 3. Create HandoverLog and update Fleet status
-        return this.prisma.$transaction(async (tx) => {
+        return prisma.$transaction(async (tx) => {
             const log = await tx.handoverLog.create({
                 data: {
                     fleetId: data.fleetId,
                     userId: data.userId,
-                    action: 'CheckIn',
-                    latitude: data.latitude,
-                    longitude: data.longitude,
+                    action: 'CheckedIn',
                     conditionNotes: data.conditionNotes,
-                    signatureUrl,
+                    photosUrls: data.photosUrls || [],
+                },
+                include: {
+                    fleet: { select: { carNumber: true, carType: true } },
+                    user: { select: { name: true } },
                 },
             });
 
-            const nextStatus = data.isMaintenanceRequired ? 'Maintenance' : 'Ready';
+            const nextStatus = data.hasIssue ? 'Under Maintenance' : 'Available';
             await tx.fleet.update({
                 where: { id: data.fleetId },
                 data: { status: nextStatus },
             });
 
+            // Create maintenance log if issue reported
+            if (data.hasIssue && data.issueDescription) {
+                await tx.maintenanceLog.create({
+                    data: {
+                        fleetId: data.fleetId,
+                        reportedById: data.userId,
+                        issueDescription: data.issueDescription,
+                        photosUrls: data.photosUrls || [],
+                        status: 'Open',
+                    },
+                });
+                await tx.handoverLog.create({
+                    data: {
+                        fleetId: data.fleetId,
+                        userId: data.userId,
+                        action: 'IssueReported',
+                        conditionNotes: data.issueDescription,
+                        photosUrls: data.photosUrls || [],
+                    },
+                });
+            }
+
             return log;
         });
     }
 
-    async getMyHandoverHistory(userId: string, pagination?: PaginationParams): Promise<PaginatedResult<HandoverLog>> {
-        const page = pagination?.page || 1;
-        const limit = pagination?.limit || 50;
-        const skip = (page - 1) * limit;
+    async bulkCheckOut(fleetIds: string[], userId: string) {
+        const results = { success: [] as string[], failed: [] as { id: string; reason: string }[] };
 
-        const where = { userId };
-
-        const [data, total] = await Promise.all([
-            this.prisma.handoverLog.findMany({
-                where,
-                include: { fleet: true },
-                orderBy: { timestamp: 'desc' },
-                skip,
-                take: limit,
-            }),
-            this.prisma.handoverLog.count({ where }),
-        ]);
-
-        return {
-            data,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        for (const fleetId of fleetIds) {
+            try {
+                await this.checkOut({ fleetId, userId });
+                results.success.push(fleetId);
+            } catch (err: any) {
+                results.failed.push({ id: fleetId, reason: err.message });
+            }
+        }
+        return results;
     }
 
-    async getAllHistory(filters: {
+    async bulkCheckIn(fleetIds: string[], userId: string, conditionNotes?: string) {
+        const results = { success: [] as string[], failed: [] as { id: string; reason: string }[] };
+
+        for (const fleetId of fleetIds) {
+            try {
+                await this.checkIn({ fleetId, userId, conditionNotes });
+                results.success.push(fleetId);
+            } catch (err: any) {
+                results.failed.push({ id: fleetId, reason: err.message });
+            }
+        }
+        return results;
+    }
+
+    async getHistory(filters: {
         stadiumId?: string;
-        faTrigram?: string;
+        userId?: string;
         fleetId?: string;
-    }, pagination?: PaginationParams): Promise<PaginatedResult<HandoverLog>> {
+        action?: string;
+    }, pagination?: { page?: number; limit?: number }) {
         const page = pagination?.page || 1;
-        const limit = pagination?.limit || 50;
+        const limit = pagination?.limit || 100;
         const skip = (page - 1) * limit;
 
-        const where = {
+        const where: any = {
+            ...(filters.userId && { userId: filters.userId }),
             ...(filters.fleetId && { fleetId: filters.fleetId }),
-            fleet: {
-                ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
-                ...(filters.faTrigram && { assignedToFA: filters.faTrigram }),
-            },
+            ...(filters.action && { action: filters.action }),
         };
 
+        if (filters.stadiumId) {
+            where.fleet = { stadiumId: filters.stadiumId };
+        }
+
         const [data, total] = await Promise.all([
-            this.prisma.handoverLog.findMany({
+            prisma.handoverLog.findMany({
                 where,
                 include: {
-                    fleet: { include: { stadium: true } },
-                    user: { select: { name: true, email: true, role: true } },
+                    fleet: {
+                        include: { stadium: { select: { id: true, name: true } } },
+                    },
+                    user: { select: { id: true, name: true, email: true, role: true } },
                 },
                 orderBy: { timestamp: 'desc' },
                 skip,
                 take: limit,
             }),
-            this.prisma.handoverLog.count({ where }),
+            prisma.handoverLog.count({ where }),
         ]);
 
         return {
             data,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
     }
 }

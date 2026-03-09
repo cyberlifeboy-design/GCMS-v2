@@ -8,16 +8,16 @@ const router = Router();
 
 router.use(authenticate);
 
-// Export audit logs (Admin only)
-router.get('/audit', requireRole('Admin'), auditLog(), ReportsController.exportAuditLogs);
+// Export audit logs (SuperAdmin only)
+router.get('/audit', requireRole('SuperAdmin'), auditLog(), ReportsController.exportAuditLogs);
 
-// Get utilization stats (Admin/LCC)
-router.get('/utilization', requireRole('Admin', 'LCC'), auditLog(), ReportsController.getUtilization);
+// Get utilization stats (SuperAdmin/Admin/Observer)
+router.get('/utilization', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUtilization);
 
-// Export handover logs (Admin/LCC)
-router.get('/handover/export', requireRole('Admin', 'LCC'), auditLog(), ReportsController.exportHandoverLogs);
+// Export handover logs
+router.get('/handover/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportHandoverLogs);
 
-// Export maintenance logs (Admin/LCC)
-router.get('/maintenance/export', requireRole('Admin', 'LCC'), auditLog(), ReportsController.exportMaintenanceLogs);
+// Export maintenance logs
+router.get('/maintenance/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportMaintenanceLogs);
 
 export default router;

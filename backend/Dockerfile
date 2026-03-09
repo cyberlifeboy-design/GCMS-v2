@@ -6,5 +6,5 @@ RUN npm install
 RUN npm install -g tsx
 COPY . .
 RUN npx prisma generate
-EXPOSE 3001
+EXPOSE 3005
 CMD ["tsx", "src/server.ts"]

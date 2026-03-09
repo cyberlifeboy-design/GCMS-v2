@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fleetApi, usersApi } from '@/lib/api';
+import { fleetApi, usersApi, stadiumsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { carTypeColors } from '@/lib/constants';
 
 interface FleetCart {
     id: string;
@@ -29,13 +30,6 @@ const statusColors: Record<string, string> = {
     'Under Maintenance': 'bg-red-500 text-white',
 };
 
-const carTypeColors: Record<string, string> = {
-    'Cargo': 'bg-red-600 text-white',
-    'Accessibility': 'bg-yellow-400 text-black',
-    '6-Seater': 'bg-green-600 text-white',
-    '4-Seater': 'bg-blue-600 text-white',
-};
-
 const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
 const STATUSES = ['Available', 'Assigned', 'Dispatched', 'Under Maintenance'] as const;
 
@@ -44,6 +38,7 @@ type CartFormData = {
     carType: string;
     status: string;
     requiresVAP: boolean;
+    stadiumId: string;
 };
 
 const EMPTY_FORM: CartFormData = {
@@ -51,18 +46,22 @@ const EMPTY_FORM: CartFormData = {
     carType: '4-Seater',
     status: 'Available',
     requiresVAP: false,
+    stadiumId: '',
 };
 
 export function FleetPage() {
     const { user } = useAuthStore();
     const role = user?.role;
+    const isSuperAdmin = role === 'SuperAdmin';
     const isAdmin = role === 'SuperAdmin' || role === 'Admin';
     const isFA = role === 'FA';
 
     const [fleet, setFleet] = useState<FleetCart[]>([]);
     const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
     const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
     const [loading, setLoading] = useState(true);
+    const [stadiumsLoading, setStadiumsLoading] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
 
@@ -111,6 +110,18 @@ export function FleetPage() {
         }
     };
 
+    const loadStadiums = async () => {
+        try {
+            setStadiumsLoading(true);
+            const res = await stadiumsApi.getAll();
+            setStadiums(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setStadiumsLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (isFA) {
             loadMyCarts();
@@ -118,6 +129,13 @@ export function FleetPage() {
             loadFleet();
         }
     }, [statusFilter]);
+
+    // Load stadiums for SuperAdmin (to select venue when creating carts)
+    useEffect(() => {
+        if (isSuperAdmin) {
+            loadStadiums();
+        }
+    }, [isSuperAdmin]);
 
     const filteredFleet = fleet.filter(c =>
         c.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
@@ -130,12 +148,20 @@ export function FleetPage() {
     );
 
     const openCreate = () => {
-        setFormData(EMPTY_FORM);
+        // For Admin users, auto-populate with their stadiumId
+        const defaultStadiumId = !isSuperAdmin ? user?.stadiumId || '' : '';
+        setFormData({ ...EMPTY_FORM, stadiumId: defaultStadiumId });
         setCartModal({ open: true, mode: 'create' });
     };
 
     const openEdit = (cart: FleetCart) => {
-        setFormData({ carNumber: cart.carNumber, carType: cart.carType, status: cart.status, requiresVAP: cart.requiresVAP });
+        setFormData({
+            carNumber: cart.carNumber,
+            carType: cart.carType,
+            status: cart.status,
+            requiresVAP: cart.requiresVAP,
+            stadiumId: cart.stadium?.id || '',
+        });
         setCartModal({ open: true, mode: 'edit', cart });
     };
 
@@ -147,6 +173,13 @@ export function FleetPage() {
 
     const handleSaveCart = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate stadiumId is present (required by backend)
+        if (!formData.stadiumId) {
+            alert('Please select a stadium');
+            return;
+        }
+
         setSubmitting(true);
         try {
             if (cartModal.mode === 'create') {
@@ -355,6 +388,47 @@ export function FleetPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleSaveCart} className="space-y-4">
+                        {/* Stadium Selector - Visible for SuperAdmin, read-only for Admin */}
+                        {cartModal.mode === 'create' ? (
+                            isSuperAdmin ? (
+                                <div className="space-y-2">
+                                    <Label htmlFor="stadiumId">Stadium *</Label>
+                                    <Select
+                                        value={formData.stadiumId}
+                                        onValueChange={v => setFormData(d => ({ ...d, stadiumId: v }))}
+                                        disabled={stadiumsLoading}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={stadiumsLoading ? 'Loading...' : 'Select stadium'} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {stadiums.map(s => (
+                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <Label>Stadium</Label>
+                                    <Input
+                                        value="Your assigned venue"
+                                        disabled
+                                        className="bg-muted"
+                                    />
+                                    <p className="text-xs text-muted-foreground">Carts are created at your assigned venue</p>
+                                </div>
+                            )
+                        ) : (
+                            <div className="space-y-2">
+                                <Label>Stadium</Label>
+                                <Input
+                                    value={cartModal.cart?.stadium?.name || 'Unknown'}
+                                    disabled
+                                    className="bg-muted"
+                                />
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label htmlFor="carNumber">Car Number *</Label>
                             <Input id="carNumber" value={formData.carNumber}

@@ -1,4 +1,3 @@
-import { PrismaClient, Fleet } from '@prisma/client';
 import { prisma } from '../../config/database';
 
 export interface PaginationParams {
@@ -17,105 +16,145 @@ export interface PaginatedResult<T> {
 }
 
 export class FleetService {
-    private prisma: PrismaClient;
-
-    constructor() {
-        this.prisma = prisma;
-    }
-
     async getAll(filters: {
         stadiumId?: string;
-        faTrigram?: string;
+        assignedUserId?: string;
         status?: string;
-    }, pagination?: PaginationParams): Promise<PaginatedResult<Fleet>> {
+        carType?: string;
+        requiresVAP?: boolean;
+    }, pagination?: PaginationParams): Promise<PaginatedResult<any>> {
         const page = pagination?.page || 1;
-        const limit = pagination?.limit || 50;
+        const limit = pagination?.limit || 100;
         const skip = (page - 1) * limit;
 
-        const where = {
+        const where: any = {
             ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
-            ...(filters.faTrigram && { assignedToFA: filters.faTrigram }),
+            ...(filters.assignedUserId && { assignedUserId: filters.assignedUserId }),
             ...(filters.status && { status: filters.status }),
+            ...(filters.carType && { carType: filters.carType }),
+            ...(filters.requiresVAP !== undefined && { requiresVAP: filters.requiresVAP }),
         };
 
         const [data, total] = await Promise.all([
-            this.prisma.fleet.findMany({
+            prisma.fleet.findMany({
                 where,
-                include: { stadium: true },
+                include: {
+                    stadium: true,
+                    assignedUser: {
+                        select: { id: true, name: true, phone: true, email: true, role: true },
+                    },
+                },
                 skip,
                 take: limit,
-                orderBy: { unitNumber: 'asc' },
+                orderBy: { carNumber: 'asc' },
             }),
-            this.prisma.fleet.count({ where }),
+            prisma.fleet.count({ where }),
         ]);
 
         return {
             data,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
     }
 
     async getById(id: string) {
-        return this.prisma.fleet.findUnique({
+        return prisma.fleet.findUnique({
             where: { id },
             include: {
                 stadium: true,
+                assignedUser: {
+                    select: { id: true, name: true, phone: true, email: true, role: true },
+                },
             },
         });
     }
 
     async create(data: {
-        unitNumber: string;
+        carNumber: string;
         carType: string;
-        keyId: string;
-        keyColorCode: string;
-        status: string;
-        vapsPermit?: string;
+        status?: string;
+        requiresVAP?: boolean;
         stadiumId: string;
-        assignedToFA?: string;
+        assignedUserId?: string;
     }) {
-        return this.prisma.fleet.create({
-            data,
+        return prisma.fleet.create({
+            data: {
+                carNumber: data.carNumber,
+                carType: data.carType,
+                status: data.status || 'Available',
+                requiresVAP: data.requiresVAP ?? false,
+                stadiumId: data.stadiumId,
+                assignedUserId: data.assignedUserId,
+            },
+            include: { stadium: true, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 
     async update(id: string, data: Partial<{
-        unitNumber: string;
+        carNumber: string;
         carType: string;
-        keyId: string;
-        keyColorCode: string;
         status: string;
-        vapsPermit: string;
+        requiresVAP: boolean;
         stadiumId: string;
-        assignedToFA: string;
+        assignedUserId: string | null;
     }>) {
-        return this.prisma.fleet.update({
+        return prisma.fleet.update({
             where: { id },
             data,
+            include: { stadium: true, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 
     async delete(id: string) {
-        return this.prisma.fleet.delete({
-            where: { id },
+        return prisma.fleet.delete({ where: { id } });
+    }
+
+    async assignUser(fleetId: string, userId: string | null) {
+        const newStatus = userId ? 'Assigned' : 'Available';
+        return prisma.fleet.update({
+            where: { id: fleetId },
+            data: { assignedUserId: userId, status: newStatus },
+            include: { assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 
-    async getAvailableByFA(faTrigram: string, stadiumId?: string) {
-        return this.prisma.fleet.findMany({
-            where: {
-                assignedToFA: faTrigram,
-                status: 'Ready',
-                ...(stadiumId && { stadiumId }),
-            },
-            include: {
-                stadium: true,
-            },
+    async bulkCreate(carts: Array<{
+        carNumber: string;
+        carType: string;
+        requiresVAP?: boolean;
+        stadiumId: string;
+    }>) {
+        const results = { created: 0, skipped: 0, errors: [] as string[] };
+
+        for (const cart of carts) {
+            try {
+                await prisma.fleet.create({
+                    data: {
+                        carNumber: cart.carNumber,
+                        carType: cart.carType,
+                        status: 'Available',
+                        requiresVAP: cart.requiresVAP ?? false,
+                        stadiumId: cart.stadiumId,
+                    },
+                });
+                results.created++;
+            } catch (err: any) {
+                if (err.code === 'P2002') {
+                    results.skipped++;
+                } else {
+                    results.errors.push(`Cart ${cart.carNumber}: ${err.message}`);
+                }
+            }
+        }
+
+        return results;
+    }
+
+    async getAssignedToUser(userId: string) {
+        return prisma.fleet.findMany({
+            where: { assignedUserId: userId },
+            include: { stadium: true },
+            orderBy: { carNumber: 'asc' },
         });
     }
 }

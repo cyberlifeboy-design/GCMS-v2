@@ -6,241 +6,167 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit2, Trash2, Upload, Loader2 } from 'lucide-react';
+import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 interface User {
     id: string;
-    accreditationId: string;
     name: string;
     email: string;
-    role: 'Admin' | 'LCC' | 'FocalPoint' | 'Contractor';
-    faTrigram?: string;
+    phone?: string;
+    role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
+    isActive: boolean;
     stadium?: { id: string; name: string };
     createdAt: string;
 }
 
 const roleColors: Record<string, string> = {
-    'Admin': 'bg-purple-500',
-    'LCC': 'bg-blue-500',
-    'FocalPoint': 'bg-green-500',
-    'Contractor': 'bg-orange-500',
+    'SuperAdmin': 'bg-purple-500 text-white',
+    'Admin': 'bg-blue-500 text-white',
+    'FA': 'bg-green-500 text-white',
+    'Observer': 'bg-gray-400 text-white',
 };
 
-const faTrigramOptions = ['LOG', 'MOB', 'SPS', 'VUM', 'GOP'];
+const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer'] as const;
+
+type UserFormData = {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    role: string;
+};
+
+const EMPTY_FORM: UserFormData = {
+    name: '', email: '', password: '', phone: '', role: 'FA',
+};
 
 export function UsersPage() {
+    const { user: currentUser } = useAuthStore();
+    const role = currentUser?.role;
+    const isSuperAdmin = role === 'SuperAdmin';
+    const isAdmin = role === 'Admin';
+    const canManage = isSuperAdmin || isAdmin;
+
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
-    const { user: currentUser } = useAuthStore();
 
-    // Modal states
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    // Modals
+    const [createOpen, setCreateOpen] = useState(false);
+    const [bulkOpen, setBulkOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
 
-    // Form states
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        role: 'FocalPoint',
-        accreditationId: '',
-        faTrigram: 'none',
-        password: '',
-    });
+    // Bulk
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [bulkData, setBulkData] = useState('');
     const [bulkError, setBulkError] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        loadUsers();
-    }, []);
 
     const loadUsers = async () => {
         try {
             setLoading(true);
-            const response = await usersApi.getAll();
-            setUsers(response.data.data || []);
-        } catch (error) {
-            console.error('Failed to load users:', error);
+            const res = await usersApi.getAll();
+            setUsers(res.data.data || []);
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
-    const filteredUsers = users.filter(u => {
-        const matchesSearch =
+    useEffect(() => { loadUsers(); }, []);
+
+    const filtered = users.filter(u => {
+        const matchSearch =
             u.name?.toLowerCase().includes(search.toLowerCase()) ||
             u.email?.toLowerCase().includes(search.toLowerCase()) ||
-            u.accreditationId?.toLowerCase().includes(search.toLowerCase());
-        const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-        return matchesSearch && matchesRole;
+            u.phone?.includes(search);
+        const matchRole = roleFilter === 'all' || u.role === roleFilter;
+        return matchSearch && matchRole;
     });
 
-    const handleAddUser = async (e: React.FormEvent) => {
+    const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
         try {
-            await usersApi.bulkCreate([{
+            await usersApi.create({
                 name: formData.name,
                 email: formData.email,
-                role: formData.role,
-                accreditationId: formData.accreditationId,
-                faTrigram: formData.faTrigram && formData.faTrigram !== 'none' ? formData.faTrigram : undefined,
                 password: formData.password || 'changeme123',
-            }]);
-            setIsAddModalOpen(false);
-            resetForm();
-            loadUsers();
-        } catch (error) {
-            console.error('Failed to add user:', error);
-            alert('Failed to add user. Please try again.');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleEditUser = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedUser) return;
-        setSubmitting(true);
-        try {
-            await usersApi.update(selectedUser.id, {
-                name: formData.name,
-                email: formData.email,
+                phone: formData.phone || undefined,
                 role: formData.role,
-                faTrigram: formData.faTrigram && formData.faTrigram !== 'none' ? formData.faTrigram : undefined,
             });
-            setIsEditModalOpen(false);
-            setSelectedUser(null);
-            resetForm();
+            setCreateOpen(false);
+            setFormData(EMPTY_FORM);
             loadUsers();
-        } catch (error) {
-            console.error('Failed to update user:', error);
-            alert('Failed to update user. Please try again.');
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to create user');
         } finally {
             setSubmitting(false);
         }
     };
 
-    const handleDeleteUser = async () => {
-        if (!selectedUser) return;
-        setSubmitting(true);
+    const handleToggleActive = async (u: User) => {
         try {
-            await usersApi.delete(selectedUser.id);
-            setIsDeleteModalOpen(false);
-            setSelectedUser(null);
-            loadUsers();
-        } catch (error) {
-            console.error('Failed to delete user:', error);
-            alert('Failed to delete user. Please try again.');
-        } finally {
-            setSubmitting(false);
+            await usersApi.setStatus(u.id, !u.isActive);
+            setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update status');
         }
     };
 
-    const handleBulkUpload = async (e: React.FormEvent) => {
+    const handleBulkCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setBulkError('');
         try {
-            let usersToCreate: any[] = [];
-
-            // Try parsing as JSON first
+            let parsed: any[];
             try {
-                usersToCreate = JSON.parse(bulkData);
-                if (!Array.isArray(usersToCreate)) {
-                    throw new Error('Data must be an array of users');
-                }
+                parsed = JSON.parse(bulkData);
+                if (!Array.isArray(parsed)) throw new Error('Must be array');
             } catch {
-                // Try CSV format
                 const lines = bulkData.trim().split('\n');
                 const headers = lines[0].split(',').map(h => h.trim());
-                usersToCreate = lines.slice(1).map(line => {
-                    const values = line.split(',').map(v => v.trim());
-                    const user: any = {};
-                    headers.forEach((h, i) => {
-                        user[h] = values[i];
-                    });
-                    return user;
+                parsed = lines.slice(1).map(line => {
+                    const vals = line.split(',').map(v => v.trim());
+                    const obj: any = {};
+                    headers.forEach((h, i) => { obj[h] = vals[i]; });
+                    return obj;
                 });
             }
-
-            if (usersToCreate.length === 0) {
-                setBulkError('No users found in data');
-                return;
-            }
-
-            await usersApi.bulkCreate(usersToCreate);
-            setIsBulkModalOpen(false);
+            if (parsed.length === 0) { setBulkError('No users found'); return; }
+            await usersApi.bulkCreate(parsed);
+            setBulkOpen(false);
             setBulkData('');
             loadUsers();
-            alert(`Successfully created ${usersToCreate.length} users`);
-        } catch (error) {
-            console.error('Failed to bulk upload:', error);
-            setBulkError('Failed to process data. Check format and try again.');
+            alert(`Created ${parsed.length} users`);
+        } catch {
+            setBulkError('Failed — check format (JSON array or CSV with headers: name,email,role,password)');
         }
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
+    const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
         const reader = new FileReader();
-        reader.onload = (event) => {
-            const text = event.target?.result as string;
-            setBulkData(text);
-        };
-        reader.readAsText(file);
+        reader.onload = ev => setBulkData(ev.target?.result as string);
+        reader.readAsText(f);
     };
-
-    const openEditModal = (user: User) => {
-        setSelectedUser(user);
-        setFormData({
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            accreditationId: user.accreditationId,
-            faTrigram: user.faTrigram || 'none',
-            password: '',
-        });
-        setIsEditModalOpen(true);
-    };
-
-    const openDeleteModal = (user: User) => {
-        setSelectedUser(user);
-        setIsDeleteModalOpen(true);
-    };
-
-    const resetForm = () => {
-        setFormData({
-            name: '',
-            email: '',
-            role: 'FocalPoint',
-            accreditationId: '',
-            faTrigram: 'none',
-            password: '',
-        });
-    };
-
-    const isAdmin = currentUser?.role === 'Admin';
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">User Management</h1>
-                {isAdmin && (
+                {canManage && (
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setIsBulkModalOpen(true)}>
+                        <input type="file" accept=".csv,.json" ref={fileInputRef} onChange={handleFileRead} className="hidden" />
+                        <Button variant="outline" onClick={() => { setBulkData(''); setBulkError(''); setBulkOpen(true); }}>
                             <Upload className="w-4 h-4 mr-2" />Bulk Upload
                         </Button>
-                        <Button onClick={() => { resetForm(); setIsAddModalOpen(true); }}>
+                        <Button onClick={() => { setFormData(EMPTY_FORM); setCreateOpen(true); }}>
                             <Plus className="w-4 h-4 mr-2" />Add User
                         </Button>
                     </div>
@@ -253,22 +179,17 @@ export function UsersPage() {
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search users by name, email, or accreditation ID..."
+                                placeholder="Search by name, email, or phone…"
                                 value={search}
-                                onChange={(e) => setSearch(e.target.value)}
+                                onChange={e => setSearch(e.target.value)}
                                 className="pl-10"
                             />
                         </div>
                         <Select value={roleFilter} onValueChange={setRoleFilter}>
-                            <SelectTrigger className="w-40">
-                                <SelectValue placeholder="All Roles" />
-                            </SelectTrigger>
+                            <SelectTrigger className="w-44"><SelectValue placeholder="All Roles" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Roles</SelectItem>
-                                <SelectItem value="Admin">Admin</SelectItem>
-                                <SelectItem value="LCC">LCC</SelectItem>
-                                <SelectItem value="FocalPoint">Focal Point</SelectItem>
-                                <SelectItem value="Contractor">Contractor</SelectItem>
+                                {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     </div>
@@ -279,302 +200,125 @@ export function UsersPage() {
                             <TableRow>
                                 <TableHead>Name</TableHead>
                                 <TableHead>Email</TableHead>
+                                <TableHead>Phone</TableHead>
                                 <TableHead>Role</TableHead>
-                                <TableHead>FA Trigram</TableHead>
-                                <TableHead>Accreditation ID</TableHead>
                                 <TableHead>Stadium</TableHead>
-                                {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                                <TableHead>Status</TableHead>
+                                {canManage && <TableHead className="text-right">Active</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow>
-                                    <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
-                                        <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8">
+                                    <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                </TableCell></TableRow>
+                            ) : filtered.length === 0 ? (
+                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8 text-muted-foreground">No users found</TableCell></TableRow>
+                            ) : filtered.map(u => (
+                                <TableRow key={u.id}>
+                                    <TableCell className="font-medium">{u.name}</TableCell>
+                                    <TableCell>{u.email}</TableCell>
+                                    <TableCell>{u.phone || '—'}</TableCell>
+                                    <TableCell><Badge className={roleColors[u.role]}>{u.role}</Badge></TableCell>
+                                    <TableCell>{u.stadium?.name || '—'}</TableCell>
+                                    <TableCell>
+                                        <Badge className={u.isActive ? 'bg-green-500 text-white' : 'bg-red-400 text-white'}>
+                                            {u.isActive ? 'Active' : 'Inactive'}
+                                        </Badge>
                                     </TableCell>
-                                </TableRow>
-                            ) : filteredUsers.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">
-                                        No users found
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredUsers.map((user) => (
-                                    <TableRow key={user.id}>
-                                        <TableCell className="font-medium">{user.name}</TableCell>
-                                        <TableCell>{user.email}</TableCell>
-                                        <TableCell>
-                                            <Badge className={roleColors[user.role]}>{user.role}</Badge>
+                                    {canManage && (
+                                        <TableCell className="text-right">
+                                            {u.id !== currentUser?.id && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleToggleActive(u)}
+                                                    title={u.isActive ? 'Deactivate' : 'Activate'}
+                                                >
+                                                    {u.isActive
+                                                        ? <ToggleRight className="w-5 h-5 text-green-600" />
+                                                        : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                                </Button>
+                                            )}
                                         </TableCell>
-                                        <TableCell>{user.faTrigram || '-'}</TableCell>
-                                        <TableCell>{user.accreditationId}</TableCell>
-                                        <TableCell>{user.stadium?.name || '-'}</TableCell>
-                                        {isAdmin && (
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => openEditModal(user)}
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </Button>
-                                                    {user.id !== currentUser?.id && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-red-600 hover:text-red-700"
-                                                            onClick={() => openDeleteModal(user)}
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                        )}
-                                    </TableRow>
-                                ))
-                            )}
+                                    )}
+                                </TableRow>
+                            ))}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
 
-            {/* Add User Modal */}
-            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            {/* Create User Modal */}
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Add New User</DialogTitle>
+                        <DialogDescription>Create a new system user.</DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleAddUser} className="space-y-4">
+                    <form onSubmit={handleCreate} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Full Name *</Label>
-                            <Input
-                                id="name"
-                                value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                required
-                            />
+                            <Label>Full Name *</Label>
+                            <Input value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))} required placeholder="John Doe" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email *</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                required
-                            />
+                            <Label>Email *</Label>
+                            <Input type="email" value={formData.email} onChange={e => setFormData(f => ({ ...f, email: e.target.value }))} required placeholder="john@example.com" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="accreditationId">Accreditation ID *</Label>
-                            <Input
-                                id="accreditationId"
-                                value={formData.accreditationId}
-                                onChange={(e) => setFormData({ ...formData, accreditationId: e.target.value })}
-                                required
-                            />
+                            <Label>Phone</Label>
+                            <Input value={formData.phone} onChange={e => setFormData(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 0100" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="role">Role *</Label>
-                            <Select
-                                value={formData.role}
-                                onValueChange={(value) => setFormData({ ...formData, role: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
+                            <Label>Role *</Label>
+                            <Select value={formData.role} onValueChange={v => setFormData(f => ({ ...f, role: v }))}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Admin">Admin</SelectItem>
-                                    <SelectItem value="LCC">LCC</SelectItem>
-                                    <SelectItem value="FocalPoint">Focal Point</SelectItem>
-                                    <SelectItem value="Contractor">Contractor</SelectItem>
+                                    {/* Admin can only create FA users */}
+                                    {isSuperAdmin ? ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>) : (
+                                        <SelectItem value="FA">FA (Fleet Attendant)</SelectItem>
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="faTrigram">FA Trigram</Label>
-                            <Select
-                                value={formData.faTrigram}
-                                onValueChange={(value) => setFormData({ ...formData, faTrigram: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select FA" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">None</SelectItem>
-                                    {faTrigramOptions.map(fa => (
-                                        <SelectItem key={fa} value={fa}>{fa}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password (optional, defaults to changeme123)</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={formData.password}
-                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            />
+                            <Label>Password (default: changeme123)</Label>
+                            <Input type="password" value={formData.password} onChange={e => setFormData(f => ({ ...f, password: e.target.value }))} placeholder="Leave blank for default" />
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
-                                Cancel
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={submitting}>
                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Add User
+                                Create User
                             </Button>
                         </DialogFooter>
                     </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Edit User Modal */}
-            <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Edit User</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleEditUser} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-name">Full Name</Label>
-                            <Input
-                                id="edit-name"
-                                value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-email">Email</Label>
-                            <Input
-                                id="edit-email"
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-role">Role</Label>
-                            <Select
-                                value={formData.role}
-                                onValueChange={(value) => setFormData({ ...formData, role: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Admin">Admin</SelectItem>
-                                    <SelectItem value="LCC">LCC</SelectItem>
-                                    <SelectItem value="FocalPoint">Focal Point</SelectItem>
-                                    <SelectItem value="Contractor">Contractor</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-faTrigram">FA Trigram</Label>
-                            <Select
-                                value={formData.faTrigram}
-                                onValueChange={(value) => setFormData({ ...formData, faTrigram: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select FA" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">None</SelectItem>
-                                    {faTrigramOptions.map(fa => (
-                                        <SelectItem key={fa} value={fa}>{fa}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={submitting}>
-                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                Save Changes
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Delete Confirmation Modal */}
-            <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-                <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                        <DialogTitle>Delete User</DialogTitle>
-                    </DialogHeader>
-                    <p className="text-muted-foreground">
-                        Are you sure you want to delete <strong>{selectedUser?.name}</strong>? This action cannot be undone.
-                    </p>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="button" variant="destructive" onClick={handleDeleteUser} disabled={submitting}>
-                            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                            Delete
-                        </Button>
-                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             {/* Bulk Upload Modal */}
-            <Dialog open={isBulkModalOpen} onOpenChange={setIsBulkModalOpen}>
+            <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>Bulk Upload Users</DialogTitle>
+                        <DialogDescription>Upload a CSV or paste a JSON array. Fields: name, email, role, password, phone (optional).</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <p className="text-sm text-muted-foreground">
-                            Upload CSV or paste JSON array. Required fields: name, email, accreditationId, role.
-                        </p>
-                        <div className="flex gap-2">
-                            <input
-                                type="file"
-                                accept=".csv,.json"
-                                ref={fileInputRef}
-                                onChange={handleFileUpload}
-                                className="hidden"
-                            />
-                            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                                <Upload className="w-4 h-4 mr-2" />Choose File
-                            </Button>
-                        </div>
-                        <form onSubmit={handleBulkUpload}>
-                            <textarea
-                                className="w-full h-40 p-3 border rounded-md font-mono text-sm"
-                                placeholder={`Example JSON format:
-[
-  {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "accreditationId": "ACC001",
-    "role": "FocalPoint",
-    "faTrigram": "LOG"
-  }
-]`}
-                                value={bulkData}
-                                onChange={(e) => setBulkData(e.target.value)}
-                            />
-                            {bulkError && (
-                                <p className="text-sm text-red-500 mt-2">{bulkError}</p>
-                            )}
-                            <DialogFooter className="mt-4">
-                                <Button type="button" variant="outline" onClick={() => { setIsBulkModalOpen(false); setBulkData(''); setBulkError(''); }}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit">Upload</Button>
-                            </DialogFooter>
-                        </form>
-                    </div>
+                    <form onSubmit={handleBulkCreate} className="space-y-4">
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                            <Upload className="w-4 h-4 mr-2" />Choose File (.csv or .json)
+                        </Button>
+                        <textarea
+                            className="w-full h-44 p-3 border rounded-md font-mono text-sm"
+                            placeholder={`JSON example:\n[\n  {"name":"Jane","email":"jane@gcms.com","role":"FA","password":"pass123"}\n]`}
+                            value={bulkData}
+                            onChange={e => setBulkData(e.target.value)}
+                        />
+                        {bulkError && <p className="text-sm text-red-500">{bulkError}</p>}
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => { setBulkOpen(false); setBulkData(''); setBulkError(''); }}>Cancel</Button>
+                            <Button type="submit">Upload</Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

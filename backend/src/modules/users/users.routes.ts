@@ -8,19 +8,25 @@ const router = Router();
 
 router.use(authenticate);
 
-// List all users (Admin only)
-router.get('/', requireRole('Admin'), auditLog(), UsersController.getAll);
+// List all users — SuperAdmin sees all, Admin sees own venue FA
+router.get('/', requireRole('SuperAdmin', 'Admin'), UsersController.getAll);
 
 // Get specific user
-router.get('/:id', auditLog(), UsersController.getById);
+router.get('/:id', requireRole('SuperAdmin', 'Admin'), UsersController.getById);
+
+// Create single user
+router.post('/', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.create);
+
+// Bulk create
+router.post('/bulk', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.bulkCreate);
 
 // Update user
-router.put('/:id', auditLog(), UsersController.update);
+router.put('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.update);
 
-// Bulk create users (Admin only)
-router.post('/bulk', requireRole('Admin'), auditLog(), UsersController.bulkCreate);
+// Activate/deactivate
+router.patch('/:id/status', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.setActive);
 
-// Delete user (Admin only)
-router.delete('/:id', requireRole('Admin'), auditLog(), UsersController.delete);
+// Delete user
+router.delete('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.delete);
 
 export default router;

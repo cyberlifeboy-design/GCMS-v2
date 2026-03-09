@@ -9,6 +9,7 @@ import maintenanceRoutes from './modules/maintenance/maintenance.routes';
 import userRoutes from './modules/users/users.routes';
 import reportRoutes from './modules/reports/reports.routes';
 import stadiumRoutes from './modules/stadiums/stadiums.routes';
+import settingsRoutes from './modules/settings/settings.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import logger from './config/logger';
@@ -16,7 +17,7 @@ import logger from './config/logger';
 dotenv.config();
 
 const app: Application = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 
 // Middleware
 app.use(cors({ origin: [process.env.CORS_ORIGIN || 'http://localhost:3000', 'https://gcms.mehaisi.com'] }));
@@ -60,6 +61,7 @@ app.get('/api/v1', (req: Request, res: Response) => {
             users: '/api/v1/users',
             reports: '/api/v1/reports',
             stadiums: '/api/v1/stadiums',
+            settings: '/api/v1/settings',
         },
     });
 });
@@ -72,6 +74,7 @@ app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/stadiums', stadiumRoutes);
+app.use('/api/v1/settings', settingsRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

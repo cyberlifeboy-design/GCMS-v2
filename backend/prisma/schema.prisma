@@ -8,27 +8,29 @@ datasource db {
 }
 
 model Stadium {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  location  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  fleet     Fleet[]
-  users     User[]
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  location    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  fleet       Fleet[]
+  users       User[]
 }
 
+// Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
+// Cart statuses: Available, Assigned, Dispatched, Under Maintenance
 model Fleet {
   id              String           @id @default(cuid())
-  unitNumber      String           @unique
-  carType         String           // 2-seater, 4-seater, 6-seater
-  keyId           String           @unique
-  keyColorCode    String           // Color coding per PRD
-  status          String           @default("Ready") // Ready, In-Use, Maintenance, Damaged
-  vapsPermit      String?
+  carNumber       String           @unique
+  carType         String           // Cargo, Accessibility, 6-Seater, 4-Seater
+  status          String           @default("Available") // Available, Assigned, Dispatched, Under Maintenance
+  requiresVAP     Boolean          @default(false)
   stadiumId       String
   stadium         Stadium          @relation(fields: [stadiumId], references: [id])
-  assignedToFA    String?          // LOC Trigram (LOG, MOB, etc.)
+  assignedUserId  String?          // FA user assigned to this cart
+  assignedUser    User?            @relation("FleetAssignedUser", fields: [assignedUserId], references: [id])
   handoverLogs    HandoverLog[]
   maintenanceLogs MaintenanceLog[]
   createdAt       DateTime         @default(now())
@@ -36,22 +38,26 @@ model Fleet {
 
   @@index([stadiumId])
   @@index([status])
+  @@index([assignedUserId])
 }
 
+// Roles: SuperAdmin, Admin, FA, Observer
 model User {
-  id              String         @id @default(cuid())
-  accreditationId String         @unique
+  id              String          @id @default(cuid())
   name            String
-  email           String         @unique
+  email           String          @unique
   passwordHash    String
-  role            String         // Admin, LCC, FocalPoint, Contractor
-  faTrigram       String?        // LOG, MOB, SPS, VUM, GOP
+  role            String          // SuperAdmin, Admin, FA, Observer
+  phone           String?
+  isActive        Boolean         @default(true)
   stadiumId       String?
-  stadium         Stadium?       @relation(fields: [stadiumId], references: [id])
+  stadium         Stadium?        @relation(fields: [stadiumId], references: [id])
   handoverLogs    HandoverLog[]
   refreshTokens   RefreshToken[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  assignedCarts   Fleet[]         @relation("FleetAssignedUser")
+  maintenanceLogs MaintenanceLog[] @relation("MaintenanceReporter")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@index([stadiumId])
   @@index([role])
@@ -68,19 +74,17 @@ model RefreshToken {
   @@index([userId])
 }
 
+// Actions: CheckedIn, CheckedOut, IssueReported
 model HandoverLog {
   id             String   @id @default(cuid())
   fleetId        String
   fleet          Fleet    @relation(fields: [fleetId], references: [id])
   userId         String
   user           User     @relation(fields: [userId], references: [id])
-  action         String   // CheckOut, CheckIn
+  action         String   // CheckedIn, CheckedOut, IssueReported
   timestamp      DateTime @default(now())
-  latitude       Float?
-  longitude      Float?
   conditionNotes String?
-  signatureUrl   String?  // MinIO URL
-  photosUrls     String[] // Array of MinIO URLs
+  photosUrls     String[] // Array of MinIO URLs (for issue reports)
   createdAt      DateTime @default(now())
 
   @@index([fleetId])
@@ -88,22 +92,36 @@ model HandoverLog {
   @@index([timestamp])
 }
 
+// Statuses: Open, InProgress, Resolved
 model MaintenanceLog {
   id               String    @id @default(cuid())
   fleetId          String
   fleet            Fleet     @relation(fields: [fleetId], references: [id])
-  reportedBy       String    // User ID
+  reportedById     String
+  reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
   issueDescription String
+  photosUrls       String[]  @default([]) // Photos uploaded with issue report
   reportedAt       DateTime  @default(now())
-  contractorId     String?   // User ID of assigned contractor
-  fixDescription   String?
-  fixedAt          DateTime?
-  status           String    @default("Pending") // Pending, InProgress, Fixed
+  status           String    @default("Open") // Open, InProgress, Resolved
+  resolutionNotes  String?
+  resolvedAt       DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([fleetId])
   @@index([status])
+  @@index([reportedById])
+}
+
+model SystemSettings {
+  id             String   @id @default(cuid())
+  tournamentName String   @default("Golf Cart Management System")
+  logoUrl        String?
+  headerUrl      String?
+  footerUrl      String?
+  footerText     String?
+  updatedAt      DateTime @updatedAt
+  updatedById    String?
 }
 
 model AuditLog {

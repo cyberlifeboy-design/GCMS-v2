@@ -8,36 +8,19 @@ const router = Router();
 
 router.use(authenticate);
 
-// POST /api/v1/handover/checkout - Check out a car
-router.post(
-    '/checkout',
-    requireRole('FocalPoint', 'Admin'),
-    auditLog(),
-    HandoverController.checkOut
-);
+// POST /checkout — FA and Admin can check out
+router.post('/checkout', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.checkOut);
 
-// POST /api/v1/handover/checkin - Check in a car
-router.post(
-    '/checkin',
-    requireRole('FocalPoint', 'Admin'),
-    auditLog(),
-    HandoverController.checkIn
-);
+// POST /checkin — FA and Admin can check in
+router.post('/checkin', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.checkIn);
 
-// GET /api/v1/handover/my-history - Current user's history
-router.get(
-    '/my-history',
-    requireRole('FocalPoint', 'Admin'),
-    auditLog(),
-    HandoverController.getMyHistory
-);
+// POST /bulk-checkout — bulk operations
+router.post('/bulk-checkout', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.bulkCheckOut);
 
-// GET /api/v1/handover/history - Full history (Admin/LCC, or FocalPoint filtered)
-router.get(
-    '/history',
-    requireRole('Admin', 'LCC', 'FocalPoint'),
-    auditLog(),
-    HandoverController.getAllHistory
-);
+// POST /bulk-checkin
+router.post('/bulk-checkin', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.bulkCheckIn);
+
+// GET /history — full log (RBAC scoped inside controller)
+router.get('/history', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getHistory);
 
 export default router;

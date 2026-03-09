@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Plus, Search, Download, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { carTypeColors } from '@/lib/constants';
 
 interface MaintenanceLog {
     id: string;
@@ -189,6 +190,7 @@ export function MaintenancePage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Cart #</TableHead>
+                                <TableHead>Type</TableHead>
                                 <TableHead>Issue</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Reported By</TableHead>
@@ -200,14 +202,19 @@ export function MaintenancePage() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={canUpdateStatus ? 8 : 7} className="text-center py-8">
+                                <TableRow><TableCell colSpan={canUpdateStatus ? 9 : 8} className="text-center py-8">
                                     <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                                 </TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={canUpdateStatus ? 8 : 7} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={canUpdateStatus ? 9 : 8} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
                             ) : filtered.map(issue => (
                                 <TableRow key={issue.id}>
                                     <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
+                                    <TableCell>
+                                        <Badge className={carTypeColors[issue.fleet?.carType] || 'bg-gray-500 text-white'} variant="secondary">
+                                            {issue.fleet?.carType || '—'}
+                                        </Badge>
+                                    </TableCell>
                                     <TableCell className="max-w-xs truncate">{issue.issueDescription}</TableCell>
                                     <TableCell><Badge className={statusColors[issue.status]}>{issue.status}</Badge></TableCell>
                                     <TableCell>{issue.reportedBy?.name || '—'}</TableCell>

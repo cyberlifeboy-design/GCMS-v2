@@ -20,7 +20,7 @@ export class ReportsController {
                 { header: 'IP Address', key: 'ipAddress', width: 15 },
             ];
 
-            logs.forEach(log => sheet.addRow(log));
+            logs.forEach((log: any) => sheet.addRow(log));
 
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             res.setHeader('Content-Disposition', 'attachment; filename=audit_logs.xlsx');
@@ -50,23 +50,19 @@ export class ReportsController {
 
             sheet.columns = [
                 { header: 'Timestamp', key: 'timestamp', width: 25 },
-                { header: 'Unit Number', key: 'unitNumber', width: 15 },
+                { header: 'Car Number', key: 'carNumber', width: 15 },
                 { header: 'User', key: 'userName', width: 20 },
                 { header: 'Action', key: 'action', width: 15 },
-                { header: 'Latitude', key: 'latitude', width: 15 },
-                { header: 'Longitude', key: 'longitude', width: 15 },
                 { header: 'Condition', key: 'conditionNotes', width: 30 },
             ];
 
-            logs.forEach(log => {
+            logs.forEach((log: any) => {
                 sheet.addRow({
                     timestamp: log.timestamp,
-                    unitNumber: log.fleet.unitNumber,
-                    userName: log.user.name,
+                    carNumber: log.fleet?.carNumber || '',
+                    userName: log.user?.name || '',
                     action: log.action,
-                    latitude: log.latitude,
-                    longitude: log.longitude,
-                    conditionNotes: log.conditionNotes,
+                    conditionNotes: log.conditionNotes || '',
                 });
             });
 
@@ -89,21 +85,21 @@ export class ReportsController {
 
             sheet.columns = [
                 { header: 'Reported At', key: 'reportedAt', width: 25 },
-                { header: 'Unit Number', key: 'unitNumber', width: 15 },
+                { header: 'Car Number', key: 'carNumber', width: 15 },
                 { header: 'Issue', key: 'issueDescription', width: 30 },
                 { header: 'Status', key: 'status', width: 15 },
-                { header: 'Fixed At', key: 'fixedAt', width: 25 },
-                { header: 'Fix', key: 'fixDescription', width: 30 },
+                { header: 'Resolved At', key: 'resolvedAt', width: 25 },
+                { header: 'Resolution Notes', key: 'resolutionNotes', width: 30 },
             ];
 
-            logs.forEach(log => {
+            logs.forEach((log: any) => {
                 sheet.addRow({
                     reportedAt: log.reportedAt,
-                    unitNumber: log.fleet.unitNumber,
+                    carNumber: log.fleet?.carNumber || '',
                     issueDescription: log.issueDescription,
                     status: log.status,
-                    fixedAt: log.fixedAt,
-                    fixDescription: log.fixDescription,
+                    resolvedAt: log.resolvedAt || '',
+                    resolutionNotes: log.resolutionNotes || '',
                 });
             });
 

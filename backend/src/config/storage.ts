@@ -13,6 +13,8 @@ export const minioClient = new Minio.Client({
 export const BUCKETS = {
     SIGNATURES: 'signatures',
     INCIDENT_PHOTOS: 'incident-photos',
+    MAINTENANCE_PHOTOS: 'maintenance-photos',
+    BRANDING: 'branding',
 };
 
 /**

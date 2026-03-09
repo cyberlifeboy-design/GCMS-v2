@@ -1,59 +1,102 @@
-import { PrismaClient, User } from '@prisma/client';
 import { prisma } from '../../config/database';
+import bcrypt from 'bcrypt';
 
 export interface PaginationParams {
     page?: number;
     limit?: number;
 }
 
-export interface PaginatedResult<T> {
-    data: T[];
-    pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-    };
-}
-
 export class UsersService {
-    private prisma: PrismaClient;
-
-    constructor() {
-        this.prisma = prisma;
-    }
-
-    async getAll(pagination?: PaginationParams): Promise<PaginatedResult<User>> {
+    async getAll(filters: {
+        role?: string;
+        stadiumId?: string;
+        isActive?: boolean;
+    }, pagination?: PaginationParams) {
         const page = pagination?.page || 1;
-        const limit = pagination?.limit || 50;
+        const limit = pagination?.limit || 100;
         const skip = (page - 1) * limit;
 
+        const where: any = {
+            ...(filters.role && { role: filters.role }),
+            ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
+            ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+        };
+
         const [data, total] = await Promise.all([
-            this.prisma.user.findMany({
-                include: { stadium: true },
+            prisma.user.findMany({
+                where,
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    phone: true,
+                    isActive: true,
+                    stadiumId: true,
+                    stadium: { select: { id: true, name: true } },
+                    createdAt: true,
+                },
                 orderBy: { name: 'asc' },
                 skip,
                 take: limit,
             }),
-            this.prisma.user.count(),
+            prisma.user.count({ where }),
         ]);
 
         return {
             data,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
     }
 
     async getById(id: string) {
-        return this.prisma.user.findUnique({
+        return prisma.user.findUnique({
             where: { id },
-            include: {
-                stadium: true,
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                phone: true,
+                isActive: true,
+                stadiumId: true,
+                stadium: { select: { id: true, name: true } },
+                createdAt: true,
+            },
+        });
+    }
+
+    async create(data: {
+        name: string;
+        email: string;
+        password: string;
+        role: string;
+        phone?: string;
+        stadiumId?: string;
+    }) {
+        const exists = await prisma.user.findUnique({ where: { email: data.email } });
+        if (exists) throw new Error('User with this email already exists');
+
+        const passwordHash = await bcrypt.hash(data.password || 'changeme123', 10);
+        return prisma.user.create({
+            data: {
+                name: data.name,
+                email: data.email,
+                passwordHash,
+                role: data.role,
+                phone: data.phone,
+                stadiumId: data.stadiumId,
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                phone: true,
+                isActive: true,
+                stadiumId: true,
+                stadium: { select: { id: true, name: true } },
+                createdAt: true,
             },
         });
     }
@@ -62,38 +105,61 @@ export class UsersService {
         name: string;
         email: string;
         role: string;
-        faTrigram: string;
+        phone: string;
         stadiumId: string;
-        accreditationId: string;
+        isActive: boolean;
     }>) {
-        return this.prisma.user.update({
+        return prisma.user.update({
             where: { id },
             data,
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                phone: true,
+                isActive: true,
+                stadiumId: true,
+                stadium: { select: { id: true, name: true } },
+                updatedAt: true,
+            },
+        });
+    }
+
+    async setActive(id: string, isActive: boolean) {
+        return prisma.user.update({
+            where: { id },
+            data: { isActive },
+            select: { id: true, name: true, isActive: true },
         });
     }
 
     async delete(id: string) {
-        return this.prisma.user.delete({
-            where: { id },
-        });
+        return prisma.user.delete({ where: { id } });
     }
 
-    async bulkCreate(users: any[]) {
-        const bcrypt = await import('bcrypt');
-        const saltRounds = 10;
-
-        // Destructure to exclude password from spread, preventing it from being stored
-        const hashedUsers = await Promise.all(
-            users.map(async ({ password, ...userData }) => ({
-                ...userData,
-                passwordHash: await bcrypt.hash(password || 'welcome123', saltRounds),
-            }))
-        );
-
-        return this.prisma.user.createMany({
-            data: hashedUsers,
-            skipDuplicates: true,
-        });
+    async bulkCreate(users: Array<{
+        name: string;
+        email: string;
+        password?: string;
+        role: string;
+        phone?: string;
+        stadiumId?: string;
+    }>) {
+        const results = { created: 0, skipped: 0, errors: [] as string[] };
+        for (const u of users) {
+            try {
+                await this.create({ ...u, password: u.password || 'changeme123' });
+                results.created++;
+            } catch (err: any) {
+                if (err.message.includes('already exists')) {
+                    results.skipped++;
+                } else {
+                    results.errors.push(`${u.email}: ${err.message}`);
+                }
+            }
+        }
+        return results;
     }
 }
 

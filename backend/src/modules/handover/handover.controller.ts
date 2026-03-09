@@ -5,27 +5,30 @@ import { AuthRequest } from '../../middleware/auth.middleware';
 
 const checkoutSchema = z.object({
     fleetId: z.string().min(1),
-    latitude: z.number().optional(),
-    longitude: z.number().optional(),
     conditionNotes: z.string().optional(),
-    signatureBase64: z.string().optional(),
 });
 
-const checkinSchema = checkoutSchema.extend({
-    isMaintenanceRequired: z.boolean().default(false),
+const checkinSchema = z.object({
+    fleetId: z.string().min(1),
+    conditionNotes: z.string().optional(),
+    hasIssue: z.boolean().default(false),
+    issueDescription: z.string().optional(),
+    photosUrls: z.array(z.string()).optional(),
+});
+
+const bulkIdsSchema = z.object({
+    fleetIds: z.array(z.string()).min(1),
+    conditionNotes: z.string().optional(),
 });
 
 export class HandoverController {
     static async checkOut(req: AuthRequest, res: Response) {
         try {
             const validatedData = checkoutSchema.parse(req.body);
-            const userId = req.user!.userId;
-
             const log = await handoverService.checkOut({
                 ...validatedData,
-                userId,
+                userId: req.user!.userId,
             });
-
             res.status(201).json(log);
         } catch (error) {
             if (error instanceof z.ZodError) {
@@ -41,13 +44,10 @@ export class HandoverController {
     static async checkIn(req: AuthRequest, res: Response) {
         try {
             const validatedData = checkinSchema.parse(req.body);
-            const userId = req.user!.userId;
-
             const log = await handoverService.checkIn({
                 ...validatedData,
-                userId,
+                userId: req.user!.userId,
             });
-
             res.status(201).json(log);
         } catch (error) {
             if (error instanceof z.ZodError) {
@@ -55,42 +55,58 @@ export class HandoverController {
             } else if (error instanceof Error) {
                 res.status(400).json({ error: error.message });
             } else {
-                res.status(500).json({ error: 'Checkin failed' });
+                res.status(500).json({ error: 'Check-in failed' });
             }
         }
     }
 
-    static async getMyHistory(req: AuthRequest, res: Response) {
+    static async bulkCheckOut(req: AuthRequest, res: Response) {
         try {
-            const userId = req.user!.userId;
-            const history = await handoverService.getMyHandoverHistory(userId);
-            res.status(200).json(history);
+            const { fleetIds } = bulkIdsSchema.parse(req.body);
+            const results = await handoverService.bulkCheckOut(fleetIds, req.user!.userId);
+            res.status(200).json(results);
         } catch (error) {
-            res.status(500).json({ error: 'Failed to fetch history' });
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Bulk checkout failed' });
+            }
         }
     }
 
-    static async getAllHistory(req: AuthRequest, res: Response) {
+    static async bulkCheckIn(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, faTrigram, fleetId } = req.query;
+            const { fleetIds, conditionNotes } = bulkIdsSchema.parse(req.body);
+            const results = await handoverService.bulkCheckIn(fleetIds, req.user!.userId, conditionNotes);
+            res.status(200).json(results);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Bulk check-in failed' });
+            }
+        }
+    }
 
-            // RBAC Filtering for non-admins
-            let filterStadiumId = stadiumId as string | undefined;
-            let filterFATrigram = faTrigram as string | undefined;
+    static async getHistory(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId, action } = req.query as any;
 
-            if (req.user?.role === 'FocalPoint') {
-                filterFATrigram = req.user.faTrigram!;
-                if (req.user.stadiumId) {
-                    filterStadiumId = req.user.stadiumId;
-                }
+            let stadiumId: string | undefined;
+            let userId: string | undefined;
+
+            if (req.user?.role === 'Admin') {
+                stadiumId = req.user.stadiumId;
+            } else if (req.user?.role === 'FA') {
+                userId = req.user.userId;
             }
 
-            const history = await handoverService.getAllHistory({
-                stadiumId: filterStadiumId,
-                faTrigram: filterFATrigram,
-                fleetId: fleetId as string,
+            const history = await handoverService.getHistory({
+                stadiumId,
+                userId,
+                fleetId,
+                action,
             });
-
             res.status(200).json(history);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch history' });

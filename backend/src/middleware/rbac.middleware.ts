@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth.middleware';
 
-type Role = 'Admin' | 'LCC' | 'FocalPoint' | 'Contractor';
+export type Role = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
 
 /**
  * Middleware to check if user has required role(s)
@@ -28,6 +28,8 @@ export const requireRole = (...allowedRoles: Role[]) => {
 
 /**
  * Check if user has access to a specific stadium
+ * SuperAdmin and Observer have access to all stadiums
+ * Admin and FA are scoped to their assigned stadium
  */
 export const checkStadiumAccess = (stadiumIdFromRequest: (req: AuthRequest) => string) => {
     return (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -36,19 +38,16 @@ export const checkStadiumAccess = (stadiumIdFromRequest: (req: AuthRequest) => s
             return;
         }
 
-        // Admin and LCC have access to all stadiums
-        if (req.user.role === 'Admin' || req.user.role === 'LCC') {
+        // SuperAdmin and Observer have access to all stadiums
+        if (req.user.role === 'SuperAdmin' || req.user.role === 'Observer') {
             next();
             return;
         }
 
         const requestedStadiumId = stadiumIdFromRequest(req);
 
-        // Check if user has access to this stadium
         if (req.user.stadiumId !== requestedStadiumId) {
-            res.status(403).json({
-                error: 'Access denied to this stadium',
-            });
+            res.status(403).json({ error: 'Access denied to this venue' });
             return;
         }
 
@@ -57,40 +56,7 @@ export const checkStadiumAccess = (stadiumIdFromRequest: (req: AuthRequest) => s
 };
 
 /**
- * Check if FocalPoint user has access to specific FA (Functional Area)
- */
-export const checkFAAccess = (faTrigramFromRequest: (req: AuthRequest) => string) => {
-    return (req: AuthRequest, res: Response, next: NextFunction): void => {
-        if (!req.user) {
-            res.status(401).json({ error: 'Authentication required' });
-            return;
-        }
-
-        // Admin and LCC have access to all FAs
-        if (req.user.role === 'Admin' || req.user.role === 'LCC') {
-            next();
-            return;
-        }
-
-        // FocalPoint can only access their assigned FA
-        if (req.user.role === 'FocalPoint') {
-            const requestedFA = faTrigramFromRequest(req);
-            if (req.user.faTrigram !== requestedFA) {
-                res.status(403).json({
-                    error: 'Access denied to this functional area',
-                    userFA: req.user.faTrigram,
-                    requestedFA,
-                });
-                return;
-            }
-        }
-
-        next();
-    };
-};
-
-/**
- * Check if user owns a resource or is an admin
+ * Check if user owns a resource or is an admin-level role
  */
 export const requireOwnership = (userIdFromRequest: (req: AuthRequest) => string) => {
     return (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -99,15 +65,14 @@ export const requireOwnership = (userIdFromRequest: (req: AuthRequest) => string
             return;
         }
 
-        // Admins can access any resource
-        if (req.user.role === 'Admin') {
+        // SuperAdmin and Admin can access any resource
+        if (req.user.role === 'SuperAdmin' || req.user.role === 'Admin') {
             next();
             return;
         }
 
         const resourceUserId = userIdFromRequest(req);
 
-        // Check if user owns this resource
         if (req.user.userId !== resourceUserId) {
             res.status(403).json({
                 error: 'Access denied - you can only access your own resources',

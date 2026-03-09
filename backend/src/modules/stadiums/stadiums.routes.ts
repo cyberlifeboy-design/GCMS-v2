@@ -22,22 +22,22 @@ router.get('/:id', authenticate, StadiumController.getById);
 /**
  * @route   POST /api/v1/stadiums
  * @desc    Create a new stadium
- * @access  Protected (Admin only)
+ * @access  Protected (SuperAdmin only)
  */
-router.post('/', authenticate, requireRole('Admin'), StadiumController.create);
+router.post('/', authenticate, requireRole('SuperAdmin'), StadiumController.create);
 
 /**
  * @route   PUT /api/v1/stadiums/:id
  * @desc    Update a stadium
- * @access  Protected (Admin only)
+ * @access  Protected (SuperAdmin only)
  */
-router.put('/:id', authenticate, requireRole('Admin'), StadiumController.update);
+router.put('/:id', authenticate, requireRole('SuperAdmin'), StadiumController.update);
 
 /**
  * @route   DELETE /api/v1/stadiums/:id
  * @desc    Delete a stadium
- * @access  Protected (Admin only)
+ * @access  Protected (SuperAdmin only)
  */
-router.delete('/:id', authenticate, requireRole('Admin'), StadiumController.delete);
+router.delete('/:id', authenticate, requireRole('SuperAdmin'), StadiumController.delete);
 
 export default router;

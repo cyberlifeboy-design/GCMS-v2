@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { handoverApi, fleetApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,196 +9,98 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowRightLeft, LogOut, LogIn, History, Loader2, MapPin } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { LogOut, LogIn, History, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { carTypeColors } from '@/lib/constants';
 
 interface HandoverLog {
     id: string;
     fleetId: string;
-    fleet: {
-        unitNumber: string;
-        carType: string;
-    };
+    fleet: { carNumber: string; carType: string };
     userId: string;
-    user?: {
-        name: string;
-        faTrigram?: string;
-    };
-    action: 'CheckOut' | 'CheckIn';
-    timestamp: string;
-    latitude?: number;
-    longitude?: number;
+    user?: { name: string };
+    action: 'CheckedOut' | 'CheckedIn' | 'IssueReported';
+    createdAt: string;
     conditionNotes?: string;
-    signatureUrl?: string;
+    issueDescription?: string;
 }
 
-interface FleetVehicle {
+interface FleetCart {
     id: string;
-    unitNumber: string;
+    carNumber: string;
     carType: string;
     status: string;
 }
 
 const actionColors: Record<string, string> = {
-    'CheckOut': 'bg-blue-500',
-    'CheckIn': 'bg-green-500',
+    'CheckedOut': 'bg-blue-500 text-white',
+    'CheckedIn': 'bg-green-500 text-white',
+    'IssueReported': 'bg-red-500 text-white',
+};
+
+const actionLabels: Record<string, string> = {
+    'CheckedOut': 'Check-Out',
+    'CheckedIn': 'Check-In',
+    'IssueReported': 'Issue',
 };
 
 export function HandoverPage() {
+    const { user: currentUser } = useAuthStore();
+    const role = currentUser?.role;
+    const canHandover = role === 'FA' || role === 'Admin' || role === 'SuperAdmin';
+
     const [history, setHistory] = useState<HandoverLog[]>([]);
-    const [availableFleet, setAvailableFleet] = useState<FleetVehicle[]>([]);
-    const [inUseFleet, setInUseFleet] = useState<FleetVehicle[]>([]);
+    const [availableFleet, setAvailableFleet] = useState<FleetCart[]>([]);
+    const [dispatchedFleet, setDispatchedFleet] = useState<FleetCart[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const { user: currentUser } = useAuthStore();
+    const [actionFilter, setActionFilter] = useState('all');
 
-    // Modal states
-    const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-    const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
+    const [checkoutOpen, setCheckoutOpen] = useState(false);
+    const [checkinOpen, setCheckinOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [locationError, setLocationError] = useState('');
 
-    // Signature canvas ref
-    const checkoutSigRef = useRef<HTMLCanvasElement>(null);
-    const checkinSigRef = useRef<HTMLCanvasElement>(null);
-
-    // Form states
-    const [checkoutForm, setCheckoutForm] = useState({
-        fleetId: '',
-        latitude: null as number | null,
-        longitude: null as number | null,
-        conditionNotes: '',
-        hasSignature: false,
-    });
-
+    const [checkoutForm, setCheckoutForm] = useState({ fleetId: '', conditionNotes: '' });
     const [checkinForm, setCheckinForm] = useState({
-        fleetId: '',
-        latitude: null as number | null,
-        longitude: null as number | null,
-        conditionNotes: '',
-        isMaintenanceRequired: false,
-        hasSignature: false,
+        fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '',
     });
 
-    const userRole = currentUser?.role;
-    const isAdmin = userRole === 'Admin';
-    const isFocalPoint = userRole === 'FocalPoint';
-    const canHandover = isAdmin || isFocalPoint;
-
-    useEffect(() => {
-        loadData();
-    }, []);
+    // Bulk selection state
+    const [selectedAvailable, setSelectedAvailable] = useState<string[]>([]);
+    const [selectedDispatched, setSelectedDispatched] = useState<string[]>([]);
 
     const loadData = async () => {
         try {
             setLoading(true);
-            const [historyRes, fleetRes] = await Promise.all([
+            const [histRes, fleetRes] = await Promise.all([
                 handoverApi.getHistory(),
                 fleetApi.getAll(),
             ]);
-            setHistory(historyRes.data.data || []);
-            const allFleet = fleetRes.data.data || [];
-            setAvailableFleet(allFleet.filter((v: FleetVehicle) => v.status === 'Ready'));
-            setInUseFleet(allFleet.filter((v: FleetVehicle) => v.status === 'In-Use'));
-        } catch (error) {
-            console.error('Failed to load data:', error);
+            setHistory(histRes.data.data || []);
+            const all: FleetCart[] = fleetRes.data.data || [];
+            setAvailableFleet(all.filter(v => v.status === 'Available'));
+            setDispatchedFleet(all.filter(v => v.status === 'Dispatched'));
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
-    const getCurrentLocation = async (): Promise<{ latitude: number; longitude: number } | null> => {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) {
-                setLocationError('Geolocation is not supported by your browser');
-                resolve(null);
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    resolve({
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                    });
-                },
-                (error) => {
-                    setLocationError('Unable to retrieve your location: ' + error.message);
-                    resolve(null);
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        });
-    };
-
-    const captureSignature = (canvasRef: React.RefObject<HTMLCanvasElement>): string | null => {
-        const canvas = canvasRef.current;
-        if (!canvas) return null;
-
-        // Check if canvas has any drawing (simple check - not empty)
-        const context = canvas.getContext('2d');
-        if (!context) return null;
-
-        // Get image data and check if it's mostly empty
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        let isEmpty = true;
-
-        // Check if there's any non-white pixel
-        for (let i = 3; i < data.length; i += 4) {
-            if (data[i] !== 0) {
-                isEmpty = false;
-                break;
-            }
-        }
-
-        if (isEmpty) return null;
-        return canvas.toDataURL('image/png');
-    };
-
-    const clearSignature = (canvasRef: React.RefObject<HTMLCanvasElement | null>) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const context = canvas.getContext('2d');
-        if (context) {
-            context.clearRect(0, 0, canvas.width, canvas.height);
-        }
-    };
+    useEffect(() => { loadData(); }, []);
 
     const handleCheckout = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!checkoutForm.fleetId) {
-            alert('Please select a vehicle');
-            return;
-        }
-
-        const signature = captureSignature(checkoutSigRef);
-        if (!signature) {
-            alert('Please provide a signature');
-            return;
-        }
-
+        if (!checkoutForm.fleetId) { alert('Select a cart'); return; }
         setSubmitting(true);
-        setLocationError('');
-
         try {
-            const location = await getCurrentLocation();
-
-            await handoverApi.checkOut({
-                fleetId: checkoutForm.fleetId,
-                latitude: location?.latitude,
-                longitude: location?.longitude,
-                conditionNotes: checkoutForm.conditionNotes,
-                signatureBase64: signature,
-            });
-
-            setIsCheckoutModalOpen(false);
-            resetCheckoutForm();
+            await handoverApi.checkOut({ fleetId: checkoutForm.fleetId, conditionNotes: checkoutForm.conditionNotes });
+            setCheckoutOpen(false);
+            setCheckoutForm({ fleetId: '', conditionNotes: '' });
             loadData();
-            alert('Vehicle checked out successfully!');
-        } catch (error: any) {
-            console.error('Failed to check out:', error);
-            alert(error.response?.data?.error || 'Failed to check out vehicle. Please try again.');
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Check-out failed');
         } finally {
             setSubmitting(false);
         }
@@ -206,179 +108,91 @@ export function HandoverPage() {
 
     const handleCheckin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!checkinForm.fleetId) {
-            alert('Please select a vehicle');
-            return;
-        }
-
-        const signature = captureSignature(checkinSigRef);
-        if (!signature) {
-            alert('Please provide a signature');
-            return;
-        }
-
+        if (!checkinForm.fleetId) { alert('Select a cart'); return; }
         setSubmitting(true);
-        setLocationError('');
-
         try {
-            const location = await getCurrentLocation();
-
             await handoverApi.checkIn({
                 fleetId: checkinForm.fleetId,
-                latitude: location?.latitude,
-                longitude: location?.longitude,
                 conditionNotes: checkinForm.conditionNotes,
-                isMaintenanceRequired: checkinForm.isMaintenanceRequired,
-                signatureBase64: signature,
+                hasIssue: checkinForm.hasIssue,
+                issueDescription: checkinForm.hasIssue ? checkinForm.issueDescription : undefined,
             });
-
-            setIsCheckinModalOpen(false);
-            resetCheckinForm();
+            setCheckinOpen(false);
+            setCheckinForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '' });
             loadData();
-            alert('Vehicle checked in successfully!');
-        } catch (error: any) {
-            console.error('Failed to check in:', error);
-            alert(error.response?.data?.error || 'Failed to check in vehicle. Please try again.');
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Check-in failed');
         } finally {
             setSubmitting(false);
         }
     };
 
-    const resetCheckoutForm = () => {
-        setCheckoutForm({
-            fleetId: '',
-            latitude: null,
-            longitude: null,
-            conditionNotes: '',
-            hasSignature: false,
-        });
-        clearSignature(checkoutSigRef);
-        setLocationError('');
+    // Bulk selection handlers
+    const toggleAvailableSelection = (id: string) => {
+        setSelectedAvailable(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
     };
 
-    const resetCheckinForm = () => {
-        setCheckinForm({
-            fleetId: '',
-            latitude: null,
-            longitude: null,
-            conditionNotes: '',
-            isMaintenanceRequired: false,
-            hasSignature: false,
-        });
-        clearSignature(checkinSigRef);
-        setLocationError('');
+    const toggleDispatchedSelection = (id: string) => {
+        setSelectedDispatched(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
     };
 
-    const openCheckoutModal = () => {
-        resetCheckoutForm();
-        setIsCheckoutModalOpen(true);
-    };
-
-    const openCheckinModal = () => {
-        resetCheckinForm();
-        setIsCheckinModalOpen(true);
-    };
-
-    // Initialize signature pads
-    const initSignaturePad = (canvasRef: React.RefObject<HTMLCanvasElement | null>) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        // Make canvas responsive
-        const container = canvas.parentElement;
-        if (container) {
-            const rect = container.getBoundingClientRect();
-            canvas.width = rect.width - 8; // Account for padding
-            canvas.height = 150;
+    const toggleAllAvailable = () => {
+        if (selectedAvailable.length === availableFleet.length) {
+            setSelectedAvailable([]);
+        } else {
+            setSelectedAvailable(availableFleet.map(v => v.id));
         }
-
-        // Set up canvas for drawing
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        let isDrawing = false;
-        let lastX = 0;
-        let lastY = 0;
-
-        const getCoordinates = (e: MouseEvent | TouchEvent) => {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
-        };
-
-        const startDrawing = (e: MouseEvent | TouchEvent) => {
-            isDrawing = true;
-            const coords = getCoordinates(e);
-            lastX = coords.x;
-            lastY = coords.y;
-        };
-
-        const draw = (e: MouseEvent | TouchEvent) => {
-            if (!isDrawing) return;
-            e.preventDefault();
-            const coords = getCoordinates(e);
-
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(coords.x, coords.y);
-            ctx.stroke();
-
-            lastX = coords.x;
-            lastY = coords.y;
-        };
-
-        const stopDrawing = () => {
-            isDrawing = false;
-        };
-
-        // Mouse events
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
-
-        // Touch events
-        canvas.addEventListener('touchstart', startDrawing, { passive: false });
-        canvas.addEventListener('touchmove', draw, { passive: false });
-        canvas.addEventListener('touchend', stopDrawing);
-
-        return () => {
-            canvas.removeEventListener('mousedown', startDrawing);
-            canvas.removeEventListener('mousemove', draw);
-            canvas.removeEventListener('mouseup', stopDrawing);
-            canvas.removeEventListener('mouseout', stopDrawing);
-            canvas.removeEventListener('touchstart', startDrawing);
-            canvas.removeEventListener('touchmove', draw);
-            canvas.removeEventListener('touchend', stopDrawing);
-        };
     };
 
-    useEffect(() => {
-        if (isCheckoutModalOpen) {
-            setTimeout(() => initSignaturePad(checkoutSigRef), 100);
+    const toggleAllDispatched = () => {
+        if (selectedDispatched.length === dispatchedFleet.length) {
+            setSelectedDispatched([]);
+        } else {
+            setSelectedDispatched(dispatchedFleet.map(v => v.id));
         }
-    }, [isCheckoutModalOpen]);
+    };
 
-    useEffect(() => {
-        if (isCheckinModalOpen) {
-            setTimeout(() => initSignaturePad(checkinSigRef), 100);
+    const handleBulkCheckout = async () => {
+        if (selectedAvailable.length === 0) return;
+        if (!confirm(`Check out ${selectedAvailable.length} selected cart(s)?`)) return;
+        setSubmitting(true);
+        try {
+            await handoverApi.bulkCheckOut({ fleetIds: selectedAvailable });
+            setSelectedAvailable([]);
+            loadData();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Bulk check-out failed');
+        } finally {
+            setSubmitting(false);
         }
-    }, [isCheckinModalOpen]);
+    };
 
-    const filteredHistory = history.filter(h =>
-        h.fleet?.unitNumber?.toLowerCase().includes(search.toLowerCase()) ||
-        h.user?.name?.toLowerCase().includes(search.toLowerCase()) ||
-        h.action?.toLowerCase().includes(search.toLowerCase())
-    );
+    const handleBulkCheckin = async () => {
+        if (selectedDispatched.length === 0) return;
+        if (!confirm(`Check in ${selectedDispatched.length} selected cart(s)?`)) return;
+        setSubmitting(true);
+        try {
+            await handoverApi.bulkCheckIn({ fleetIds: selectedDispatched });
+            setSelectedDispatched([]);
+            loadData();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Bulk check-in failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const filtered = history.filter(h => {
+        const matchSearch =
+            h.fleet?.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
+            h.user?.name?.toLowerCase().includes(search.toLowerCase());
+        const matchAction = actionFilter === 'all' || h.action === actionFilter;
+        return matchSearch && matchAction;
+    });
 
     return (
         <div className="space-y-6">
@@ -386,10 +200,10 @@ export function HandoverPage() {
                 <h1 className="text-3xl font-bold">Handover Management</h1>
                 {canHandover && (
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={openCheckinModal}>
+                        <Button variant="outline" onClick={() => { setCheckinForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '' }); setCheckinOpen(true); }}>
                             <LogIn className="w-4 h-4 mr-2" />Check In
                         </Button>
-                        <Button onClick={openCheckoutModal}>
+                        <Button onClick={() => { setCheckoutForm({ fleetId: '', conditionNotes: '' }); setCheckoutOpen(true); }}>
                             <LogOut className="w-4 h-4 mr-2" />Check Out
                         </Button>
                     </div>
@@ -398,17 +212,11 @@ export function HandoverPage() {
 
             <Tabs defaultValue="history">
                 <TabsList>
-                    <TabsTrigger value="history">
-                        <History className="w-4 h-4 mr-2" />Handover History
-                    </TabsTrigger>
+                    <TabsTrigger value="history"><History className="w-4 h-4 mr-2" />History</TabsTrigger>
                     {canHandover && (
                         <>
-                            <TabsTrigger value="available">
-                                <ArrowRightLeft className="w-4 h-4 mr-2" />Available Vehicles
-                            </TabsTrigger>
-                            <TabsTrigger value="inuse">
-                                <LogOut className="w-4 h-4 mr-2" />In-Use Vehicles
-                            </TabsTrigger>
+                            <TabsTrigger value="available">Available ({availableFleet.length})</TabsTrigger>
+                            <TabsTrigger value="dispatched">Dispatched ({dispatchedFleet.length})</TabsTrigger>
                         </>
                     )}
                 </TabsList>
@@ -416,73 +224,58 @@ export function HandoverPage() {
                 <TabsContent value="history">
                     <Card>
                         <CardHeader>
-                            <div className="relative">
-                                <History className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Search handover history..."
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className="pl-10"
-                                />
+                            <div className="flex gap-4">
+                                <div className="relative flex-1">
+                                    <Input
+                                        placeholder="Search by cart or user…"
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                    />
+                                </div>
+                                <Select value={actionFilter} onValueChange={setActionFilter}>
+                                    <SelectTrigger className="w-44">
+                                        <SelectValue placeholder="All Actions" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Actions</SelectItem>
+                                        <SelectItem value="CheckedOut">Check-Out</SelectItem>
+                                        <SelectItem value="CheckedIn">Check-In</SelectItem>
+                                        <SelectItem value="IssueReported">Issue Reported</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </CardHeader>
                         <CardContent>
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Vehicle</TableHead>
+                                        <TableHead>Cart #</TableHead>
                                         <TableHead>Action</TableHead>
                                         <TableHead>User</TableHead>
-                                        <TableHead>FA</TableHead>
-                                        <TableHead>Timestamp</TableHead>
-                                        <TableHead>Location</TableHead>
+                                        <TableHead>Date/Time</TableHead>
                                         <TableHead>Notes</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {loading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="text-center py-8">
-                                                <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                        <TableRow><TableCell colSpan={5} className="text-center py-8">
+                                            <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                        </TableCell></TableRow>
+                                    ) : filtered.length === 0 ? (
+                                        <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No handover history</TableCell></TableRow>
+                                    ) : filtered.map(log => (
+                                        <TableRow key={log.id}>
+                                            <TableCell className="font-mono font-semibold">{log.fleet?.carNumber}</TableCell>
+                                            <TableCell>
+                                                <Badge className={actionColors[log.action]}>{actionLabels[log.action]}</Badge>
+                                            </TableCell>
+                                            <TableCell>{log.user?.name}</TableCell>
+                                            <TableCell className="text-sm">{new Date(log.createdAt).toLocaleString()}</TableCell>
+                                            <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
+                                                {log.issueDescription || log.conditionNotes || '—'}
                                             </TableCell>
                                         </TableRow>
-                                    ) : filteredHistory.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                                No handover history found
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        filteredHistory.map((log) => (
-                                            <TableRow key={log.id}>
-                                                <TableCell className="font-medium">
-                                                    {log.fleet?.unitNumber}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge className={actionColors[log.action]}>
-                                                        {log.action === 'CheckOut' ? 'Check Out' : 'Check In'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>{log.user?.name}</TableCell>
-                                                <TableCell>{log.user?.faTrigram || '-'}</TableCell>
-                                                <TableCell>
-                                                    {new Date(log.timestamp).toLocaleString()}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {log.latitude && log.longitude ? (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
-                                                        </span>
-                                                    ) : (
-                                                        '-'
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="max-w-xs truncate">
-                                                    {log.conditionNotes || '-'}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
+                                    ))}
                                 </TableBody>
                             </Table>
                         </CardContent>
@@ -494,98 +287,130 @@ export function HandoverPage() {
                         <TabsContent value="available">
                             <Card>
                                 <CardHeader>
-                                    <h3 className="text-lg font-semibold">Available Vehicles (Ready for Check Out)</h3>
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-semibold">Available Carts — Ready for Check-Out</h3>
+                                        {selectedAvailable.length > 0 && (
+                                            <Button
+                                                size="sm"
+                                                onClick={handleBulkCheckout}
+                                                disabled={submitting}
+                                            >
+                                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                                <LogOut className="w-4 h-4 mr-1" />
+                                                Check Out Selected ({selectedAvailable.length})
+                                            </Button>
+                                        )}
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Unit Number</TableHead>
+                                                <TableHead className="w-12">
+                                                    <Checkbox
+                                                        checked={availableFleet.length > 0 && selectedAvailable.length === availableFleet.length}
+                                                        onCheckedChange={toggleAllAvailable}
+                                                        aria-label="Select all available carts"
+                                                    />
+                                                </TableHead>
+                                                <TableHead>Cart #</TableHead>
                                                 <TableHead>Type</TableHead>
-                                                <TableHead>Status</TableHead>
                                                 <TableHead className="text-right">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {availableFleet.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                                        No vehicles available for check out
+                                                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No available carts</TableCell></TableRow>
+                                            ) : availableFleet.map(v => (
+                                                <TableRow
+                                                    key={v.id}
+                                                    className={selectedAvailable.includes(v.id) ? 'bg-blue-50' : ''}
+                                                >
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={selectedAvailable.includes(v.id)}
+                                                            onCheckedChange={() => toggleAvailableSelection(v.id)}
+                                                            aria-label={`Select ${v.carNumber}`}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
+                                                    <TableCell>
+                                                        <Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button size="sm" onClick={() => { setCheckoutForm({ fleetId: v.id, conditionNotes: '' }); setCheckoutOpen(true); }}>
+                                                            <LogOut className="w-4 h-4 mr-1" />Check Out
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
-                                            ) : (
-                                                availableFleet.map((v) => (
-                                                    <TableRow key={v.id}>
-                                                        <TableCell className="font-medium">{v.unitNumber}</TableCell>
-                                                        <TableCell>{v.carType}</TableCell>
-                                                        <TableCell>
-                                                            <Badge className="bg-green-500">{v.status}</Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => {
-                                                                    setCheckoutForm({ ...checkoutForm, fleetId: v.id });
-                                                                    openCheckoutModal();
-                                                                }}
-                                                            >
-                                                                <LogOut className="w-4 h-4 mr-1" />Check Out
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            )}
+                                            ))}
                                         </TableBody>
                                     </Table>
                                 </CardContent>
                             </Card>
                         </TabsContent>
 
-                        <TabsContent value="inuse">
+                        <TabsContent value="dispatched">
                             <Card>
                                 <CardHeader>
-                                    <h3 className="text-lg font-semibold">In-Use Vehicles (Ready for Check In)</h3>
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-semibold">Dispatched Carts — Ready for Check-In</h3>
+                                        {selectedDispatched.length > 0 && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={handleBulkCheckin}
+                                                disabled={submitting}
+                                            >
+                                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                                <LogIn className="w-4 h-4 mr-1" />
+                                                Check In Selected ({selectedDispatched.length})
+                                            </Button>
+                                        )}
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Unit Number</TableHead>
+                                                <TableHead className="w-12">
+                                                    <Checkbox
+                                                        checked={dispatchedFleet.length > 0 && selectedDispatched.length === dispatchedFleet.length}
+                                                        onCheckedChange={toggleAllDispatched}
+                                                        aria-label="Select all dispatched carts"
+                                                    />
+                                                </TableHead>
+                                                <TableHead>Cart #</TableHead>
                                                 <TableHead>Type</TableHead>
-                                                <TableHead>Status</TableHead>
                                                 <TableHead className="text-right">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {inUseFleet.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                                        No vehicles currently in use
+                                            {dispatchedFleet.length === 0 ? (
+                                                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No dispatched carts</TableCell></TableRow>
+                                            ) : dispatchedFleet.map(v => (
+                                                <TableRow
+                                                    key={v.id}
+                                                    className={selectedDispatched.includes(v.id) ? 'bg-green-50' : ''}
+                                                >
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={selectedDispatched.includes(v.id)}
+                                                            onCheckedChange={() => toggleDispatchedSelection(v.id)}
+                                                            aria-label={`Select ${v.carNumber}`}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
+                                                    <TableCell>
+                                                        <Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button size="sm" variant="outline" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '', hasIssue: false, issueDescription: '' }); setCheckinOpen(true); }}>
+                                                            <LogIn className="w-4 h-4 mr-1" />Check In
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
-                                            ) : (
-                                                inUseFleet.map((v) => (
-                                                    <TableRow key={v.id}>
-                                                        <TableCell className="font-medium">{v.unitNumber}</TableCell>
-                                                        <TableCell>{v.carType}</TableCell>
-                                                        <TableCell>
-                                                            <Badge className="bg-blue-500">{v.status}</Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => {
-                                                                    setCheckinForm({ ...checkinForm, fleetId: v.id });
-                                                                    openCheckinModal();
-                                                                }}
-                                                            >
-                                                                <LogIn className="w-4 h-4 mr-1" />Check In
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            )}
+                                            ))}
                                         </TableBody>
                                     </Table>
                                 </CardContent>
@@ -595,68 +420,36 @@ export function HandoverPage() {
                 )}
             </Tabs>
 
-            {/* Checkout Modal */}
-            <Dialog open={isCheckoutModalOpen} onOpenChange={setIsCheckoutModalOpen}>
+            {/* Check-Out Modal */}
+            <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Check Out Vehicle</DialogTitle>
-                        <DialogDescription>
-                            Select a vehicle and sign to confirm check out.
-                        </DialogDescription>
+                        <DialogTitle>Check Out Cart</DialogTitle>
+                        <DialogDescription>Select a cart and confirm condition before dispatching.</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCheckout} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="checkout-fleet">Vehicle *</Label>
-                            <Select
-                                value={checkoutForm.fleetId}
-                                onValueChange={(value) => setCheckoutForm({ ...checkoutForm, fleetId: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select vehicle" />
-                                </SelectTrigger>
+                            <Label>Cart *</Label>
+                            <Select value={checkoutForm.fleetId} onValueChange={v => setCheckoutForm(f => ({ ...f, fleetId: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>
-                                    {availableFleet.map((v) => (
-                                        <SelectItem key={v.id} value={v.id}>
-                                            {v.unitNumber} ({v.carType})
-                                        </SelectItem>
+                                    {availableFleet.map(v => (
+                                        <SelectItem key={v.id} value={v.id}>{v.carNumber} ({v.carType})</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="checkout-notes">Condition Notes</Label>
+                            <Label>Condition Notes</Label>
                             <textarea
-                                id="checkout-notes"
-                                className="w-full min-h-[60px] p-3 border rounded-md"
+                                className="w-full min-h-[80px] p-3 border rounded-md text-sm"
                                 value={checkoutForm.conditionNotes}
-                                onChange={(e) => setCheckoutForm({ ...checkoutForm, conditionNotes: e.target.value })}
-                                placeholder="Any existing damage or notes..."
+                                onChange={e => setCheckoutForm(f => ({ ...f, conditionNotes: e.target.value }))}
+                                placeholder="Any existing damage or observations…"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Signature *</Label>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => clearSignature(checkoutSigRef)}>
-                                    Clear
-                                </Button>
-                            </div>
-                            <div className="border rounded-md p-1 bg-gray-50">
-                                <canvas
-                                    ref={checkoutSigRef}
-                                    className="w-full h-[150px] border border-gray-300 rounded bg-white cursor-crosshair touch-none"
-                                />
-                            </div>
-                        </div>
-                        {locationError && (
-                            <div className="flex items-center gap-2 text-amber-600 text-sm">
-                                <MapPin className="w-4 h-4" />
-                                {locationError}
-                            </div>
-                        )}
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsCheckoutModalOpen(false)}>
-                                Cancel
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={submitting}>
                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Check Out
@@ -666,80 +459,56 @@ export function HandoverPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Checkin Modal */}
-            <Dialog open={isCheckinModalOpen} onOpenChange={setIsCheckinModalOpen}>
+            {/* Check-In Modal */}
+            <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Check In Vehicle</DialogTitle>
-                        <DialogDescription>
-                            Return a vehicle and sign to confirm check in.
-                        </DialogDescription>
+                        <DialogTitle>Check In Cart</DialogTitle>
+                        <DialogDescription>Return a cart and note any issues found.</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCheckin} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="checkin-fleet">Vehicle *</Label>
-                            <Select
-                                value={checkinForm.fleetId}
-                                onValueChange={(value) => setCheckinForm({ ...checkinForm, fleetId: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select vehicle" />
-                                </SelectTrigger>
+                            <Label>Cart *</Label>
+                            <Select value={checkinForm.fleetId} onValueChange={v => setCheckinForm(f => ({ ...f, fleetId: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>
-                                    {inUseFleet.map((v) => (
-                                        <SelectItem key={v.id} value={v.id}>
-                                            {v.unitNumber} ({v.carType})
-                                        </SelectItem>
+                                    {dispatchedFleet.map(v => (
+                                        <SelectItem key={v.id} value={v.id}>{v.carNumber} ({v.carType})</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="checkin-notes">Condition Notes</Label>
+                            <Label>Condition Notes</Label>
                             <textarea
-                                id="checkin-notes"
-                                className="w-full min-h-[60px] p-3 border rounded-md"
+                                className="w-full min-h-[80px] p-3 border rounded-md text-sm"
                                 value={checkinForm.conditionNotes}
-                                onChange={(e) => setCheckinForm({ ...checkinForm, conditionNotes: e.target.value })}
-                                placeholder="Any new damage or issues to report..."
+                                onChange={e => setCheckinForm(f => ({ ...f, conditionNotes: e.target.value }))}
+                                placeholder="Return condition observations…"
                             />
                         </div>
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="checkbox"
-                                id="maintenance"
-                                checked={checkinForm.isMaintenanceRequired}
-                                onChange={(e) => setCheckinForm({ ...checkinForm, isMaintenanceRequired: e.target.checked })}
-                                className="w-4 h-4 rounded border-gray-300"
-                            />
-                            <Label htmlFor="maintenance" className="text-sm cursor-pointer">
-                                Maintenance Required
+                        <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                            <input type="checkbox" id="hasIssue" checked={checkinForm.hasIssue}
+                                onChange={e => setCheckinForm(f => ({ ...f, hasIssue: e.target.checked }))}
+                                className="w-4 h-4 rounded" />
+                            <Label htmlFor="hasIssue" className="cursor-pointer flex items-center gap-2 text-amber-800">
+                                <AlertTriangle className="w-4 h-4" />Report an Issue (will set cart to Maintenance)
                             </Label>
                         </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Signature *</Label>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => clearSignature(checkinSigRef)}>
-                                    Clear
-                                </Button>
-                            </div>
-                            <div className="border rounded-md p-1 bg-gray-50">
-                                <canvas
-                                    ref={checkinSigRef}
-                                    className="w-full h-[150px] border border-gray-300 rounded bg-white cursor-crosshair touch-none"
+                        {checkinForm.hasIssue && (
+                            <div className="space-y-2">
+                                <Label>Issue Description *</Label>
+                                <textarea
+                                    className="w-full min-h-[80px] p-3 border rounded-md text-sm"
+                                    value={checkinForm.issueDescription}
+                                    onChange={e => setCheckinForm(f => ({ ...f, issueDescription: e.target.value }))}
+                                    placeholder="Describe the issue in detail…"
+                                    required={checkinForm.hasIssue}
                                 />
-                            </div>
-                        </div>
-                        {locationError && (
-                            <div className="flex items-center gap-2 text-amber-600 text-sm">
-                                <MapPin className="w-4 h-4" />
-                                {locationError}
                             </div>
                         )}
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsCheckinModalOpen(false)}>
-                                Cancel
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setCheckinOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={submitting}>
                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Check In

@@ -1,142 +1,150 @@
-import { PrismaClient, MaintenanceLog } from '@prisma/client';
 import { prisma } from '../../config/database';
-
-export interface PaginationParams {
-    page?: number;
-    limit?: number;
-}
-
-export interface PaginatedResult<T> {
-    data: T[];
-    pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-    };
-}
+import { uploadFile } from '../../config/storage';
 
 export class MaintenanceService {
-    private prisma: PrismaClient;
+    async getAll(filters: {
+        stadiumId?: string;
+        status?: string;
+        fleetId?: string;
+    }, pagination?: { page?: number; limit?: number }) {
+        const page = pagination?.page || 1;
+        const limit = pagination?.limit || 100;
+        const skip = (page - 1) * limit;
 
-    constructor() {
-        this.prisma = prisma;
+        const where: any = {
+            ...(filters.fleetId && { fleetId: filters.fleetId }),
+            ...(filters.status && { status: filters.status }),
+        };
+
+        if (filters.stadiumId) {
+            where.fleet = { stadiumId: filters.stadiumId };
+        }
+
+        const [data, total] = await Promise.all([
+            prisma.maintenanceLog.findMany({
+                where,
+                include: {
+                    fleet: { include: { stadium: true } },
+                    reportedBy: {
+                        select: { id: true, name: true, phone: true, email: true, role: true },
+                    },
+                },
+                orderBy: { reportedAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.maintenanceLog.count({ where }),
+        ]);
+
+        return {
+            data,
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        };
+    }
+
+    async getByFleet(fleetId: string) {
+        return prisma.maintenanceLog.findMany({
+            where: { fleetId },
+            include: {
+                reportedBy: { select: { id: true, name: true, phone: true, role: true } },
+            },
+            orderBy: { reportedAt: 'desc' },
+        });
     }
 
     async reportIssue(data: {
         fleetId: string;
-        reportedBy: string;
+        reportedById: string;
         issueDescription: string;
+        photosUrls?: string[];
+        updateFleetStatus?: boolean;
     }) {
-        return this.prisma.$transaction(async (tx) => {
+        return prisma.$transaction(async (tx) => {
             const log = await tx.maintenanceLog.create({
                 data: {
                     fleetId: data.fleetId,
-                    reportedBy: data.reportedBy,
+                    reportedById: data.reportedById,
                     issueDescription: data.issueDescription,
-                    status: 'Pending',
+                    photosUrls: data.photosUrls || [],
+                    status: 'Open',
+                },
+                include: {
+                    reportedBy: { select: { id: true, name: true, phone: true, role: true } },
+                    fleet: true,
                 },
             });
 
-            await tx.fleet.update({
-                where: { id: data.fleetId },
-                data: { status: 'Maintenance' },
-            });
+            if (data.updateFleetStatus !== false) {
+                await tx.fleet.update({
+                    where: { id: data.fleetId },
+                    data: { status: 'Under Maintenance' },
+                });
+            }
 
             return log;
         });
     }
 
-    async assignToContractor(id: string, contractorId: string) {
-        return this.prisma.maintenanceLog.update({
-            where: { id },
-            data: {
-                contractorId,
-                status: 'InProgress',
-            },
-        });
-    }
+    async updateStatus(id: string, data: {
+        status: string;
+        resolutionNotes?: string;
+    }) {
+        const updateData: any = { status: data.status };
+        if (data.resolutionNotes) updateData.resolutionNotes = data.resolutionNotes;
+        if (data.status === 'Resolved') {
+            updateData.resolvedAt = new Date();
+        }
 
-    async reportFix(id: string, data: { fixDescription: string }) {
-        return this.prisma.$transaction(async (tx) => {
+        return prisma.$transaction(async (tx) => {
             const log = await tx.maintenanceLog.update({
                 where: { id },
-                data: {
-                    fixDescription: data.fixDescription,
-                    fixedAt: new Date(),
-                    status: 'Fixed',
-                },
+                data: updateData,
+                include: { fleet: true },
             });
 
-            await tx.fleet.update({
-                where: { id: log.fleetId },
-                data: { status: 'Ready' },
-            });
+            // When resolved, mark cart back to Available
+            if (data.status === 'Resolved') {
+                await tx.fleet.update({
+                    where: { id: log.fleetId },
+                    data: { status: 'Available' },
+                });
+            }
 
             return log;
         });
     }
 
-    async getPendingTasks(contractorId?: string, pagination?: PaginationParams): Promise<PaginatedResult<MaintenanceLog>> {
-        const page = pagination?.page || 1;
-        const limit = pagination?.limit || 50;
-        const skip = (page - 1) * limit;
-
-        const where = {
-            status: { in: ['Pending', 'InProgress'] },
-            ...(contractorId && { contractorId }),
-        };
-
-        const [data, total] = await Promise.all([
-            this.prisma.maintenanceLog.findMany({
-                where,
-                include: {
-                    fleet: { include: { stadium: true } },
-                },
-                orderBy: { reportedAt: 'desc' },
-                skip,
-                take: limit,
-            }),
-            this.prisma.maintenanceLog.count({ where }),
-        ]);
-
-        return {
-            data,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+    async uploadPhotos(filenames: string[], buffers: Buffer[]): Promise<string[]> {
+        const urls: string[] = [];
+        for (let i = 0; i < filenames.length; i++) {
+            try {
+                const url = await uploadFile('maintenance-photos', filenames[i], buffers[i], 'image/jpeg');
+                urls.push(url);
+            } catch (err) {
+                console.error(`Failed to upload ${filenames[i]}:`, err);
+            }
+        }
+        return urls;
     }
 
-    async getHistoryByFleet(fleetId: string, pagination?: PaginationParams): Promise<PaginatedResult<MaintenanceLog>> {
-        const page = pagination?.page || 1;
-        const limit = pagination?.limit || 50;
-        const skip = (page - 1) * limit;
-
-        const where = { fleetId };
-
-        const [data, total] = await Promise.all([
-            this.prisma.maintenanceLog.findMany({
-                where,
-                orderBy: { reportedAt: 'desc' },
-                skip,
-                take: limit,
-            }),
-            this.prisma.maintenanceLog.count({ where }),
+    async exportToCsv(filters: { stadiumId?: string; status?: string }): Promise<string> {
+        const data = await this.getAll(filters, { limit: 10000 });
+        const rows = data.data.map((r: any) => [
+            r.id,
+            r.fleet?.carNumber || '',
+            r.fleet?.stadium?.name || '',
+            r.reportedBy?.name || '',
+            r.reportedBy?.phone || '',
+            r.issueDescription,
+            r.status,
+            r.reportedAt ? new Date(r.reportedAt).toISOString() : '',
+            r.resolutionNotes || '',
+            r.resolvedAt ? new Date(r.resolvedAt).toISOString() : '',
         ]);
 
-        return {
-            data,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        const header = ['ID', 'Cart Number', 'Venue', 'Reporter', 'Phone', 'Issue', 'Status', 'Reported At', 'Resolution Notes', 'Resolved At'];
+        const csvLines = [header, ...rows].map(row => row.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(','));
+        return csvLines.join('\n');
     }
 }
 

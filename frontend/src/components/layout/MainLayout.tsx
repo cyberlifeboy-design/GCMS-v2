@@ -2,15 +2,16 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X } from 'lucide-react';
 
 const navItems = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Fleet', href: '/fleet', icon: Car },
-    { name: 'Handover', href: '/handover', icon: ArrowLeftRight },
-    { name: 'Maintenance', href: '/maintenance', icon: Wrench },
-    { name: 'Users', href: '/users', icon: Users },
-    { name: 'Reports', href: '/reports', icon: FileText },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
+    { name: 'Fleet', href: '/fleet', icon: Car, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
+    { name: 'Handover', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'] },
+    { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
+    { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'] },
+    { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'] },
+    { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin'] },
 ];
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const handleNavClick = () => {
         setSidebarOpen(false);
     };
+
+    const filteredNavItems = navItems.filter(item =>
+        user && item.roles.includes(user.role)
+    );
 
     return (
         <div className="flex h-screen overflow-hidden">
@@ -55,7 +60,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
                 {/* Navigation */}
                 <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                    {navItems.map((item) => {
+                    {filteredNavItems.map((item) => {
                         const Icon = item.icon;
                         const isActive = location.pathname === item.href;
                         return (
@@ -63,9 +68,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                 key={item.name}
                                 to={item.href}
                                 onClick={handleNavClick}
-                                className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                    isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-                                }`}
+                                className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+                                    }`}
                             >
                                 <Icon className="w-5 h-5 flex-shrink-0" />
                                 {item.name}
@@ -78,7 +82,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <div className="p-4 border-t">
                     <div className="mb-4">
                         <p className="font-medium truncate">{user?.name}</p>
-                        <p className="text-xs text-muted-foreground">{user?.role}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-xs text-muted-foreground">{user?.role}</p>
+                            {user?.stadiumId && (
+                                <p className="text-[10px] px-1 bg-muted rounded text-muted-foreground">Stadium ID: {user.stadiumId.slice(0, 8)}</p>
+                            )}
+                        </div>
                     </div>
                     <Button onClick={logout} variant="outline" className="w-full">
                         Logout

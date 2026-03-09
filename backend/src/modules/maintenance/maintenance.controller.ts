@@ -1,96 +1,116 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { maintenanceService } from './maintenance.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import multer from 'multer';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const reportIssueSchema = z.object({
     fleetId: z.string().min(1),
     issueDescription: z.string().min(1),
 });
 
-const assignContractorSchema = z.object({
-    contractorId: z.string().min(1),
-});
-
-const reportFixSchema = z.object({
-    fixDescription: z.string().min(1),
+const updateStatusSchema = z.object({
+    status: z.enum(['Open', 'InProgress', 'Resolved']),
+    resolutionNotes: z.string().optional(),
 });
 
 export class MaintenanceController {
+    static uploadMiddleware = upload.array('photos', 5);
+
+    static async getAll(req: AuthRequest, res: Response) {
+        try {
+            const { status, fleetId } = req.query as any;
+
+            // RBAC scoping  
+            let stadiumId: string | undefined;
+            if (req.user?.role === 'Admin') {
+                stadiumId = req.user.stadiumId;
+            }
+
+            const logs = await maintenanceService.getAll({ stadiumId, status, fleetId });
+            res.status(200).json(logs);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch maintenance logs' });
+        }
+    }
+
+    static async getByFleet(req: AuthRequest, res: Response) {
+        try {
+            const history = await maintenanceService.getByFleet(req.params['fleetId'] as string);
+            res.status(200).json({ data: history });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch fleet history' });
+        }
+    }
+
     static async reportIssue(req: AuthRequest, res: Response) {
         try {
             const validatedData = reportIssueSchema.parse(req.body);
             const userId = req.user!.userId;
 
+            // Upload photos if present
+            let photosUrls: string[] = [];
+            if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+                const filenames = (req.files as Express.Multer.File[]).map(
+                    (f, i) => `maint_${validatedData.fleetId}_${Date.now()}_${i}${getExt(f.originalname)}`
+                );
+                const buffers = (req.files as Express.Multer.File[]).map(f => f.buffer);
+                photosUrls = await maintenanceService.uploadPhotos(filenames, buffers);
+            }
+
             const log = await maintenanceService.reportIssue({
-                ...validatedData,
-                reportedBy: userId,
+                fleetId: validatedData.fleetId,
+                reportedById: userId,
+                issueDescription: validatedData.issueDescription,
+                photosUrls,
             });
 
             res.status(201).json(log);
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error) {
+                res.status(400).json({ error: error.message });
             } else {
                 res.status(500).json({ error: 'Failed to report issue' });
             }
         }
     }
 
-    static async assignToContractor(req: Request, res: Response) {
+    static async updateStatus(req: AuthRequest, res: Response) {
         try {
-            const { id } = req.params;
-            const { contractorId } = assignContractorSchema.parse(req.body);
-
-            const log = await maintenanceService.assignToContractor(id as string, contractorId);
+            const id = req.params['id'] as string;
+            const validatedData = updateStatusSchema.parse(req.body);
+            const log = await maintenanceService.updateStatus(id, validatedData);
             res.status(200).json(log);
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
-                res.status(500).json({ error: 'Failed to assign contractor' });
+                res.status(500).json({ error: 'Failed to update status' });
             }
         }
     }
 
-    static async reportFix(req: Request, res: Response) {
+    static async exportCsv(req: AuthRequest, res: Response) {
         try {
-            const { id } = req.params;
-            const validatedData = reportFixSchema.parse(req.body);
+            let stadiumId = req.query.stadiumId as string | undefined;
+            if (req.user?.role === 'Admin') stadiumId = req.user.stadiumId;
+            const status = req.query.status as string | undefined;
 
-            const log = await maintenanceService.reportFix(id as string, validatedData);
-            res.status(200).json(log);
+            const csv = await maintenanceService.exportToCsv({ stadiumId, status });
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="maintenance-report.csv"');
+            res.status(200).send(csv);
         } catch (error) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: 'Validation error', details: error.errors });
-            } else {
-                res.status(500).json({ error: 'Failed to report fix' });
-            }
+            res.status(500).json({ error: 'Export failed' });
         }
     }
+}
 
-    static async getPendingTasks(req: AuthRequest, res: Response) {
-        try {
-            const role = req.user?.role;
-            const userId = req.user?.userId;
-
-            // Contractors only see their assigned tasks
-            const contractorId = role === 'Contractor' ? userId : undefined;
-
-            const tasks = await maintenanceService.getPendingTasks(contractorId);
-            res.status(200).json(tasks);
-        } catch (error) {
-            res.status(500).json({ error: 'Failed to fetch pending tasks' });
-        }
-    }
-
-    static async getHistoryByFleet(req: Request, res: Response) {
-        try {
-            const { fleetId } = req.params;
-            const history = await maintenanceService.getHistoryByFleet(fleetId as string);
-            res.status(200).json(history);
-        } catch (error) {
-            res.status(500).json({ error: 'Failed to fetch maintenance history' });
-        }
-    }
+function getExt(filename: string): string {
+    const parts = filename.split('.');
+    return parts.length > 1 ? `.${parts.pop()}` : '';
 }
