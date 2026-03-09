@@ -14,7 +14,7 @@ const navItems = [
     { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'] },
     { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'] },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'] },
-    { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin'] },
+    { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'] },
 ];
 
 export function MainLayout({ children }: { children: React.ReactNode }) {

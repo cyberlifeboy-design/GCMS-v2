@@ -22,7 +22,12 @@ export function ForgotPasswordPage() {
             await authApi.forgotPassword(email);
             setIsSubmitted(true);
         } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to send reset link');
+            const errorMsg = err.response?.data?.error;
+            if (errorMsg?.toLowerCase().includes('too many')) {
+                setError('Too many attempts. Please wait 15 minutes before trying again.');
+            } else {
+                setError(errorMsg || 'Failed to send reset link');
+            }
         } finally {
             setIsLoading(false);
         }
