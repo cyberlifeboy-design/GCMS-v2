@@ -13,9 +13,9 @@ const CART_STATUSES = ['Available', 'Assigned', 'Dispatched', 'Under Maintenance
 
 const createFleetSchema = z.object({
     carNumber: z.string().min(1, 'Car number is required'),
-    carType: z.enum(CART_TYPES, { errorMap: () => ({ message: 'Car type must be one of: Cargo, Accessibility, 6-Seater, 4-Seater' }) }),
+    carType: z.enum(CART_TYPES),
     status: z.enum(CART_STATUSES).default('Available'),
-    requiresVAP: z.boolean().default(false),
+    requiresVAP: z.boolean().default(false).optional(),
     stadiumId: z.string().min(1, 'Stadium is required'),
     assignedUserId: z.string().optional(),
 });
@@ -75,7 +75,9 @@ export class FleetController {
 
     static async create(req: AuthRequest, res: Response) {
         try {
+            console.log('Create fleet request body:', JSON.stringify(req.body, null, 2));
             const validatedData = createFleetSchema.parse(req.body);
+            console.log('Validated data:', JSON.stringify(validatedData, null, 2));
 
             // Admin can only create in their own stadium
             if (req.user?.role === 'Admin' && validatedData.stadiumId !== req.user.stadiumId) {
@@ -87,8 +89,10 @@ export class FleetController {
             res.status(201).json(vehicle);
         } catch (error) {
             if (error instanceof z.ZodError) {
+                console.error('Zod validation error:', error.errors);
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
+                console.error('Create fleet error:', error);
                 res.status(500).json({ error: 'Failed to create vehicle' });
             }
         }

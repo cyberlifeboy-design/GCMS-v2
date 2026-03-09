@@ -190,12 +190,19 @@ export function FleetPage() {
 
         // For non-SuperAdmin, ensure stadiumId comes from user's assignment
         const submitData = {
-            ...formData,
+            carNumber: formData.carNumber.trim(),
+            carType: formData.carType,
+            status: formData.status || 'Available',
+            requiresVAP: formData.requiresVAP || false,
             stadiumId: isSuperAdmin ? formData.stadiumId : (user?.stadiumId || formData.stadiumId)
         };
 
         if (!submitData.stadiumId) {
             alert('Please select a stadium');
+            return;
+        }
+        if (!submitData.carNumber) {
+            alert('Please enter a car number');
             return;
         }
         setSubmitting(true);
