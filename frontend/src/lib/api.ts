@@ -18,15 +18,28 @@ apiClient.interceptors.request.use((config) => {
     return config;
 });
 
-// Auto-refresh on 401
+// Auto-refresh on 401 (only for authenticated routes, not login/public pages)
 apiClient.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response?.status === 401 && !originalRequest._retry) {
+
+        // Skip auth redirect for public endpoints
+        const publicEndpoints = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/settings'];
+        const isPublicEndpoint = publicEndpoints.some(ep => originalRequest.url?.includes(ep));
+
+        // Don't redirect if already on login page
+        const isLoginPage = window.location.pathname === '/login' ||
+                            window.location.pathname === '/forgot-password' ||
+                            window.location.pathname.startsWith('/reset-password');
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isPublicEndpoint && !isLoginPage) {
             originalRequest._retry = true;
             try {
                 const refreshToken = localStorage.getItem('refreshToken');
+                if (!refreshToken) {
+                    throw new Error('No refresh token');
+                }
                 const res = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
                 localStorage.setItem('accessToken', res.data.accessToken);
                 originalRequest.headers.Authorization = `Bearer ${res.data.accessToken}`;

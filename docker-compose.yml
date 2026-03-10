@@ -51,6 +51,9 @@ services:
       - NODE_ENV=development
       - CORS_ORIGIN=https://gcms.mehaisi.com
       - MINIO_ENDPOINT=minio
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - FRONTEND_URL=https://gcms.mehaisi.com
     ports:
       - "3005:3005"
     depends_on:
@@ -65,6 +68,16 @@ services:
       - "traefik.http.routers.gcms-api.entrypoints=web,websecure"
       - "traefik.http.routers.gcms-api.priority=100"
       - "traefik.http.services.gcms-api.loadbalancer.server.port=3005"
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: gcms-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - gcms_network
     restart: unless-stopped
 
   frontend:
