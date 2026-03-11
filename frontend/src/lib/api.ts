@@ -226,4 +226,35 @@ export const settingsApi = {
         }),
 };
 
+// Car Requests (public and admin)
+export const requestsApi = {
+    // Public endpoints (no auth)
+    createPublic: (data: {
+        requesterName: string;
+        requesterEmail: string;
+        requesterPhone?: string;
+        departmentId: string;
+        stadiumId: string;
+        cargoCount: number;
+        fourSeaterCount: number;
+        sixSeaterCount: number;
+        accessibilityCount: number;
+        notes?: string;
+    }) => axios.post(`${API_URL}/public/requests`, data),
+    getByTokenPublic: (token: string) =>
+        axios.get(`${API_URL}/public/requests/${token}`),
+
+    // Admin endpoints (auth required)
+    getAll: (params?: Record<string, unknown>) =>
+        apiClient.get('/requests', { params }),
+    getById: (id: string) =>
+        apiClient.get(`/requests/${id}`),
+    approve: (id: string, reviewNotes?: string) =>
+        apiClient.post(`/requests/${id}/approve`, { reviewNotes }),
+    reject: (id: string, reviewNotes?: string) =>
+        apiClient.post(`/requests/${id}/reject`, { reviewNotes }),
+    delete: (id: string) =>
+        apiClient.delete(`/requests/${id}`),
+};
+
 export default apiClient;

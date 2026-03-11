@@ -11,6 +11,7 @@ import reportRoutes from './modules/reports/reports.routes';
 import stadiumRoutes from './modules/stadiums/stadiums.routes';
 import settingsRoutes from './modules/settings/settings.routes';
 import departmentRoutes from './modules/departments/departments.routes';
+import requestRoutes from './modules/requests/requests.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import logger from './config/logger';
@@ -66,6 +67,9 @@ app.get('/api/v1', (req: Request, res: Response) => {
             reports: '/api/v1/reports',
             stadiums: '/api/v1/stadiums',
             settings: '/api/v1/settings',
+            departments: '/api/v1/departments',
+            requests: '/api/v1/requests',
+            publicRequests: '/api/v1/public/requests',
         },
     });
 });
@@ -80,6 +84,7 @@ app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/stadiums', stadiumRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/departments', departmentRoutes);
+app.use('/api/v1', requestRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

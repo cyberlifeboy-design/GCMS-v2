@@ -18,18 +18,20 @@ model Stadium {
   fleet       Fleet[]
   users       User[]
   departments Department[]
+  carRequests CarRequest[]
 }
 
 model Department {
-  id        String   @id @default(cuid())
-  name      String
-  code      String?
-  stadiumId String
-  stadium   Stadium  @relation(fields: [stadiumId], references: [id])
-  users     User[]
-  fleet     Fleet[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  code        String?
+  stadiumId   String
+  stadium     Stadium  @relation(fields: [stadiumId], references: [id])
+  users       User[]
+  fleet       Fleet[]
+  carRequests CarRequest[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([name, stadiumId])
   @@index([stadiumId])
@@ -80,6 +82,7 @@ model User {
   refreshTokens   RefreshToken[]
   assignedCarts   Fleet[]         @relation("FleetAssignedUser")
   maintenanceLogs MaintenanceLog[] @relation("MaintenanceReporter")
+  reviewedRequests CarRequest[]   @relation("CarRequestReviewer")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -139,14 +142,25 @@ model MaintenanceLog {
 }
 
 model SystemSettings {
-  id             String   @id @default(cuid())
-  tournamentName String   @default("Golf Cart Management System")
-  logoUrl        String?
-  headerUrl      String?
-  footerUrl      String?
-  footerText     String?
-  updatedAt      DateTime @updatedAt
-  updatedById    String?
+  id                            String    @id @default(cuid())
+  tournamentName                String    @default("Golf Cart Management System")
+  logoUrl                       String?
+  headerUrl                     String?
+  footerUrl                     String?
+  footerText                    String?
+  // Notification settings
+  maintenanceNotificationEmails  String?   // Comma-separated emails for maintenance alerts
+  // Handover settings
+  handoverTimeoutMinutes        Int       @default(120) // Timeout for handover status
+  defaultStadiumId              String?   // Default stadium for new users
+  // Feature toggles
+  enableMaintenanceReports      Boolean   @default(true)
+  enableHandoverPhotos          Boolean   @default(true)
+  // System announcements
+  systemAnnouncement            String?   // Optional system-wide announcement text
+  announcementExpiry            DateTime? // When announcement expires
+  updatedAt                     DateTime  @updatedAt
+  updatedById                   String?
 }
 
 model AuditLog {
@@ -164,4 +178,34 @@ model AuditLog {
   @@index([userId])
   @@index([entityType])
   @@index([timestamp])
+}
+
+// Public car request from department leads
+model CarRequest {
+  id               String    @id @default(cuid())
+  requesterName    String
+  requesterEmail   String
+  requesterPhone   String?
+  departmentId     String
+  department       Department @relation(fields: [departmentId], references: [id])
+  stadiumId        String
+  stadium          Stadium    @relation(fields: [stadiumId], references: [id])
+  cargoCount       Int       @default(0)
+  fourSeaterCount  Int       @default(0)
+  sixSeaterCount   Int       @default(0)
+  accessibilityCount Int     @default(0)
+  notes            String?
+  requestToken     String    @unique  // Unique token for the public link
+  status           String    @default("Pending") // Pending, Approved, Rejected
+  reviewedById     String?
+  reviewedBy       User?     @relation("CarRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([stadiumId])
+  @@index([departmentId])
+  @@index([requestToken])
 }

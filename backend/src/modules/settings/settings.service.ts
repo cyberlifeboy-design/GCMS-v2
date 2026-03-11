@@ -19,6 +19,13 @@ export class SettingsService {
         headerUrl: string | null;
         footerUrl: string | null;
         footerText: string | null;
+        maintenanceNotificationEmails: string | null;
+        handoverTimeoutMinutes: number;
+        defaultStadiumId: string | null;
+        enableMaintenanceReports: boolean;
+        enableHandoverPhotos: boolean;
+        systemAnnouncement: string | null;
+        announcementExpiry: Date | null;
     }>, updatedById?: string) {
         const existing = await this.get();
         return prisma.systemSettings.update({

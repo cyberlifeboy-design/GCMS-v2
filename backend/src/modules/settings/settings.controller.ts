@@ -9,6 +9,13 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 const updateSettingsSchema = z.object({
     tournamentName: z.string().min(1).optional(),
     footerText: z.string().optional(),
+    maintenanceNotificationEmails: z.string().optional().nullable(),
+    handoverTimeoutMinutes: z.number().int().min(1).optional(),
+    defaultStadiumId: z.string().optional().nullable(),
+    enableMaintenanceReports: z.boolean().optional(),
+    enableHandoverPhotos: z.boolean().optional(),
+    systemAnnouncement: z.string().optional().nullable(),
+    announcementExpiry: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
 });
 
 export class SettingsController {

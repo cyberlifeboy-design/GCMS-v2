@@ -17,6 +17,8 @@ const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ defa
 const StadiumsPage = lazy(() => import('@/pages/StadiumsPage').then(m => ({ default: m.StadiumsPage })));
 const DepartmentsPage = lazy(() => import('@/pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
 const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').then(m => ({ default: m.FleetManagementPage })));
+const RequestsManagementPage = lazy(() => import('@/pages/RequestsManagementPage').then(m => ({ default: m.RequestsManagementPage })));
+const PublicRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.PublicRequestPage })));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
@@ -32,6 +34,10 @@ function AppContent() {
             </div>
         }>
             <Routes>
+                {/* Public routes (no auth) */}
+                <Route path="/request" element={<PublicRequestPage />} />
+                <Route path="/request/confirm/:token" element={<PublicRequestPage />} />
+                
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -51,6 +57,7 @@ function AppContent() {
                                     <Route path="/fleet-management" element={<FleetManagementPage />} />
                                     <Route path="/reports" element={<ReportsPage />} />
                                     <Route path="/settings" element={<SettingsPage />} />
+                                    <Route path="/requests" element={<RequestsManagementPage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>
                             </MainLayout>

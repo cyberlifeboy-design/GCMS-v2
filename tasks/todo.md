@@ -54,3 +54,4 @@ Starting with **#57** (Return Cart bug - critical)
 - [x] #60 - Enhanced user creation with department/stadium - DONE
 - [x] #61 - Department across all stadiums - DONE
 - [x] #62 - Enhanced reporting - DONE
+- [x] #63 - Settings export format options - DONE
