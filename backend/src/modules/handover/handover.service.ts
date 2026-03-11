@@ -43,7 +43,7 @@ export class HandoverService {
             orderBy: { timestamp: 'desc' },
             include: {
                 fleet: { select: { id: true, carNumber: true, carType: true, status: true } },
-                user: { select: { id: true, name: true, email: true } },
+                user: { select: { id: true, name: true, email: true, role: true } },
             },
         });
 
@@ -75,7 +75,7 @@ export class HandoverService {
                 },
                 include: {
                     fleet: { select: { carNumber: true, carType: true } },
-                    user: { select: { name: true } },
+                    user: { select: { id: true, name: true, email: true, role: true } },
                 },
             });
 

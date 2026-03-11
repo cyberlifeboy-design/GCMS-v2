@@ -20,7 +20,7 @@ interface HandoverLog {
     fleetId: string;
     fleet: { carNumber: string; carType: string };
     userId: string;
-    user?: { name: string };
+    user?: { id: string; name: string; email?: string; role?: string };
     action: 'CheckedIn' | 'CheckedOut' | 'IssueReported';
     createdAt: string;
     conditionNotes?: string;
@@ -262,7 +262,7 @@ export function HandoverPage() {
                                     <TableRow>
                                         <TableHead>Cart #</TableHead>
                                         <TableHead>Action</TableHead>
-                                        <TableHead>User</TableHead>
+                                        <TableHead>FA Name</TableHead>
                                         <TableHead>Date/Time</TableHead>
                                         <TableHead>Notes</TableHead>
                                     </TableRow>
