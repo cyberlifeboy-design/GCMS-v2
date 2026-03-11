@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usersApi, stadiumsApi } from '@/lib/api';
+import { usersApi, stadiumsApi, departmentsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ interface User {
     role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
     isActive: boolean;
     stadium?: { id: string; name: string };
+    department?: { id: string; name: string };
     createdAt: string;
 }
 
@@ -38,10 +39,12 @@ type UserFormData = {
     password: string;
     phone: string;
     role: string;
+    stadiumId: string;
+    departmentId: string;
 };
 
 const EMPTY_FORM: UserFormData = {
-    name: '', email: '', password: '', phone: '', role: 'FA',
+    name: '', email: '', password: '', phone: '', role: 'FA', stadiumId: '', departmentId: '',
 };
 
 export function UsersPage() {
@@ -67,8 +70,9 @@ export function UsersPage() {
     const [bulkOpen, setBulkOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
-    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', stadiumId: '' });
+    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', stadiumId: '', departmentId: '' });
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
+    const [departments, setDepartments] = useState<Array<{ id: string; name: string; stadiumId: string }>>([]);
 
     // Bulk
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,10 +108,27 @@ export function UsersPage() {
         }
     }, [isSuperAdmin]);
 
+    // Load departments when stadiums load or when Admin views
+    useEffect(() => {
+        if ((isSuperAdmin || isAdmin) && departments.length === 0) {
+            loadDepartments();
+        }
+    }, [isSuperAdmin, isAdmin]);
+
     const loadStadiums = async () => {
         try {
             const res = await stadiumsApi.getAll();
             setStadiums(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const loadDepartments = async (stadiumId?: string) => {
+        try {
+            const params = stadiumId ? { stadiumId } : {};
+            const res = await departmentsApi.getAll(params);
+            setDepartments(res.data.data || []);
         } catch (e) {
             console.error(e);
         }
@@ -131,6 +152,8 @@ export function UsersPage() {
                 password: formData.password || 'changeme123',
                 phone: formData.phone || undefined,
                 role: formData.role,
+                stadiumId: isSuperAdmin ? formData.stadiumId || undefined : currentUser?.stadiumId,
+                departmentId: formData.departmentId || undefined,
             });
             setCreateOpen(false);
             setFormData(EMPTY_FORM);
@@ -159,6 +182,7 @@ export function UsersPage() {
             phone: u.phone || '',
             role: u.role || 'FA',
             stadiumId: u.stadium?.id || '',
+            departmentId: u.department?.id || '',
         });
         setEditOpen(true);
     };
@@ -174,6 +198,7 @@ export function UsersPage() {
                 phone: editData.phone || undefined,
                 role: editData.role as any,
                 stadiumId: isSuperAdmin ? editData.stadiumId || undefined : undefined,
+                departmentId: editData.departmentId || undefined,
             });
             setEditOpen(false);
             setEditUser(null);
@@ -275,8 +300,9 @@ export function UsersPage() {
                                 <TableHead>Phone</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Stadium</TableHead>
+                                <TableHead>Department</TableHead>
                                 <TableHead>Status</TableHead>
-                                {canManage && <TableHead className="text-right">Active</TableHead>}
+                                {canManage && <TableHead className="text-right">Actions</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -293,6 +319,7 @@ export function UsersPage() {
                                     <TableCell>{u.phone || '—'}</TableCell>
                                     <TableCell><Badge className={roleColors[u.role]}>{u.role}</Badge></TableCell>
                                     <TableCell>{u.stadium?.name || '—'}</TableCell>
+                                    <TableCell>{u.department?.name || '—'}</TableCell>
                                     <TableCell>
                                         <Badge className={u.isActive ? 'bg-green-500 text-white' : 'bg-red-400 text-white'}>
                                             {u.isActive ? 'Active' : 'Inactive'}
@@ -366,6 +393,45 @@ export function UsersPage() {
                                     {isSuperAdmin ? ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>) : (
                                         <SelectItem value="FA">FA (Fleet Attendant)</SelectItem>
                                     )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {isSuperAdmin && (
+                            <div className="space-y-2">
+                                <Label>Stadium</Label>
+                                <Select value={formData.stadiumId} onValueChange={v => {
+                                    setFormData(f => ({ ...f, stadiumId: v, departmentId: '' }));
+                                    if (v) loadDepartments(v);
+                                    else setDepartments([]);
+                                }}>
+                                    <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="">No Stadium</SelectItem>
+                                        {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                        {isAdmin && !isSuperAdmin && (
+                            <div className="space-y-2">
+                                <Label>Stadium</Label>
+                                <Input value={currentUser?.stadium?.name || 'Assigned Stadium'} disabled className="bg-gray-100" />
+                                <p className="text-xs text-muted-foreground">Admins create users at their own venue</p>
+                            </div>
+                        )}
+                        <div className="space-y-2">
+                            <Label>Department</Label>
+                            <Select
+                                value={formData.departmentId}
+                                onValueChange={v => setFormData(f => ({ ...f, departmentId: v }))}
+                                disabled={!formData.stadiumId && isSuperAdmin}
+                            >
+                                <SelectTrigger><SelectValue placeholder={formData.stadiumId || !isSuperAdmin ? "Select department" : "Select stadium first"} /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="">No Department</SelectItem>
+                                    {(isSuperAdmin ? departments.filter(d => d.stadiumId === formData.stadiumId) : departments).map(d => (
+                                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -443,7 +509,11 @@ export function UsersPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Stadium</Label>
-                                    <Select value={editData.stadiumId} onValueChange={v => setEditData(d => ({ ...d, stadiumId: v }))}>
+                                    <Select value={editData.stadiumId} onValueChange={v => {
+                                        setEditData(d => ({ ...d, stadiumId: v, departmentId: '' }));
+                                        if (v) loadDepartments(v);
+                                        else setDepartments([]);
+                                    }}>
                                         <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="">No Stadium</SelectItem>
@@ -451,19 +521,45 @@ export function UsersPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                <div className="space-y-2">
+                                    <Label>Department</Label>
+                                    <Select value={editData.departmentId} onValueChange={v => setEditData(d => ({ ...d, departmentId: v }))}>
+                                        <SelectTrigger><SelectValue placeholder={editData.stadiumId ? "Select department" : "Select stadium first"} /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="">No Department</SelectItem>
+                                            {departments.filter(d => d.stadiumId === editData.stadiumId).map(d => (
+                                                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </>
                         )}
                         {isAdmin && !isSuperAdmin && (
-                            <div className="space-y-2">
-                                <Label>Role</Label>
-                                <Select value={editData.role} onValueChange={v => setEditData(d => ({ ...d, role: v }))}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="FA">FA</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">Admin can only edit FA users at their venue</p>
-                            </div>
+                            <>
+                                <div className="space-y-2">
+                                    <Label>Role</Label>
+                                    <Select value={editData.role} onValueChange={v => setEditData(d => ({ ...d, role: v }))}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="FA">FA</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">Admin can only edit FA users at their venue</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Department</Label>
+                                    <Select value={editData.departmentId} onValueChange={v => setEditData(d => ({ ...d, departmentId: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="">No Department</SelectItem>
+                                            {departments.map(d => (
+                                                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </>
                         )}
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>

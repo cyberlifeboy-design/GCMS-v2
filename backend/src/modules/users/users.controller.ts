@@ -12,6 +12,7 @@ const createUserSchema = z.object({
     role: z.enum(ROLES),
     phone: z.string().optional(),
     stadiumId: z.string().optional(),
+    departmentId: z.string().optional(),
 });
 
 const updateUserSchema = z.object({
@@ -20,6 +21,7 @@ const updateUserSchema = z.object({
     role: z.enum(ROLES).optional(),
     phone: z.string().optional(),
     stadiumId: z.string().optional(),
+    departmentId: z.string().optional(),
     isActive: z.boolean().optional(),
 });
 
@@ -205,6 +207,7 @@ export class UsersController {
                 role: z.enum(ROLES),
                 phone: z.string().optional(),
                 stadiumId: z.string().optional(),
+                departmentId: z.string().optional(),
             }));
             const users = schema.parse(req.body);
 

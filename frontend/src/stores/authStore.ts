@@ -9,6 +9,7 @@ export interface AuthUser {
     role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
     phone?: string;
     stadiumId?: string;
+    stadium?: { id: string; name: string };
     isActive: boolean;
 }
 

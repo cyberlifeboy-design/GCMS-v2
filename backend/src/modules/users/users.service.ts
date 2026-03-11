@@ -101,6 +101,7 @@ export class UsersService {
         role: string;
         phone?: string;
         stadiumId?: string;
+        departmentId?: string;
     }) {
         const exists = await prisma.user.findUnique({ where: { email: data.email } });
         if (exists) throw new Error('User with this email already exists');
@@ -116,6 +117,7 @@ export class UsersService {
                 role: data.role,
                 phone: data.phone,
                 stadiumId: data.stadiumId,
+                departmentId: data.departmentId,
             },
             select: {
                 id: true,
@@ -126,6 +128,8 @@ export class UsersService {
                 isActive: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
+                departmentId: true,
+                department: { select: { id: true, name: true } },
                 createdAt: true,
             },
         });
@@ -137,6 +141,7 @@ export class UsersService {
         role: string;
         phone: string;
         stadiumId: string;
+        departmentId: string;
         isActive: boolean;
     }>) {
         return prisma.user.update({
@@ -151,6 +156,8 @@ export class UsersService {
                 isActive: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
+                departmentId: true,
+                department: { select: { id: true, name: true } },
                 updatedAt: true,
             },
         });
@@ -175,6 +182,7 @@ export class UsersService {
         role: string;
         phone?: string;
         stadiumId?: string;
+        departmentId?: string;
     }>) {
         const results = { created: 0, skipped: 0, errors: [] as string[] };
         for (const u of users) {
