@@ -20,6 +20,9 @@ dotenv.config();
 const app: Application = express();
 const PORT = process.env.PORT || 3005;
 
+// Trust first proxy (Cloudflare/nginx) - required for rate limiter to work behind reverse proxy
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({ origin: [process.env.CORS_ORIGIN || 'http://localhost:3000', 'https://gcms.mehaisi.com'] }));
 app.use(express.json());

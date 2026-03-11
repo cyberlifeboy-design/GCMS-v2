@@ -17,7 +17,8 @@ const createFleetSchema = z.object({
     status: z.enum(CART_STATUSES).default('Available'),
     requiresVAP: z.boolean().default(false).optional(),
     stadiumId: z.string().min(1, 'Stadium is required'),
-    assignedUserId: z.string().optional(),
+    assignedUserId: z.string().optional().nullable(),
+    departmentId: z.string().optional().nullable(),
 });
 
 const updateFleetSchema = createFleetSchema.partial();

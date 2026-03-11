@@ -20,6 +20,7 @@ export class FleetService {
                 where,
                 include: {
                     stadium: true,
+                    department: { select: { id: true, name: true } },
                     assignedUser: {
                         select: { id: true, name: true, phone: true, email: true, role: true },
                     },
@@ -42,6 +43,7 @@ export class FleetService {
             where: { id },
             include: {
                 stadium: true,
+                department: { select: { id: true, name: true } },
                 assignedUser: {
                     select: { id: true, name: true, phone: true, email: true, role: true },
                 },
@@ -55,7 +57,8 @@ export class FleetService {
         status?: string;
         requiresVAP?: boolean;
         stadiumId: string;
-        assignedUserId?: string;
+        assignedUserId?: string | null;
+        departmentId?: string | null;
     }) {
         return prisma.fleet.create({
             data: {
@@ -64,9 +67,10 @@ export class FleetService {
                 status: data.status || 'Available',
                 requiresVAP: data.requiresVAP ?? false,
                 stadiumId: data.stadiumId,
-                assignedUserId: data.assignedUserId,
+                assignedUserId: data.assignedUserId || null,
+                departmentId: data.departmentId || null,
             },
-            include: { stadium: true, assignedUser: { select: { id: true, name: true, phone: true } } },
+            include: { stadium: true, department: { select: { id: true, name: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 
@@ -77,11 +81,12 @@ export class FleetService {
         requiresVAP: boolean;
         stadiumId: string;
         assignedUserId: string | null;
+        departmentId: string | null;
     }>) {
         return prisma.fleet.update({
             where: { id },
             data,
-            include: { stadium: true, assignedUser: { select: { id: true, name: true, phone: true } } },
+            include: { stadium: true, department: { select: { id: true, name: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 

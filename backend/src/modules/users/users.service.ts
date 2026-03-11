@@ -60,6 +60,8 @@ export class UsersService {
                     isActive: true,
                     stadiumId: true,
                     stadium: { select: { id: true, name: true } },
+                    departmentId: true,
+                    department: { select: { id: true, name: true } },
                     createdAt: true,
                 },
                 orderBy: { name: 'asc' },

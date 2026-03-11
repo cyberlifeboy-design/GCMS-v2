@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fleetApi, usersApi, stadiumsApi } from '@/lib/api';
+import { fleetApi, usersApi, stadiumsApi, departmentsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ interface FleetCart {
     status: 'Available' | 'Assigned' | 'Dispatched' | 'Under Maintenance';
     requiresVAP: boolean;
     stadium?: { id: string; name: string };
+    department?: { id: string; name: string };
     assignedUser?: { id: string; name: string; email: string };
 }
 
@@ -40,6 +41,8 @@ type CartFormData = {
     status: string;
     requiresVAP: boolean;
     stadiumId: string;
+    assignedUserId: string;
+    departmentId: string;
 };
 
 const EMPTY_FORM: CartFormData = {
@@ -48,6 +51,8 @@ const EMPTY_FORM: CartFormData = {
     status: 'Available',
     requiresVAP: false,
     stadiumId: '',
+    assignedUserId: '',
+    departmentId: '',
 };
 
 export function FleetPage() {
@@ -59,7 +64,8 @@ export function FleetPage() {
 
     const [fleet, setFleet] = useState<FleetCart[]>([]);
     const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
-    const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string }>>([]);
+    const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string; departmentId?: string; department?: { id: string; name: string } }>>([]);
+    const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [stadiumsLoading, setStadiumsLoading] = useState(false);
@@ -115,10 +121,23 @@ export function FleetPage() {
         }
     };
 
-    const loadFAUsers = async () => {
+    const loadFAUsers = async (stadiumId?: string) => {
         try {
-            const res = await usersApi.getAll({ role: 'FA' });
+            const params: Record<string, unknown> = { role: 'FA', isActive: true };
+            if (stadiumId) params.stadiumId = stadiumId;
+            const res = await usersApi.getAll(params);
             setFaUsers(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const loadDepartments = async (stadiumId?: string) => {
+        try {
+            const params: Record<string, unknown> = {};
+            if (stadiumId) params.stadiumId = stadiumId;
+            const res = await departmentsApi.getAll(params);
+            setDepartments(res.data.data || []);
         } catch (e) {
             console.error(e);
         }
@@ -151,6 +170,15 @@ export function FleetPage() {
         }
     }, [isSuperAdmin]);
 
+    // Handle stadium change in create/edit modal - reload FA users and departments
+    const handleStadiumChange = async (stadiumId: string) => {
+        setFormData(d => ({ ...d, stadiumId, assignedUserId: '', departmentId: '' }));
+        if (stadiumId) {
+            await loadFAUsers(stadiumId);
+            await loadDepartments(stadiumId);
+        }
+    };
+
     const filteredFleet = fleet.filter(c =>
         c.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
         c.carType?.toLowerCase().includes(search.toLowerCase()) ||
@@ -165,22 +193,30 @@ export function FleetPage() {
         // For non-SuperAdmin, use their assigned stadium
         const defaultStadiumId = isSuperAdmin ? '' : (user?.stadiumId || '');
         setFormData({ ...EMPTY_FORM, stadiumId: defaultStadiumId });
+        // Load FA users and departments for the stadium
+        await loadFAUsers(defaultStadiumId || user?.stadiumId);
+        await loadDepartments(defaultStadiumId || user?.stadiumId);
         setCartModal({ open: true, mode: 'create' });
     };
 
-    const openEdit = (cart: FleetCart) => {
+    const openEdit = async (cart: FleetCart) => {
         setFormData({
             carNumber: cart.carNumber,
             carType: cart.carType,
             status: cart.status,
             requiresVAP: cart.requiresVAP,
             stadiumId: cart.stadium?.id || '',
+            assignedUserId: cart.assignedUser?.id || '',
+            departmentId: cart.department?.id || '',
         });
+        // Load FA users and departments for editing
+        await loadFAUsers(cart.stadium?.id || user?.stadiumId);
+        await loadDepartments(cart.stadium?.id || user?.stadiumId);
         setCartModal({ open: true, mode: 'edit', cart });
     };
 
     const openAssign = async (cart: FleetCart) => {
-        await loadFAUsers();
+        await loadFAUsers(cart.stadium?.id || user?.stadiumId);
         setAssignUserId(cart.assignedUser?.id || '');
         setAssignModal({ open: true, cart });
     };
@@ -194,7 +230,9 @@ export function FleetPage() {
             carType: formData.carType,
             status: formData.status || 'Available',
             requiresVAP: formData.requiresVAP || false,
-            stadiumId: isSuperAdmin ? formData.stadiumId : (user?.stadiumId || formData.stadiumId)
+            stadiumId: isSuperAdmin ? formData.stadiumId : (user?.stadiumId || formData.stadiumId),
+            assignedUserId: formData.assignedUserId || null,
+            departmentId: formData.departmentId || null,
         };
 
         if (!submitData.stadiumId) {
@@ -311,17 +349,18 @@ export function FleetPage() {
                         <TableHead>Status</TableHead>
                         <TableHead>VAP</TableHead>
                         <TableHead>Assigned FA</TableHead>
+                        <TableHead>Department</TableHead>
                         <TableHead>Stadium</TableHead>
                         {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8">
+                        <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">
                             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell></TableRow>
                     ) : data.length === 0 ? (
-                        <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                        <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground">
                             No carts found
                         </TableCell></TableRow>
                     ) : data.map(cart => (
@@ -337,6 +376,7 @@ export function FleetPage() {
                                 {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
                             </TableCell>
                             <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                            <TableCell>{cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                             {isAdmin && (
                                 <TableCell className="text-right">
@@ -471,7 +511,7 @@ export function FleetPage() {
                                     <Label htmlFor="stadiumId">Stadium *</Label>
                                     <Select
                                         value={formData.stadiumId}
-                                        onValueChange={v => setFormData(d => ({ ...d, stadiumId: v }))}
+                                        onValueChange={v => handleStadiumChange(v)}
                                         disabled={stadiumsLoading}
                                     >
                                         <SelectTrigger>
@@ -527,6 +567,43 @@ export function FleetPage() {
                                 onChange={e => setFormData(d => ({ ...d, requiresVAP: e.target.checked }))}
                                 className="w-4 h-4 rounded" />
                             <Label htmlFor="requiresVAP" className="cursor-pointer">Requires VAP (VIP Access Pass)</Label>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="departmentId">Department</Label>
+                            <Select
+                                value={formData.departmentId}
+                                onValueChange={v => setFormData(d => ({ ...d, departmentId: v }))}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select department (optional)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="">— None —</SelectItem>
+                                    {departments.map(d => (
+                                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="assignedUserId">Assign to FA</Label>
+                            <Select
+                                value={formData.assignedUserId}
+                                onValueChange={v => setFormData(d => ({ ...d, assignedUserId: v }))}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select FA (optional)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="">— Unassigned —</SelectItem>
+                                    {faUsers.map(u => (
+                                        <SelectItem key={u.id} value={u.id}>
+                                            {u.name}{u.department?.name ? ` (${u.department.name})` : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">Assign a Fleet Attendant to this cart during creation</p>
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setCartModal(m => ({ ...m, open: false }))}>Cancel</Button>
