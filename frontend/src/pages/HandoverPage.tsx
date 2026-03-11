@@ -308,12 +308,12 @@ export function HandoverPage() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h3 className="font-semibold">Available / Assigned Carts</h3>
-                                            <p className="text-xs text-muted-foreground">Take a cart out for use (marks as Dispatched)</p>
+                                            <p className="text-xs text-muted-foreground">Check out a cart for use (marks as Dispatched)</p>
                                         </div>
                                         {selectedAvailable.length > 0 && (
                                             <Button size="sm" onClick={handleBulkCheckin} disabled={submitting}>
                                                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                                                <LogIn className="w-4 h-4 mr-1" /> Take Out ({selectedAvailable.length})
+                                                <LogIn className="w-4 h-4 mr-1" /> Check Out ({selectedAvailable.length})
                                             </Button>
                                         )}
                                     </div>
@@ -337,7 +337,7 @@ export function HandoverPage() {
                                                     <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
                                                     <TableCell><Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge></TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button size="sm" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '' }); setCheckinOpen(true); }}><LogIn className="w-4 h-4 mr-1" />Take Out</Button>
+                                                        <Button size="sm" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '' }); setCheckinOpen(true); }}><LogIn className="w-4 h-4 mr-1" />Check Out</Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -399,8 +399,8 @@ export function HandoverPage() {
             <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Take Out Cart</DialogTitle>
-                        <DialogDescription>Select a cart to take out. This marks it as "Dispatched".</DialogDescription>
+                        <DialogTitle>Check Out Cart</DialogTitle>
+                        <DialogDescription>Select a cart to check out. This marks it as "Dispatched".</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCheckin} className="space-y-4">
                         <div className="space-y-2">
@@ -420,7 +420,7 @@ export function HandoverPage() {
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setCheckinOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Take Out</Button>
+                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Check Out</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
