@@ -25,7 +25,7 @@ apiClient.interceptors.response.use(
         const originalRequest = error.config;
 
         // Skip auth redirect for public endpoints
-        const publicEndpoints = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/settings'];
+        const publicEndpoints = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/public/'];
         const isPublicEndpoint = publicEndpoints.some(ep => originalRequest.url?.includes(ep));
 
         // Don't redirect if already on login page
