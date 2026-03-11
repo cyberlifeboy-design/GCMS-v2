@@ -507,26 +507,26 @@ export function FleetPage() {
                             <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell>{cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                            {isAdmin && (
+                            {(isAdmin || isFA) && (
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-1">
-                                        <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
-                                            <UserCheck className="w-4 h-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
-                                            <Edit2 className="w-4 h-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
-                                            <Trash2 className="w-4 h-4" />
+                                        {isAdmin && (
+                                            <>
+                                                <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
+                                                    <UserCheck className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
+                                                    <Edit2 className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </>
+                                        )}
+                                        <Button variant="ghost" size="sm" onClick={() => setMaintModal({ open: true, cart })} title="Report Maintenance">
+                                            <Wrench className="w-4 h-4" />
                                         </Button>
                                     </div>
-                                </TableCell>
-                            )}
-                            {isFA && (
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="sm" onClick={() => setMaintModal({ open: true, cart })} title="Report Maintenance">
-                                        <Wrench className="w-4 h-4" />
-                                    </Button>
                                 </TableCell>
                             )}
                         </TableRow>
