@@ -65,21 +65,26 @@ export function DashboardPage() {
             let blob: Blob;
             let filename: string;
 
+            let response;
             switch (type) {
                 case 'Fleet Overview':
-                    blob = await reportsApi.exportFleet();
+                    response = await reportsApi.exportFleet();
+                    blob = response.data;
                     filename = 'fleet_overview.xlsx';
                     break;
                 case 'Activity Timeline':
-                    blob = await reportsApi.exportActivity();
+                    response = await reportsApi.exportActivity();
+                    blob = response.data;
                     filename = 'activity_timeline.xlsx';
                     break;
                 case 'Full System':
-                    blob = await reportsApi.exportFull();
+                    response = await reportsApi.exportFull();
+                    blob = response.data;
                     filename = 'gcms_full_report.xlsx';
                     break;
                 default:
-                    blob = await reportsApi.exportFull();
+                    response = await reportsApi.exportFull();
+                    blob = response.data;
                     filename = 'gcms_report.xlsx';
             }
 

@@ -37,9 +37,9 @@ export interface Fleet {
     requiresVAP: boolean;
     stadiumId: string;
     stadium?: { id: string; name: string };
-    departmentId?: string;
+    departmentId?: string | null;
     department?: { id: string; name: string } | null;
-    assignedUserId?: string;
+    assignedUserId?: string | null;
     assignedUser?: { id: string; name: string } | null;
     createdAt: Date;
 }
@@ -50,7 +50,7 @@ export interface HandoverLog {
     fleet?: { carNumber: string; carType: string };
     userId: string;
     user?: { name: string; email: string };
-    action: HandoverAction;
+    action: string;
     timestamp: Date;
     conditionNotes?: string;
     photosUrls: string[];
@@ -66,7 +66,7 @@ export interface MaintenanceLog {
     issueDescription: string;
     photosUrls: string[];
     reportedAt: Date;
-    status: MaintenanceStatus;
+    status: string;
     resolutionNotes?: string;
     resolvedAt?: Date;
     createdAt: Date;

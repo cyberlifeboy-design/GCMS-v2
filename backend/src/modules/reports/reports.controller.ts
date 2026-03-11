@@ -2,7 +2,6 @@ import { Response } from 'express';
 import { reportsService } from './reports.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import * as ExcelJS from 'exceljs';
-import { HandoverLog, MaintenanceLog, Fleet, DashboardStats } from '../../types';
 
 export class ReportsController {
     static async exportAuditLogs(req: AuthRequest, res: Response) {
@@ -51,7 +50,7 @@ export class ReportsController {
 
     static async exportHandoverLogs(req: AuthRequest, res: Response) {
         try {
-            const logs: HandoverLog[] = await reportsService.getHandoverReports({});
+            const logs = await reportsService.getHandoverReports({});
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Handover Logs');
@@ -86,7 +85,7 @@ export class ReportsController {
 
     static async exportMaintenanceLogs(req: AuthRequest, res: Response) {
         try {
-            const logs: MaintenanceLog[] = await reportsService.getMaintenanceReports({});
+            const logs = await reportsService.getMaintenanceReports({});
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Maintenance Logs');
@@ -123,8 +122,8 @@ export class ReportsController {
 
     static async exportFleetOverview(req: AuthRequest, res: Response) {
         try {
-            const stats: DashboardStats = await reportsService.getDashboardStats({});
-            const fleet: Fleet[] = await reportsService.getFleetList({});
+            const stats = await reportsService.getDashboardStats({});
+            const fleet = await reportsService.getFleetList({});
 
             const workbook = new ExcelJS.Workbook();
             const summarySheet = workbook.addWorksheet('Summary');
@@ -175,7 +174,7 @@ export class ReportsController {
 
     static async exportActivityTimeline(req: AuthRequest, res: Response) {
         try {
-            const logs: HandoverLog[] = await reportsService.getHandoverReports({});
+            const logs = await reportsService.getHandoverReports({});
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Activity Timeline');
@@ -212,7 +211,7 @@ export class ReportsController {
 
     static async exportFullReport(req: AuthRequest, res: Response) {
         try {
-            const [stats, fleet, handoverLogs, maintenanceLogs]: [DashboardStats, Fleet[], HandoverLog[], MaintenanceLog[]] = await Promise.all([
+            const [stats, fleet, handoverLogs, maintenanceLogs] = await Promise.all([
                 reportsService.getDashboardStats({}),
                 reportsService.getFleetList({}),
                 reportsService.getHandoverReports({}),
