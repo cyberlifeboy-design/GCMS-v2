@@ -54,6 +54,8 @@ services:
       - SMTP_HOST=mailhog
       - SMTP_PORT=1025
       - FRONTEND_URL=https://gcms.mehaisi.com
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@gcms.local}
     ports:
       - "3005:3005"
     depends_on:
@@ -70,9 +72,13 @@ services:
       - "traefik.http.services.gcms-api.loadbalancer.server.port=3005"
     restart: unless-stopped
 
+  # MailHog - Development only email testing (not for production)
+  # Remove this service in production and set RESEND_API_KEY instead
   mailhog:
     image: mailhog/mailhog:latest
     container_name: gcms-mailhog
+    profiles:
+      - dev
     ports:
       - "1025:1025"
       - "8025:8025"

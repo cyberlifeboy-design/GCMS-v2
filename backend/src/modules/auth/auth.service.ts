@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database';
 import { authConfig } from '../../config/auth';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
+import { emailService } from '../../services/email.service';
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
 
@@ -189,26 +189,12 @@ export class AuthService {
             },
         });
 
-        // Send email (Mock or real depending on env)
-        const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'localhost',
-            port: Number(process.env.SMTP_PORT) || 1025,
-            secure: false,
-        });
-
-        const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
+        // Send email via email service (Resend in production, SMTP/MailHog in dev)
         try {
-            await transporter.sendMail({
-                from: '"GCMS Admin" <admin@gcms.local>',
-                to: user.email,
-                subject: 'Password Reset Request',
-                text: `You requested a password reset. Please click here: ${resetUrl}`,
-                html: `<p>You requested a password reset. Please click <a href="${resetUrl}">here</a> to reset your password.</p>`,
-            });
+            await emailService.sendPasswordResetEmail(user.email, token);
         } catch (error) {
-            console.error('Failed to send email:', error);
-            // Don't throw error to prevent user enumeration or just inform them
+            console.error('Failed to send password reset email:', error);
+            // Don't throw error to prevent user enumeration
         }
 
         return { message: 'Password reset email sent' };
