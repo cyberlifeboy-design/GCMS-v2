@@ -26,7 +26,10 @@ export class HandoverService {
 
             await tx.fleet.update({
                 where: { id: data.fleetId },
-                data: { status: 'Dispatched' },
+                data: { 
+                    status: 'Dispatched',
+                    assignedUserId: data.userId, // Track who has the cart
+                },
             });
         });
 
@@ -79,7 +82,10 @@ export class HandoverService {
             const nextStatus = data.hasIssue ? 'Under Maintenance' : 'Available';
             await tx.fleet.update({
                 where: { id: data.fleetId },
-                data: { status: nextStatus },
+                data: { 
+                    status: nextStatus,
+                    assignedUserId: null, // Clear assignment when returned
+                },
             });
 
             // Create maintenance log if issue reported
