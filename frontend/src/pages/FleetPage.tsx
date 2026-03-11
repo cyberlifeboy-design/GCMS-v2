@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fleetApi, usersApi, stadiumsApi, departmentsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield } from 'lucide-react';
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
@@ -55,12 +56,82 @@ const EMPTY_FORM: CartFormData = {
     departmentId: '',
 };
 
+// Multi-select dropdown component for car types
+function CarTypeMultiSelect({
+    selected,
+    onChange,
+}: {
+    selected: string[];
+    onChange: (types: string[]) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleType = (type: string) => {
+        if (selected.includes(type)) {
+            onChange(selected.filter(t => t !== type));
+        } else {
+            onChange([...selected, type]);
+        }
+    };
+
+    const displayText = selected.length === 0
+        ? 'All Types'
+        : selected.length === 1
+            ? selected[0]
+            : `${selected.length} types selected`;
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                className="flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"
+            >
+                <span className={selected.length === 0 ? 'text-muted-foreground' : ''}>{displayText}</span>
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+            </button>
+            {open && (
+                <div className="absolute z-50 mt-1 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+                    <div className="p-1">
+                        {CAR_TYPES.map(type => (
+                            <div
+                                key={type}
+                                className="relative flex cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                onClick={() => toggleType(type)}
+                            >
+                                <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                                    {selected.includes(type) && <Check className="h-4 w-4" />}
+                                </span>
+                                <Badge className={carTypeColors[type]} variant="secondary">{type}</Badge>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function FleetPage() {
     const { user } = useAuthStore();
     const role = user?.role;
     const isSuperAdmin = role === 'SuperAdmin';
     const isAdmin = role === 'SuperAdmin' || role === 'Admin';
     const isFA = role === 'FA';
+
+    // URL params for filter persistence
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const [fleet, setFleet] = useState<FleetCart[]>([]);
     const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
@@ -70,10 +141,19 @@ export function FleetPage() {
     const [loading, setLoading] = useState(true);
     const [stadiumsLoading, setStadiumsLoading] = useState(false);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
+
+    // Filters with URL persistence
+    const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all');
+    const [carTypeFilter, setCarTypeFilter] = useState<string[]>(() => {
+        const carType = searchParams.get('carType');
+        return carType ? carType.split(',').filter(t => CAR_TYPES.includes(t as typeof CAR_TYPES[number])) : [];
+    });
 
     // Pagination state
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(() => {
+        const p = searchParams.get('page');
+        return p ? parseInt(p, 10) || 1 : 1;
+    });
     const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
 
     // Modal states
@@ -92,11 +172,21 @@ export function FleetPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importResult, setImportResult] = useState<string>('');
 
+    // Update URL params when filters change
+    useEffect(() => {
+        const params = new URLSearchParams();
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        if (carTypeFilter.length > 0) params.set('carType', carTypeFilter.join(','));
+        if (page > 1) params.set('page', page.toString());
+        setSearchParams(params, { replace: true });
+    }, [statusFilter, carTypeFilter, page, setSearchParams]);
+
     const loadFleet = async () => {
         try {
             setLoading(true);
-            const params = {
+            const params: Record<string, unknown> = {
                 ...(statusFilter !== 'all' && { status: statusFilter }),
+                ...(carTypeFilter.length > 0 && { carType: carTypeFilter.join(',') }),
                 page,
                 limit: pagination.limit
             };
@@ -161,7 +251,7 @@ export function FleetPage() {
         } else {
             loadFleet();
         }
-    }, [statusFilter, page]);
+    }, [statusFilter, carTypeFilter, page]);
 
     // Load stadiums for SuperAdmin (to select venue when creating carts)
     useEffect(() => {
@@ -177,6 +267,12 @@ export function FleetPage() {
             await loadFAUsers(stadiumId);
             await loadDepartments(stadiumId);
         }
+    };
+
+    // Handle car type filter changes
+    const handleCarTypeFilterChange = (types: string[]) => {
+        setCarTypeFilter(types);
+        setPage(1); // Reset to first page when filter changes
     };
 
     const filteredFleet = fleet.filter(c =>
@@ -446,8 +542,8 @@ export function FleetPage() {
                 {!isFA && (
                     <Card>
                         <CardHeader>
-                            <div className="flex gap-4">
-                                <div className="relative flex-1">
+                            <div className="flex gap-4 flex-wrap">
+                                <div className="relative flex-1 min-w-[200px]">
                                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         placeholder="Search by car number, type, or stadium…"
@@ -465,6 +561,10 @@ export function FleetPage() {
                                         {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
+                                <CarTypeMultiSelect
+                                    selected={carTypeFilter}
+                                    onChange={handleCarTypeFilterChange}
+                                />
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">

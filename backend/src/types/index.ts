@@ -105,7 +105,7 @@ export interface FleetFilters {
     stadiumId?: string;
     assignedUserId?: string;
     status?: string;
-    carType?: string;
+    carType?: string | string[];
     requiresVAP?: boolean;
 }
 

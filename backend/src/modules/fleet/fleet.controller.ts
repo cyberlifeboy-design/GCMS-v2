@@ -41,11 +41,18 @@ export class FleetController {
                 filterStadiumId = req.user.stadiumId;
             }
 
+            // Support comma-separated carType for multi-select filter
+            let carTypeFilter: string | string[] | undefined;
+            if (carType) {
+                const types = (carType as string).split(',').map(t => t.trim()).filter(Boolean);
+                carTypeFilter = types.length === 1 ? types[0] : types;
+            }
+
             const filters: FleetFilters = {
                 stadiumId: filterStadiumId,
                 assignedUserId: filterAssignedUserId,
                 status: status as string,
-                carType: carType as string,
+                carType: carTypeFilter,
                 requiresVAP: requiresVAP === 'true' ? true : requiresVAP === 'false' ? false : undefined,
             };
 

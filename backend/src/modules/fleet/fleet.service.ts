@@ -11,7 +11,11 @@ export class FleetService {
             ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
             ...(filters.assignedUserId && { assignedUserId: filters.assignedUserId }),
             ...(filters.status && { status: filters.status }),
-            ...(filters.carType && { carType: filters.carType }),
+            ...(filters.carType && {
+                carType: Array.isArray(filters.carType)
+                    ? { in: filters.carType }
+                    : filters.carType
+            }),
             ...(filters.requiresVAP !== undefined && { requiresVAP: filters.requiresVAP }),
         };
 
