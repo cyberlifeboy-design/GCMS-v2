@@ -25,6 +25,10 @@ const updateUserSchema = z.object({
     isActive: z.boolean().optional(),
 });
 
+const updatePreferencesSchema = z.object({
+    exportFormat: z.enum(['xlsx', 'pdf', 'docx']).optional(),
+});
+
 export class UsersController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
@@ -221,6 +225,25 @@ export class UsersController {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
                 res.status(500).json({ error: 'Failed to bulk create users' });
+            }
+        }
+    }
+
+    static async updatePreferences(req: AuthRequest, res: Response) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ error: 'Unauthorized' });
+                return;
+            }
+            const validatedData = updatePreferencesSchema.parse(req.body);
+            const user = await usersService.update(userId, validatedData);
+            res.status(200).json(user);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to update preferences' });
             }
         }
     }

@@ -71,6 +71,7 @@ model User {
   isActive        Boolean         @default(true)
   resetPasswordToken   String?    @unique
   resetPasswordExpires DateTime?
+  exportFormat    String          @default("xlsx") // xlsx, pdf, docx
   stadiumId       String?
   stadium         Stadium?        @relation(fields: [stadiumId], references: [id])
   departmentId    String?

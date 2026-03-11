@@ -29,4 +29,7 @@ router.patch('/:id/status', requireRole('SuperAdmin', 'Admin'), auditLog(), User
 // Delete user
 router.delete('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.delete);
 
+// User preferences (any authenticated user can update their own preferences)
+router.patch('/me/preferences', UsersController.updatePreferences);
+
 export default router;

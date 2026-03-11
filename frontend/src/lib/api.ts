@@ -176,6 +176,8 @@ export const usersApi = {
         apiClient.post('/users/bulk', users),
     setStatus: (id: string, isActive: boolean) =>
         apiClient.patch(`/users/${id}/status`, { isActive }),
+    updatePreferences: (data: { exportFormat?: string }) =>
+        apiClient.patch('/users/me/preferences', data),
 };
 
 // Reports & Exports

@@ -11,6 +11,7 @@ export interface AuthUser {
     stadiumId?: string;
     stadium?: { id: string; name: string };
     isActive: boolean;
+    exportFormat?: 'xlsx' | 'pdf' | 'docx';
 }
 
 interface AuthState {
@@ -19,6 +20,7 @@ interface AuthState {
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
+    updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -44,6 +46,11 @@ export const useAuthStore = create<AuthState>()(
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
                 set({ user: null, isAuthenticated: false });
+            },
+            updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => {
+                set((state) => ({
+                    user: state.user ? { ...state.user, exportFormat: format } : null,
+                }));
             },
         }),
         {

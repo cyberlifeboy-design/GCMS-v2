@@ -41,3 +41,16 @@ Starting with **#57** (Return Cart bug - critical)
 - [x] #31-46 - All critical bugs fixed (previous session)
 - [x] #57 - Return Cart fix - DONE
 - [x] #56 - Rename 'Take out' to 'Check out' - DONE
+- [x] #50 - Fleet FA/Department assignment - DONE
+- [x] #51 - Fleet Management tab - DONE
+- [x] #52 - Car type filter in fleet - DONE
+- [x] #53 - Maintenance report on fleet items - DONE
+- [x] #54 - FA name in check-in/check-out records - DONE
+- [x] #55 - Show previous FA during check-out - DONE
+- [x] #48 - Replace MailHog with Resend - DONE
+- [x] #49 - Dashboard stadium info and FA fleet overview - DONE
+- [x] #58 - Admin/SuperAdmin report maintenance - DONE
+- [x] #59 - Maintenance status dashboard - DONE
+- [x] #60 - Enhanced user creation with department/stadium - DONE
+- [x] #61 - Department across all stadiums - DONE
+- [x] #62 - Enhanced reporting - DONE

@@ -13,7 +13,7 @@ const HandoverPage = lazy(() => import('@/pages/HandoverPage').then(m => ({ defa
 const MaintenancePage = lazy(() => import('@/pages/MaintenancePage').then(m => ({ default: m.MaintenancePage })));
 const UsersPage = lazy(() => import('@/pages/UsersPage').then(m => ({ default: m.UsersPage })));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
-const SystemSettingsPage = lazy(() => import('@/pages/SystemSettingsPage').then(m => ({ default: m.SystemSettingsPage })));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const StadiumsPage = lazy(() => import('@/pages/StadiumsPage').then(m => ({ default: m.StadiumsPage })));
 const DepartmentsPage = lazy(() => import('@/pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
 const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').then(m => ({ default: m.FleetManagementPage })));
@@ -50,7 +50,7 @@ function AppContent() {
                                     <Route path="/departments" element={<DepartmentsPage />} />
                                     <Route path="/fleet-management" element={<FleetManagementPage />} />
                                     <Route path="/reports" element={<ReportsPage />} />
-                                    <Route path="/settings" element={<SystemSettingsPage />} />
+                                    <Route path="/settings" element={<SettingsPage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>
                             </MainLayout>

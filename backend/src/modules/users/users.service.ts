@@ -58,6 +58,7 @@ export class UsersService {
                     role: true,
                     phone: true,
                     isActive: true,
+                    exportFormat: true,
                     stadiumId: true,
                     stadium: { select: { id: true, name: true } },
                     departmentId: true,
@@ -87,6 +88,7 @@ export class UsersService {
                 role: true,
                 phone: true,
                 isActive: true,
+                exportFormat: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 createdAt: true,
@@ -143,6 +145,7 @@ export class UsersService {
         stadiumId: string;
         departmentId: string;
         isActive: boolean;
+        exportFormat: string;
     }>) {
         return prisma.user.update({
             where: { id },
@@ -154,6 +157,7 @@ export class UsersService {
                 role: true,
                 phone: true,
                 isActive: true,
+                exportFormat: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 departmentId: true,

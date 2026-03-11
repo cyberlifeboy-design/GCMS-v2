@@ -77,6 +77,7 @@ export function ReportsPage() {
     const { user } = useAuthStore();
     const role = user?.role;
     const canViewReports = role === 'SuperAdmin' || role === 'Admin' || role === 'Observer';
+    const defaultExportFormat = user?.exportFormat || 'xlsx';
 
     const [utilization, setUtilization] = useState<UtilizationData | null>(null);
     const [stadiumReports, setStadiumReports] = useState<StadiumReport[]>([]);
@@ -141,17 +142,24 @@ export function ReportsPage() {
         window.URL.revokeObjectURL(url);
     };
 
-    const handleExportStadium = async (format: 'xlsx' | 'pdf') => {
+    const handleExportStadium = async (format?: 'xlsx' | 'pdf') => {
+        const actualFormat = format || defaultExportFormat;
+        if (actualFormat === 'docx') {
+            // Word format not supported yet, fall back to xlsx
+            handleExportStadium('xlsx');
+            return;
+        }
         setExporting('stadium');
         try {
-            const res = await reportsApi.exportStadiumReport(format);
-            const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+            const res = await reportsApi.exportStadiumReport(actualFormat as 'xlsx' | 'pdf');
+            const ext = actualFormat === 'pdf' ? 'pdf' : 'xlsx';
             downloadBlob(res.data, `stadium_report_${new Date().toISOString().split('T')[0]}.${ext}`);
         } catch { alert('Export failed'); }
         finally { setExporting(null); }
     };
 
     const handleExportDepartment = async () => {
+        // Department only has Excel export currently
         setExporting('department');
         try {
             const res = await reportsApi.exportDepartmentReport();
@@ -160,11 +168,17 @@ export function ReportsPage() {
         finally { setExporting(null); }
     };
 
-    const handleExportUser = async (format: 'xlsx' | 'pdf') => {
+    const handleExportUser = async (format?: 'xlsx' | 'pdf') => {
+        const actualFormat = format || defaultExportFormat;
+        if (actualFormat === 'docx') {
+            // Word format not supported yet, fall back to xlsx
+            handleExportUser('xlsx');
+            return;
+        }
         setExporting('user');
         try {
-            const res = await reportsApi.exportUserReport(format);
-            const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+            const res = await reportsApi.exportUserReport(actualFormat as 'xlsx' | 'pdf');
+            const ext = actualFormat === 'pdf' ? 'pdf' : 'xlsx';
             downloadBlob(res.data, `user_report_${new Date().toISOString().split('T')[0]}.${ext}`);
         } catch { alert('Export failed'); }
         finally { setExporting(null); }
