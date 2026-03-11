@@ -1,5 +1,9 @@
 # GCMS - Golf Cart Management System
 
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/O96a/GCMS/blob/main/LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-16-blue)](https://www.postgresql.org/)
+
 A production-grade fleet management system for tournament operations, built with modern web technologies.
 
 ## Table of Contents
