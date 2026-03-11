@@ -9,6 +9,7 @@ router.use(authenticate);
 
 router.get('/', DepartmentsController.getAll);
 router.post('/', requireRole('SuperAdmin', 'Admin'), DepartmentsController.create);
+router.post('/bulk', requireRole('SuperAdmin'), DepartmentsController.createBulk);
 router.put('/:id', requireRole('SuperAdmin', 'Admin'), DepartmentsController.update);
 router.delete('/:id', requireRole('SuperAdmin', 'Admin'), DepartmentsController.delete);
 

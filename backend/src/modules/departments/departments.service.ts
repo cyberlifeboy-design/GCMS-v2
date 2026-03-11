@@ -26,6 +26,26 @@ export class DepartmentsService {
         });
     }
 
+    async createBulk(data: { name: string; code?: string; stadiumIds: string[] }) {
+        // Create departments for all specified stadiums
+        // Using transaction to ensure atomicity
+        const departments = await prisma.$transaction(
+            data.stadiumIds.map(stadiumId =>
+                prisma.department.create({
+                    data: {
+                        name: data.name,
+                        code: data.code,
+                        stadiumId,
+                    },
+                    include: {
+                        stadium: { select: { name: true } },
+                    },
+                })
+            )
+        );
+        return departments;
+    }
+
     async update(id: string, data: { name?: string; code?: string }) {
         return prisma.department.update({
             where: { id },

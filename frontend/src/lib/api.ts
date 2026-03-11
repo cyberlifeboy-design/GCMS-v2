@@ -154,6 +154,8 @@ export const departmentsApi = {
         apiClient.get(`/departments/${id}`),
     create: (data: Record<string, unknown>) =>
         apiClient.post('/departments', data),
+    createBulk: (data: { name: string; code?: string; stadiumIds: string[] }) =>
+        apiClient.post('/departments/bulk', data),
     update: (id: string, data: Record<string, unknown>) =>
         apiClient.put(`/departments/${id}`, data),
     delete: (id: string) =>

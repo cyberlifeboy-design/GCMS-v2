@@ -9,6 +9,12 @@ const createDeptSchema = z.object({
     stadiumId: z.string().min(1),
 });
 
+const createBulkDeptSchema = z.object({
+    name: z.string().min(1),
+    code: z.string().optional(),
+    stadiumIds: z.array(z.string().min(1)).min(1),
+});
+
 export class DepartmentsController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
@@ -44,6 +50,27 @@ export class DepartmentsController {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
                 res.status(500).json({ error: 'Failed to create department' });
+            }
+        }
+    }
+
+    static async createBulk(req: AuthRequest, res: Response) {
+        try {
+            // Only SuperAdmin can create departments across multiple stadiums
+            if (req.user?.role !== 'SuperAdmin') {
+                res.status(403).json({ error: 'Only SuperAdmin can create departments across multiple venues' });
+                return;
+            }
+
+            const validatedData = createBulkDeptSchema.parse(req.body);
+
+            const departments = await departmentsService.createBulk(validatedData);
+            res.status(201).json({ data: departments, count: departments.length });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to create departments' });
             }
         }
     }

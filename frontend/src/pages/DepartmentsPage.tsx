@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Search, Edit2, Loader2, Building2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -18,6 +19,8 @@ interface Department {
     stadium: { name: string };
     _count?: { users: number; fleet: number };
 }
+
+type CreateMode = 'single' | 'all' | 'select';
 
 export function DepartmentsPage() {
     const { user } = useAuthStore();
@@ -33,6 +36,8 @@ export function DepartmentsPage() {
     const [modal, setModal] = useState<{ open: boolean; mode: 'create' | 'edit'; department?: Department }>({ open: false, mode: 'create' });
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({ name: '', code: '', stadiumId: '' });
+    const [createMode, setCreateMode] = useState<CreateMode>('single');
+    const [selectedStadiumIds, setSelectedStadiumIds] = useState<string[]>([]);
 
     const loadDepartments = async () => {
         try {
@@ -70,13 +75,42 @@ export function DepartmentsPage() {
         e.preventDefault();
         setSubmitting(true);
         try {
-            const stadiumId = isSuperAdmin ? formData.stadiumId : (user?.stadiumId || '');
-            const data = { ...formData, stadiumId };
-
-            if (modal.mode === 'create') {
-                await departmentsApi.create(data);
+            if (modal.mode === 'create' && isSuperAdmin) {
+                if (createMode === 'all') {
+                    // Create for all stadiums
+                    const allStadiumIds = stadiums.map(s => s.id);
+                    await departmentsApi.createBulk({
+                        name: formData.name,
+                        code: formData.code || undefined,
+                        stadiumIds: allStadiumIds,
+                    });
+                } else if (createMode === 'select') {
+                    // Create for selected stadiums
+                    if (selectedStadiumIds.length === 0) {
+                        alert('Please select at least one stadium');
+                        setSubmitting(false);
+                        return;
+                    }
+                    await departmentsApi.createBulk({
+                        name: formData.name,
+                        code: formData.code || undefined,
+                        stadiumIds: selectedStadiumIds,
+                    });
+                } else {
+                    // Single stadium
+                    const data = { ...formData, stadiumId: formData.stadiumId };
+                    await departmentsApi.create(data);
+                }
             } else {
-                await departmentsApi.update(modal.department!.id, data);
+                // Admin or edit mode
+                const stadiumId = isSuperAdmin ? formData.stadiumId : (user?.stadiumId || '');
+                const data = { ...formData, stadiumId };
+
+                if (modal.mode === 'create') {
+                    await departmentsApi.create(data);
+                } else {
+                    await departmentsApi.update(modal.department!.id, data);
+                }
             }
             setModal({ open: false, mode: 'create' });
             loadDepartments();
@@ -89,7 +123,25 @@ export function DepartmentsPage() {
 
     const openCreate = () => {
         setFormData({ name: '', code: '', stadiumId: isSuperAdmin ? '' : (user?.stadiumId || '') });
+        setCreateMode('single');
+        setSelectedStadiumIds([]);
         setModal({ open: true, mode: 'create' });
+    };
+
+    const toggleStadiumSelection = (stadiumId: string) => {
+        setSelectedStadiumIds(prev =>
+            prev.includes(stadiumId)
+                ? prev.filter(id => id !== stadiumId)
+                : [...prev, stadiumId]
+        );
+    };
+
+    const selectAllStadiums = () => {
+        setSelectedStadiumIds(stadiums.map(s => s.id));
+    };
+
+    const deselectAllStadiums = () => {
+        setSelectedStadiumIds([]);
     };
 
     return (
@@ -168,17 +220,72 @@ export function DepartmentsPage() {
                             <Label>Code</Label>
                             <Input value={formData.code} onChange={e => setFormData(f => ({ ...f, code: e.target.value }))} placeholder="e.g. MED, SEC" />
                         </div>
+
                         {isSuperAdmin && modal.mode === 'create' && (
-                            <div className="space-y-2">
-                                <Label>Stadium / Venue *</Label>
-                                <Select value={formData.stadiumId} onValueChange={v => setFormData(f => ({ ...f, stadiumId: v }))}>
-                                    <SelectTrigger><SelectValue placeholder="Select venue" /></SelectTrigger>
-                                    <SelectContent>
-                                        {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                            <>
+                                <div className="space-y-2">
+                                    <Label>Create For</Label>
+                                    <Select value={createMode} onValueChange={(v) => setCreateMode(v as CreateMode)}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="single">Single Stadium</SelectItem>
+                                            <SelectItem value="all">All Stadiums</SelectItem>
+                                            <SelectItem value="select">Select Stadiums</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {createMode === 'single' && (
+                                    <div className="space-y-2">
+                                        <Label>Stadium / Venue *</Label>
+                                        <Select value={formData.stadiumId} onValueChange={v => setFormData(f => ({ ...f, stadiumId: v }))}>
+                                            <SelectTrigger><SelectValue placeholder="Select venue" /></SelectTrigger>
+                                            <SelectContent>
+                                                {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+
+                                {createMode === 'all' && (
+                                    <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
+                                        This will create "<span className="font-medium text-foreground">{formData.name || 'Department'}</span>" in all {stadiums.length} stadiums.
+                                    </div>
+                                )}
+
+                                {createMode === 'select' && (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <Label>Select Stadiums ({selectedStadiumIds.length} selected)</Label>
+                                            <div className="flex gap-2">
+                                                <Button type="button" variant="ghost" size="sm" onClick={selectAllStadiums}>Select All</Button>
+                                                <Button type="button" variant="ghost" size="sm" onClick={deselectAllStadiums}>Deselect All</Button>
+                                            </div>
+                                        </div>
+                                        <div className="max-h-48 overflow-y-auto border rounded-md p-2 space-y-1">
+                                            {stadiums.map(s => (
+                                                <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                                                    <Checkbox
+                                                        checked={selectedStadiumIds.includes(s.id)}
+                                                        onCheckedChange={() => toggleStadiumSelection(s.id)}
+                                                    />
+                                                    <span>{s.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {!isSuperAdmin && modal.mode === 'create' && (
+                            <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
+                                Department will be created in your assigned venue.
                             </div>
                         )}
+
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setModal(m => ({ ...m, open: false }))}>Cancel</Button>
                             <Button type="submit" disabled={submitting}>
