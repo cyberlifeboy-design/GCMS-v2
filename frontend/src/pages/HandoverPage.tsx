@@ -32,6 +32,13 @@ interface FleetCart {
     carNumber: string;
     carType: string;
     status: string;
+    assignedUser?: {
+        id: string;
+        name: string;
+        phone?: string;
+        email?: string;
+        role?: string;
+    };
 }
 
 const actionColors: Record<string, string> = {
@@ -370,17 +377,19 @@ export function HandoverPage() {
                                                 <TableHead className="w-12"><Checkbox checked={dispatchedFleet.length > 0 && selectedDispatched.length === dispatchedFleet.length} onCheckedChange={toggleAllDispatched} /></TableHead>
                                                 <TableHead>Cart #</TableHead>
                                                 <TableHead>Type</TableHead>
+                                                <TableHead>Checked Out By</TableHead>
                                                 <TableHead className="text-right">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {dispatchedFleet.length === 0 ? (
-                                                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No dispatched carts</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No dispatched carts</TableCell></TableRow>
                                             ) : dispatchedFleet.map(v => (
                                                 <TableRow key={v.id} className={selectedDispatched.includes(v.id) ? 'bg-green-50' : ''}>
                                                     <TableCell><Checkbox checked={selectedDispatched.includes(v.id)} onCheckedChange={() => toggleDispatchedSelection(v.id)} /></TableCell>
                                                     <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
                                                     <TableCell><Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge></TableCell>
+                                                    <TableCell>{v.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                                                     <TableCell className="text-right">
                                                         <Button size="sm" variant="outline" onClick={() => { setCheckoutForm({ fleetId: v.id, conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] }); setCheckoutOpen(true); }}><LogOut className="w-4 h-4 mr-1" />Return</Button>
                                                     </TableCell>
@@ -444,6 +453,21 @@ export function HandoverPage() {
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {checkoutForm.fleetId && (() => {
+                                const selectedCart = dispatchedFleet.find(v => v.id === checkoutForm.fleetId);
+                                if (selectedCart?.assignedUser) {
+                                    return (
+                                        <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md text-sm">
+                                            <span className="text-blue-700 font-medium">Previously checked out by: </span>
+                                            <span className="text-blue-900 font-semibold">{selectedCart.assignedUser.name}</span>
+                                            {selectedCart.assignedUser.phone && (
+                                                <span className="text-blue-600 ml-2">({selectedCart.assignedUser.phone})</span>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
                         </div>
                         <div className="space-y-2">
                             <Label>Condition Notes</Label>
@@ -468,10 +492,6 @@ export function HandoverPage() {
                                 </div>
                             </>
                         )}
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Return Cart</Button>
-                        </DialogFooter>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setCheckoutOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Return Cart</Button>
