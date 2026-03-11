@@ -18,8 +18,11 @@ RUN echo 'server { \
     root /usr/share/nginx/html; \
     index index.html; \
     \
+    resolver 127.0.0.11 valid=30s ipv6=off; \
+    set $backend http://gcms-backend:3005; \
+    \
     location /api/v1 { \
-        proxy_pass http://gcms-backend:3005/api/v1; \
+        proxy_pass $backend/api/v1; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
         proxy_set_header Connection "upgrade"; \
