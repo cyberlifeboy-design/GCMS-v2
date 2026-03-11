@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { fleetApi, usersApi, stadiumsApi, departmentsApi } from '@/lib/api';
+import { useSearchParams, Link } from 'react-router-dom';
+import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check } from 'lucide-react';
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
@@ -161,12 +161,15 @@ export function FleetPage() {
     const [assignModal, setAssignModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
     const [deleteModal, setDeleteModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
     const [bulkModal, setBulkModal] = useState(false);
+    const [maintModal, setMaintModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
     const [submitting, setSubmitting] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState<CartFormData>(EMPTY_FORM);
     const [assignUserId, setAssignUserId] = useState('');
     const [bulkStadiumId, setBulkStadiumId] = useState('');
+    const [maintForm, setMaintForm] = useState({ issueDescription: '' });
+    const [maintPhotos, setMaintPhotos] = useState<File[]>([]);
 
     // Bulk import
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -435,6 +438,36 @@ export function FleetPage() {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
+    const handleReportMaintenance = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!maintModal.cart) return;
+        setSubmitting(true);
+        try {
+            const fd = new FormData();
+            fd.append('fleetId', maintModal.cart.id);
+            fd.append('issueDescription', maintForm.issueDescription);
+            maintPhotos.forEach(f => fd.append('photos', f));
+            await maintenanceApi.report(fd);
+            setMaintModal({ open: false });
+            setMaintForm({ issueDescription: '' });
+            setMaintPhotos([]);
+            loadFleet();
+        } catch (err: any) {
+            const errorData = err.response?.data;
+            if (errorData?.details?.length) {
+                const messages = errorData.details.map((d: any) => {
+                    const field = d.path?.join('.') || 'Field';
+                    return `${field}: ${d.message}`;
+                }).join('\n');
+                alert(messages);
+            } else {
+                alert(errorData?.error || 'Failed to report maintenance');
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const CartTable = ({ data }: { data: FleetCart[] }) => (
         <div className="flex flex-col">
             <Table>
@@ -447,16 +480,16 @@ export function FleetPage() {
                         <TableHead>Assigned FA</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>Stadium</TableHead>
-                        {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                        {(isAdmin || isFA) && <TableHead className="text-right">Actions</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8">
+                        <TableRow><TableCell colSpan={(isAdmin || isFA) ? 8 : 7} className="text-center py-8">
                             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell></TableRow>
                     ) : data.length === 0 ? (
-                        <TableRow><TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                        <TableRow><TableCell colSpan={(isAdmin || isFA) ? 8 : 7} className="text-center py-8 text-muted-foreground">
                             No carts found
                         </TableCell></TableRow>
                     ) : data.map(cart => (
@@ -487,6 +520,13 @@ export function FleetPage() {
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     </div>
+                                </TableCell>
+                            )}
+                            {isFA && (
+                                <TableCell className="text-right">
+                                    <Button variant="ghost" size="sm" onClick={() => setMaintModal({ open: true, cart })} title="Report Maintenance">
+                                        <Wrench className="w-4 h-4" />
+                                    </Button>
                                 </TableCell>
                             )}
                         </TableRow>
@@ -786,6 +826,56 @@ export function FleetPage() {
                             Choose File & Upload
                         </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Report Maintenance Modal */}
+            <Dialog open={maintModal.open} onOpenChange={o => setMaintModal(m => ({ ...m, open: o }))}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Report Maintenance</DialogTitle>
+                        <DialogDescription>
+                            Report an issue with cart <strong>{maintModal.cart?.carNumber}</strong>. This will change the cart status to "Under Maintenance".
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleReportMaintenance} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="maintIssue">Issue Description *</Label>
+                            <textarea
+                                id="maintIssue"
+                                className="w-full min-h-[100px] p-3 border rounded-md text-sm"
+                                value={maintForm.issueDescription}
+                                onChange={e => setMaintForm(f => ({ ...f, issueDescription: e.target.value }))}
+                                placeholder="Describe the maintenance issue in detail…"
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="maintPhotos">Photos (optional, max 5)</Label>
+                            <Input
+                                id="maintPhotos"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={e => setMaintPhotos(Array.from(e.target.files || []).slice(0, 5))}
+                            />
+                            {maintPhotos.length > 0 && (
+                                <p className="text-xs text-muted-foreground">{maintPhotos.length} file(s) selected</p>
+                            )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            View all maintenance issues on the <Link to="/maintenance" className="text-primary hover:underline">Maintenance page</Link>.
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setMaintModal(m => ({ ...m, open: false }))}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Report Issue
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>
