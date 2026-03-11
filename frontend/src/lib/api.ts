@@ -92,6 +92,12 @@ export const fleetApi = {
     },
     assignUser: (id: string, userId: string | null) =>
         apiClient.post(`/fleet/${id}/assign`, { userId }),
+    getAssignmentMatrix: (params?: Record<string, unknown>) =>
+        apiClient.get('/fleet/assignment-matrix', { params }),
+    bulkAssign: (assignments: Array<{ fleetId: string; userId: string | null }>) =>
+        apiClient.post('/fleet/bulk-assign', { assignments }),
+    getAssignmentHistory: (params?: Record<string, unknown>) =>
+        apiClient.get('/fleet/assignment-history', { params }),
 };
 
 // Handover  (actions: CheckedOut / CheckedIn / IssueReported)

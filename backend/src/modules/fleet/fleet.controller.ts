@@ -5,6 +5,7 @@ import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
 import { FleetFilters, PaginationParams } from '../../types';
+import { prisma } from '../../config/database';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -217,6 +218,94 @@ export class FleetController {
             res.status(200).json({ data: carts });
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch assigned carts' });
+        }
+    }
+
+    static async getAssignmentMatrix(req: AuthRequest, res: Response) {
+        try {
+            let stadiumId = req.query.stadiumId as string | undefined;
+
+            // RBAC scoping
+            if (req.user?.role === 'Admin') {
+                stadiumId = req.user.stadiumId;
+            }
+
+            const matrix = await fleetService.getAssignmentMatrix(stadiumId);
+            res.status(200).json(matrix);
+        } catch (error) {
+            console.error('Assignment matrix error:', error);
+            res.status(500).json({ error: 'Failed to fetch assignment matrix' });
+        }
+    }
+
+    static async bulkAssign(req: AuthRequest, res: Response) {
+        try {
+            const { assignments } = req.body;
+
+            if (!Array.isArray(assignments) || assignments.length === 0) {
+                res.status(400).json({ error: 'assignments array is required' });
+                return;
+            }
+
+            // Validate each assignment
+            for (const a of assignments) {
+                if (!a.fleetId) {
+                    res.status(400).json({ error: 'Each assignment must have fleetId' });
+                    return;
+                }
+            }
+
+            // RBAC: Admin can only assign carts in their stadium
+            if (req.user?.role === 'Admin' && req.user?.stadiumId) {
+                const fleetIds = assignments.map(a => a.fleetId);
+                const carts = await prisma.fleet.findMany({
+                    where: { id: { in: fleetIds } },
+                    select: { id: true, stadiumId: true },
+                });
+                const invalid = carts.filter(c => c.stadiumId !== req.user!.stadiumId);
+                if (invalid.length > 0) {
+                    res.status(403).json({ error: 'Cannot assign carts outside your stadium' });
+                    return;
+                }
+            }
+
+            const results = await fleetService.bulkAssign(assignments);
+            res.status(200).json(results);
+        } catch (error: any) {
+            console.error('Bulk assign error:', error);
+            res.status(500).json({ error: 'Failed to bulk assign', details: error.message });
+        }
+    }
+
+    static async getAssignmentHistory(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId, userId, limit } = req.query;
+
+            // RBAC scoping
+            let filterFleetId = fleetId as string | undefined;
+
+            if (req.user?.role === 'Admin' && req.user.stadiumId) {
+                // Admin can only see history for their stadium's fleet
+                const stadiumFleet = await prisma.fleet.findFirst({
+                    where: { id: fleetId as string, stadiumId: req.user.stadiumId },
+                    select: { id: true },
+                });
+                if (fleetId && !stadiumFleet) {
+                    res.status(403).json({ error: 'Access denied' });
+                    return;
+                }
+            }
+
+            const history = await fleetService.getAssignmentHistory({
+                fleetId: filterFleetId,
+                userId: userId as string,
+                limit: limit ? parseInt(limit as string) : undefined,
+            });
+
+            res.status(200).json({ data: history });
+        } catch (error) {
+            console.error('Assignment history error:', error);
+            res.status(500).json({ error: 'Failed to fetch assignment history' });
         }
     }
 }

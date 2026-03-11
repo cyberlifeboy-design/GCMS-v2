@@ -14,6 +14,15 @@ router.get('/', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), FleetContr
 // GET /api/v1/fleet/my-carts — FA gets their assigned carts
 router.get('/my-carts', requireRole('FA', 'Admin', 'SuperAdmin'), FleetController.getMyAssignedCarts);
 
+// GET /api/v1/fleet/assignment-matrix — Matrix view of FA assignments per stadium
+router.get('/assignment-matrix', requireRole('SuperAdmin', 'Admin', 'Observer'), FleetController.getAssignmentMatrix);
+
+// POST /api/v1/fleet/bulk-assign — Bulk assign FAs to carts
+router.post('/bulk-assign', requireRole('SuperAdmin', 'Admin'), auditLog(), FleetController.bulkAssign);
+
+// GET /api/v1/fleet/assignment-history — History of FA assignments
+router.get('/assignment-history', requireRole('SuperAdmin', 'Admin', 'Observer'), FleetController.getAssignmentHistory);
+
 // GET /api/v1/fleet/:id
 router.get('/:id', requireRole('SuperAdmin', 'Admin', 'Observer'), FleetController.getById);
 
