@@ -126,6 +126,88 @@ export class ReportsService {
             },
         });
 
+        // 7. Stadium Information
+        const activeStadiums = await this.prisma.stadium.findMany({
+            where: { isActive: true },
+            select: {
+                id: true,
+                name: true,
+                code: true,
+                location: true,
+                _count: {
+                    select: { fleet: true, users: { where: { role: 'FA', isActive: true } } },
+                },
+            },
+            orderBy: { name: 'asc' },
+        });
+
+        // Get fleet status per stadium
+        const stadiumFleetStats = await this.prisma.fleet.groupBy({
+            by: ['stadiumId', 'status'],
+            where: { stadium: { isActive: true } },
+            _count: { _all: true },
+        });
+
+        // Build stadium list with fleet breakdown
+        const stadiumStatsMap = new Map<string, Record<string, number>>();
+        stadiumFleetStats.forEach(stat => {
+            if (!stadiumStatsMap.has(stat.stadiumId)) {
+                stadiumStatsMap.set(stat.stadiumId, {});
+            }
+            stadiumStatsMap.get(stat.stadiumId)![stat.status] = stat._count._all;
+        });
+
+        const stadiumsList = activeStadiums.map(stadium => ({
+            id: stadium.id,
+            name: stadium.name,
+            code: stadium.code,
+            location: stadium.location,
+            totalCarts: stadium._count.fleet,
+            activeFAs: stadium._count.users,
+            fleetBreakdown: stadiumStatsMap.get(stadium.id) || {},
+        }));
+
+        // 8. FA Fleet Overview
+        const faUsers = await this.prisma.user.findMany({
+            where: {
+                role: 'FA',
+                isActive: true,
+                ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                stadiumId: true,
+                stadium: { select: { id: true, name: true } },
+                _count: { select: { assignedCarts: true } },
+            },
+            orderBy: { name: 'asc' },
+        });
+
+        // Get assigned carts details per FA
+        const faFleetOverview = await Promise.all(
+            faUsers.map(async (fa) => {
+                const assignedCarts = await this.prisma.fleet.findMany({
+                    where: { assignedUserId: fa.id },
+                    select: {
+                        id: true,
+                        carNumber: true,
+                        carType: true,
+                        status: true,
+                    },
+                });
+                return {
+                    id: fa.id,
+                    name: fa.name,
+                    email: fa.email,
+                    stadium: fa.stadium,
+                    totalAssigned: fa._count.assignedCarts,
+                    carts: assignedCarts,
+                };
+            })
+        );
+
         return {
             fleetByType: fleetByType.map(f => ({ type: f.carType, count: f._count._all })),
             fleetByStatus: fleetByStatus.map(f => ({ status: f.status, count: f._count._all })),
@@ -133,6 +215,10 @@ export class ReportsService {
             openIssuesCount,
             vapCartsCount: vapCarts,
             activityTimeline: this.processActivityTimeline(activityLogs),
+            // New fields for stadium and FA fleet
+            activeStadiumsCount: activeStadiums.length,
+            stadiums: stadiumsList,
+            faFleetOverview,
         };
     }
 

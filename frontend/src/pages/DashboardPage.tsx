@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { reportsApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Car, Wrench, Users, Shield, Download, BarChart3, TrendingUp, Clock } from 'lucide-react';
+import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
+import { Badge } from '@/components/ui/badge';
 
 const downloadBlob = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -17,6 +18,25 @@ const downloadBlob = (blob: Blob, filename: string) => {
     a.remove();
 };
 
+interface StadiumInfo {
+    id: string;
+    name: string;
+    code: string;
+    location: string;
+    totalCarts: number;
+    activeFAs: number;
+    fleetBreakdown: Record<string, number>;
+}
+
+interface FAFleetInfo {
+    id: string;
+    name: string;
+    email: string;
+    stadium: { id: string; name: string } | null;
+    totalAssigned: number;
+    carts: Array<{ id: string; carNumber: string; carType: string; status: string }>;
+}
+
 interface DashboardStats {
     fleetByType: Array<{ type: string, count: number }>;
     fleetByStatus: Array<{ status: string, count: number }>;
@@ -24,6 +44,9 @@ interface DashboardStats {
     openIssuesCount: number;
     vapCartsCount: number;
     activityTimeline: Array<{ date: string, checkIn: number, checkOut: number }>;
+    activeStadiumsCount: number;
+    stadiums: StadiumInfo[];
+    faFleetOverview: FAFleetInfo[];
 }
 
 const COLORS = ['#1E88E5', '#43A047', '#FDD835', '#E53935', '#8E24AA'];
@@ -52,11 +75,23 @@ export function DashboardPage() {
     const totalCarts = stats?.fleetByStatus.reduce((acc, curr) => acc + curr.count, 0) || 0;
 
     const summaryCards = [
+        { label: 'Active Stadiums', value: stats?.activeStadiumsCount || 0, icon: MapPin, color: 'text-cyan-500', bg: 'bg-cyan-50' },
         { label: 'Total Carts', value: totalCarts, icon: Car, color: 'text-blue-500', bg: 'bg-blue-50' },
-        { label: 'Active Users', value: stats?.activeUsersCount || 0, icon: Users, color: 'text-green-500', bg: 'bg-green-50' },
+        { label: 'Active FAs', value: stats?.activeUsersCount || 0, icon: UserCheck, color: 'text-green-500', bg: 'bg-green-50' },
         { label: 'Open Issues', value: stats?.openIssuesCount || 0, icon: Wrench, color: 'text-red-500', bg: 'bg-red-50' },
         { label: 'VAP Required', value: stats?.vapCartsCount || 0, icon: Shield, color: 'text-purple-500', bg: 'bg-purple-50' },
     ];
+
+    // Status color mapping
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'Available': return 'bg-green-100 text-green-800';
+            case 'Assigned': return 'bg-blue-100 text-blue-800';
+            case 'Dispatched': return 'bg-yellow-100 text-yellow-800';
+            case 'Under Maintenance': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
 
     const statusData = stats?.fleetByStatus.map(s => ({ name: s.status, value: s.count })) || [];
 
@@ -119,7 +154,7 @@ export function DashboardPage() {
             </div>
 
             {/* Summary Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 {summaryCards.map(({ label, value, icon: Icon, color, bg }) => (
                     <Card key={label} className={`${bg} border-none shadow-sm`}>
                         <CardContent className="pt-6">
@@ -135,6 +170,85 @@ export function DashboardPage() {
                         </CardContent>
                     </Card>
                 ))}
+            </div>
+
+            {/* Stadium Information & FA Fleet Overview */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Active Stadiums List */}
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <MapPin className="w-5 h-5 text-cyan-500" /> Active Stadiums
+                        </CardTitle>
+                        <Badge variant="secondary">{stats?.activeStadiumsCount || 0} venues</Badge>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                            {stats?.stadiums.map((stadium) => (
+                                <div key={stadium.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                                    <div>
+                                        <p className="font-medium">{stadium.name}</p>
+                                        <p className="text-sm text-muted-foreground">{stadium.location}</p>
+                                    </div>
+                                    <div className="flex items-center gap-4 text-right">
+                                        <div>
+                                            <p className="text-lg font-bold">{stadium.totalCarts}</p>
+                                            <p className="text-xs text-muted-foreground">carts</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-lg font-bold text-green-600">{stadium.activeFAs}</p>
+                                            <p className="text-xs text-muted-foreground">FAs</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {(!stats?.stadiums || stats.stadiums.length === 0) && (
+                                <p className="text-center text-muted-foreground py-8">No active stadiums</p>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* FA Fleet Overview */}
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <UserCheck className="w-5 h-5 text-green-500" /> FA Fleet Assignments
+                        </CardTitle>
+                        <Badge variant="secondary">{stats?.faFleetOverview?.length || 0} FAs</Badge>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                            {stats?.faFleetOverview.map((fa) => (
+                                <div key={fa.id} className="p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div>
+                                            <p className="font-medium">{fa.name}</p>
+                                            <p className="text-sm text-muted-foreground">{fa.stadium?.name || 'Unassigned'}</p>
+                                        </div>
+                                        <Badge variant="outline">{fa.totalAssigned} carts</Badge>
+                                    </div>
+                                    {fa.carts.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {fa.carts.map((cart) => (
+                                                <span
+                                                    key={cart.id}
+                                                    className={`text-xs px-2 py-1 rounded ${getStatusColor(cart.status)}`}
+                                                    title={`${cart.carNumber} - ${cart.carType}`}
+                                                >
+                                                    {cart.carNumber}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {(!stats?.faFleetOverview || stats.faFleetOverview.length === 0) && (
+                                <p className="text-center text-muted-foreground py-8">No active FA assignments</p>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
