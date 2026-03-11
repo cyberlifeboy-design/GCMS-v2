@@ -7,6 +7,61 @@ interface ActivityLog {
     createdAt: Date;
 }
 
+interface StadiumReport {
+    id: string;
+    name: string;
+    code: string;
+    location: string;
+    totalCarts: number;
+    cartsByStatus: Record<string, number>;
+    cartsByType: Record<string, number>;
+    vapCarts: number;
+    activeFAs: number;
+    openIssues: number;
+    recentActivity: {
+        checkIns: number;
+        checkOuts: number;
+    };
+}
+
+interface DepartmentReport {
+    id: string;
+    name: string;
+    code: string | null;
+    stadium: { id: string; name: string };
+    totalCarts: number;
+    cartsByStatus: Record<string, number>;
+    assignedFAs: number;
+    activeFAs: number;
+    handoverActivity: {
+        checkIns: number;
+        checkOuts: number;
+    };
+}
+
+interface UserReport {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    stadium: { id: string; name: string } | null;
+    department: { id: string; name: string } | null;
+    isActive: boolean;
+    assignedCarts: number;
+    cartDetails: Array<{
+        id: string;
+        carNumber: string;
+        carType: string;
+        status: string;
+    }>;
+    activitySummary: {
+        totalCheckIns: number;
+        totalCheckOuts: number;
+        issuesReported: number;
+        lastActivity: Date | null;
+    };
+}
+
 export class ReportsService {
     private prisma: PrismaClient;
 
@@ -255,6 +310,257 @@ export class ReportsService {
             },
             orderBy: { carNumber: 'asc' },
         });
+    }
+
+    /**
+     * Stadium-wise report with cart counts, status breakdown, and maintenance
+     */
+    async getStadiumReports(): Promise<StadiumReport[]> {
+        const stadiums = await this.prisma.stadium.findMany({
+            where: { isActive: true },
+            orderBy: { name: 'asc' },
+        });
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const reports = await Promise.all(
+            stadiums.map(async (stadium) => {
+                // Fleet counts by status
+                const fleetByStatus = await this.prisma.fleet.groupBy({
+                    by: ['status'],
+                    where: { stadiumId: stadium.id },
+                    _count: { _all: true },
+                });
+
+                // Fleet counts by type
+                const fleetByType = await this.prisma.fleet.groupBy({
+                    by: ['carType'],
+                    where: { stadiumId: stadium.id },
+                    _count: { _all: true },
+                });
+
+                // VAP carts count
+                const vapCarts = await this.prisma.fleet.count({
+                    where: { stadiumId: stadium.id, requiresVAP: true },
+                });
+
+                // Total carts
+                const totalCarts = await this.prisma.fleet.count({
+                    where: { stadiumId: stadium.id },
+                });
+
+                // Active FAs
+                const activeFAs = await this.prisma.user.count({
+                    where: { stadiumId: stadium.id, role: 'FA', isActive: true },
+                });
+
+                // Open issues
+                const openIssues = await this.prisma.maintenanceLog.count({
+                    where: {
+                        fleet: { stadiumId: stadium.id },
+                        status: { in: ['Open', 'InProgress'] },
+                    },
+                });
+
+                // Recent activity (last 7 days)
+                const recentActivity = await this.prisma.handoverLog.groupBy({
+                    by: ['action'],
+                    where: {
+                        fleet: { stadiumId: stadium.id },
+                        timestamp: { gte: sevenDaysAgo },
+                    },
+                    _count: { _all: true },
+                });
+
+                const statusMap: Record<string, number> = {};
+                fleetByStatus.forEach(s => { statusMap[s.status] = s._count._all; });
+
+                const typeMap: Record<string, number> = {};
+                fleetByType.forEach(t => { typeMap[t.carType] = t._count._all; });
+
+                const activityMap: { checkIns: number; checkOuts: number } = { checkIns: 0, checkOuts: 0 };
+                recentActivity.forEach(a => {
+                    if (a.action === 'CheckedIn') activityMap.checkIns = a._count._all;
+                    else if (a.action === 'CheckedOut') activityMap.checkOuts = a._count._all;
+                });
+
+                return {
+                    id: stadium.id,
+                    name: stadium.name,
+                    code: stadium.code,
+                    location: stadium.location,
+                    totalCarts,
+                    cartsByStatus: statusMap,
+                    cartsByType: typeMap,
+                    vapCarts,
+                    activeFAs,
+                    openIssues,
+                    recentActivity: activityMap,
+                };
+            })
+        );
+
+        return reports;
+    }
+
+    /**
+     * Department-wise report with FA assignments and handover activity
+     */
+    async getDepartmentReports(filters: { stadiumId?: string } = {}): Promise<DepartmentReport[]> {
+        const where = filters.stadiumId ? { stadiumId: filters.stadiumId } : {};
+
+        const departments = await this.prisma.department.findMany({
+            where,
+            include: {
+                stadium: { select: { id: true, name: true } },
+            },
+            orderBy: { name: 'asc' },
+        });
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const reports = await Promise.all(
+            departments.map(async (dept) => {
+                // Fleet counts by status
+                const fleetByStatus = await this.prisma.fleet.groupBy({
+                    by: ['status'],
+                    where: { departmentId: dept.id },
+                    _count: { _all: true },
+                });
+
+                // Total carts
+                const totalCarts = await this.prisma.fleet.count({
+                    where: { departmentId: dept.id },
+                });
+
+                // Assigned FAs (users with this department)
+                const assignedFAs = await this.prisma.user.count({
+                    where: { departmentId: dept.id, role: 'FA' },
+                });
+
+                // Active FAs in this department
+                const activeFAs = await this.prisma.user.count({
+                    where: { departmentId: dept.id, role: 'FA', isActive: true },
+                });
+
+                // Handover activity (last 7 days)
+                const handoverActivity = await this.prisma.handoverLog.groupBy({
+                    by: ['action'],
+                    where: {
+                        fleet: { departmentId: dept.id },
+                        timestamp: { gte: sevenDaysAgo },
+                    },
+                    _count: { _all: true },
+                });
+
+                const statusMap: Record<string, number> = {};
+                fleetByStatus.forEach(s => { statusMap[s.status] = s._count._all; });
+
+                const activityMap: { checkIns: number; checkOuts: number } = { checkIns: 0, checkOuts: 0 };
+                handoverActivity.forEach(a => {
+                    if (a.action === 'CheckedIn') activityMap.checkIns = a._count._all;
+                    else if (a.action === 'CheckedOut') activityMap.checkOuts = a._count._all;
+                });
+
+                return {
+                    id: dept.id,
+                    name: dept.name,
+                    code: dept.code,
+                    stadium: dept.stadium,
+                    totalCarts,
+                    cartsByStatus: statusMap,
+                    assignedFAs,
+                    activeFAs,
+                    handoverActivity: activityMap,
+                };
+            })
+        );
+
+        return reports;
+    }
+
+    /**
+     * User activity reports with assignments and activity summary
+     */
+    async getUserReports(filters: { stadiumId?: string; role?: string } = {}): Promise<UserReport[]> {
+        const where: any = {
+            isActive: true,
+        };
+        if (filters.stadiumId) where.stadiumId = filters.stadiumId;
+        if (filters.role) where.role = filters.role;
+
+        const users = await this.prisma.user.findMany({
+            where,
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                stadiumId: true,
+                stadium: { select: { id: true, name: true } },
+                departmentId: true,
+                department: { select: { id: true, name: true } },
+                isActive: true,
+            },
+            orderBy: { name: 'asc' },
+        });
+
+        const reports = await Promise.all(
+            users.map(async (user) => {
+                // Assigned carts
+                const assignedCarts = await this.prisma.fleet.findMany({
+                    where: { assignedUserId: user.id },
+                    select: {
+                        id: true,
+                        carNumber: true,
+                        carType: true,
+                        status: true,
+                    },
+                });
+
+                // Activity summary
+                const checkIns = await this.prisma.handoverLog.count({
+                    where: { userId: user.id, action: 'CheckedIn' },
+                });
+
+                const checkOuts = await this.prisma.handoverLog.count({
+                    where: { userId: user.id, action: 'CheckedOut' },
+                });
+
+                const issuesReported = await this.prisma.maintenanceLog.count({
+                    where: { reportedById: user.id },
+                });
+
+                // Last activity
+                const lastLog = await this.prisma.handoverLog.findFirst({
+                    where: { userId: user.id },
+                    orderBy: { timestamp: 'desc' },
+                    select: { timestamp: true },
+                });
+
+                return {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    stadium: user.stadium,
+                    department: user.department,
+                    isActive: user.isActive,
+                    assignedCarts: assignedCarts.length,
+                    cartDetails: assignedCarts,
+                    activitySummary: {
+                        totalCheckIns: checkIns,
+                        totalCheckOuts: checkOuts,
+                        issuesReported,
+                        lastActivity: lastLog?.timestamp || null,
+                    },
+                };
+            })
+        );
+
+        return reports;
     }
 }
 

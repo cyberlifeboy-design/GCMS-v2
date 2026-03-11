@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { reportsService } from './reports.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import * as ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
 
 export class ReportsController {
     static async exportAuditLogs(req: AuthRequest, res: Response) {
@@ -288,6 +289,427 @@ export class ReportsController {
             res.end();
         } catch (error) {
             res.status(500).json({ error: 'Failed to export full report' });
+        }
+    }
+
+    // ==================== STADIUM REPORTS ====================
+
+    static async getStadiumReports(req: AuthRequest, res: Response) {
+        try {
+            const reports = await reportsService.getStadiumReports();
+            res.status(200).json(reports);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to get stadium reports' });
+        }
+    }
+
+    static async exportStadiumReport(req: AuthRequest, res: Response) {
+        try {
+            const reports = await reportsService.getStadiumReports();
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Stadium Report');
+
+            sheet.columns = [
+                { header: 'Stadium Name', key: 'name', width: 25 },
+                { header: 'Code', key: 'code', width: 10 },
+                { header: 'Location', key: 'location', width: 20 },
+                { header: 'Total Carts', key: 'totalCarts', width: 12 },
+                { header: 'Available', key: 'available', width: 12 },
+                { header: 'Assigned', key: 'assigned', width: 12 },
+                { header: 'Dispatched', key: 'dispatched', width: 12 },
+                { header: 'Under Maintenance', key: 'maintenance', width: 18 },
+                { header: 'VAP Carts', key: 'vapCarts', width: 12 },
+                { header: 'Active FAs', key: 'activeFAs', width: 12 },
+                { header: 'Open Issues', key: 'openIssues', width: 12 },
+                { header: 'Check-ins (7d)', key: 'checkIns', width: 14 },
+                { header: 'Check-outs (7d)', key: 'checkOuts', width: 14 },
+            ];
+
+            reports.forEach((stadium) => {
+                sheet.addRow({
+                    name: stadium.name,
+                    code: stadium.code,
+                    location: stadium.location,
+                    totalCarts: stadium.totalCarts,
+                    available: stadium.cartsByStatus['Available'] || 0,
+                    assigned: stadium.cartsByStatus['Assigned'] || 0,
+                    dispatched: stadium.cartsByStatus['Dispatched'] || 0,
+                    maintenance: stadium.cartsByStatus['Under Maintenance'] || 0,
+                    vapCarts: stadium.vapCarts,
+                    activeFAs: stadium.activeFAs,
+                    openIssues: stadium.openIssues,
+                    checkIns: stadium.recentActivity.checkIns,
+                    checkOuts: stadium.recentActivity.checkOuts,
+                });
+            });
+
+            // Add summary row
+            sheet.addRow({});
+            const summaryRow = sheet.addRow({
+                name: 'TOTAL',
+                totalCarts: reports.reduce((acc, s) => acc + s.totalCarts, 0),
+                available: reports.reduce((acc, s) => acc + (s.cartsByStatus['Available'] || 0), 0),
+                assigned: reports.reduce((acc, s) => acc + (s.cartsByStatus['Assigned'] || 0), 0),
+                dispatched: reports.reduce((acc, s) => acc + (s.cartsByStatus['Dispatched'] || 0), 0),
+                maintenance: reports.reduce((acc, s) => acc + (s.cartsByStatus['Under Maintenance'] || 0), 0),
+                vapCarts: reports.reduce((acc, s) => acc + s.vapCarts, 0),
+                activeFAs: reports.reduce((acc, s) => acc + s.activeFAs, 0),
+                openIssues: reports.reduce((acc, s) => acc + s.openIssues, 0),
+                checkIns: reports.reduce((acc, s) => acc + s.recentActivity.checkIns, 0),
+                checkOuts: reports.reduce((acc, s) => acc + s.recentActivity.checkOuts, 0),
+            });
+            summaryRow.font = { bold: true };
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=stadium_report.xlsx');
+            await workbook.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export stadium report' });
+        }
+    }
+
+    static async exportStadiumReportPdf(req: AuthRequest, res: Response) {
+        try {
+            const reports = await reportsService.getStadiumReports();
+
+            const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename=stadium_report.pdf');
+
+            doc.pipe(res);
+
+            // Title
+            doc.fontSize(18).font('Helvetica-Bold').text('Stadium Report', { align: 'center' });
+            doc.moveDown();
+
+            // Date
+            doc.fontSize(10).font('Helvetica').text(`Generated: ${new Date().toLocaleString()}`, { align: 'right' });
+            doc.moveDown();
+
+            // Table headers
+            const headers = ['Stadium', 'Total', 'Avail', 'Assign', 'Disp', 'Maint', 'VAP', 'FAs', 'Issues'];
+            const colWidths = [120, 50, 45, 45, 45, 45, 40, 40, 45];
+            let y = doc.y;
+
+            doc.font('Helvetica-Bold').fontSize(9);
+            let x = 30;
+            headers.forEach((header, i) => {
+                doc.text(header, x, y, { width: colWidths[i], align: 'center' });
+                x += colWidths[i];
+            });
+            y += 20;
+
+            // Table rows
+            doc.font('Helvetica').fontSize(8);
+            reports.forEach((stadium) => {
+                x = 30;
+                const rowData = [
+                    stadium.name,
+                    stadium.totalCarts.toString(),
+                    (stadium.cartsByStatus['Available'] || 0).toString(),
+                    (stadium.cartsByStatus['Assigned'] || 0).toString(),
+                    (stadium.cartsByStatus['Dispatched'] || 0).toString(),
+                    (stadium.cartsByStatus['Under Maintenance'] || 0).toString(),
+                    stadium.vapCarts.toString(),
+                    stadium.activeFAs.toString(),
+                    stadium.openIssues.toString(),
+                ];
+                rowData.forEach((data, i) => {
+                    doc.text(data, x, y, { width: colWidths[i], align: i === 0 ? 'left' : 'center' });
+                    x += colWidths[i];
+                });
+                y += 15;
+
+                // Check if we need a new page
+                if (y > doc.page.height - 50) {
+                    doc.addPage();
+                    y = 30;
+                }
+            });
+
+            // Summary
+            y += 10;
+            doc.font('Helvetica-Bold').fontSize(9);
+            const totalCarts = reports.reduce((acc, s) => acc + s.totalCarts, 0);
+            doc.text(`Total Stadiums: ${reports.length} | Total Carts: ${totalCarts}`, 30, y);
+
+            doc.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export stadium report PDF' });
+        }
+    }
+
+    // ==================== DEPARTMENT REPORTS ====================
+
+    static async getDepartmentReports(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            // Admin can only see their own stadium's departments
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const reports = await reportsService.getDepartmentReports({ stadiumId: filterStadiumId });
+            res.status(200).json(reports);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to get department reports' });
+        }
+    }
+
+    static async exportDepartmentReport(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const reports = await reportsService.getDepartmentReports({ stadiumId: filterStadiumId });
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Department Report');
+
+            sheet.columns = [
+                { header: 'Department', key: 'name', width: 25 },
+                { header: 'Code', key: 'code', width: 12 },
+                { header: 'Stadium', key: 'stadium', width: 20 },
+                { header: 'Total Carts', key: 'totalCarts', width: 12 },
+                { header: 'Available', key: 'available', width: 12 },
+                { header: 'Assigned', key: 'assigned', width: 12 },
+                { header: 'Dispatched', key: 'dispatched', width: 12 },
+                { header: 'Under Maintenance', key: 'maintenance', width: 18 },
+                { header: 'Assigned FAs', key: 'assignedFAs', width: 12 },
+                { header: 'Active FAs', key: 'activeFAs', width: 12 },
+                { header: 'Check-ins (7d)', key: 'checkIns', width: 14 },
+                { header: 'Check-outs (7d)', key: 'checkOuts', width: 14 },
+            ];
+
+            reports.forEach((dept) => {
+                sheet.addRow({
+                    name: dept.name,
+                    code: dept.code || '',
+                    stadium: dept.stadium.name,
+                    totalCarts: dept.totalCarts,
+                    available: dept.cartsByStatus['Available'] || 0,
+                    assigned: dept.cartsByStatus['Assigned'] || 0,
+                    dispatched: dept.cartsByStatus['Dispatched'] || 0,
+                    maintenance: dept.cartsByStatus['Under Maintenance'] || 0,
+                    assignedFAs: dept.assignedFAs,
+                    activeFAs: dept.activeFAs,
+                    checkIns: dept.handoverActivity.checkIns,
+                    checkOuts: dept.handoverActivity.checkOuts,
+                });
+            });
+
+            // Summary row
+            sheet.addRow({});
+            const summaryRow = sheet.addRow({
+                name: 'TOTAL',
+                totalCarts: reports.reduce((acc, d) => acc + d.totalCarts, 0),
+                available: reports.reduce((acc, d) => acc + (d.cartsByStatus['Available'] || 0), 0),
+                assigned: reports.reduce((acc, d) => acc + (d.cartsByStatus['Assigned'] || 0), 0),
+                dispatched: reports.reduce((acc, d) => acc + (d.cartsByStatus['Dispatched'] || 0), 0),
+                maintenance: reports.reduce((acc, d) => acc + (d.cartsByStatus['Under Maintenance'] || 0), 0),
+                assignedFAs: reports.reduce((acc, d) => acc + d.assignedFAs, 0),
+                activeFAs: reports.reduce((acc, d) => acc + d.activeFAs, 0),
+                checkIns: reports.reduce((acc, d) => acc + d.handoverActivity.checkIns, 0),
+                checkOuts: reports.reduce((acc, d) => acc + d.handoverActivity.checkOuts, 0),
+            });
+            summaryRow.font = { bold: true };
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=department_report.xlsx');
+            await workbook.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export department report' });
+        }
+    }
+
+    // ==================== USER REPORTS ====================
+
+    static async getUserReports(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId, role } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            // Admin can only see users in their stadium
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
+            res.status(200).json(reports);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to get user reports' });
+        }
+    }
+
+    static async exportUserReport(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId, role } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
+
+            const workbook = new ExcelJS.Workbook();
+            const summarySheet = workbook.addWorksheet('User Summary');
+            const detailsSheet = workbook.addWorksheet('Cart Assignments');
+
+            // Summary sheet
+            summarySheet.columns = [
+                { header: 'Name', key: 'name', width: 25 },
+                { header: 'Email', key: 'email', width: 30 },
+                { header: 'Role', key: 'role', width: 12 },
+                { header: 'Stadium', key: 'stadium', width: 20 },
+                { header: 'Department', key: 'department', width: 20 },
+                { header: 'Status', key: 'status', width: 10 },
+                { header: 'Assigned Carts', key: 'assignedCarts', width: 15 },
+                { header: 'Check-ins', key: 'checkIns', width: 12 },
+                { header: 'Check-outs', key: 'checkOuts', width: 12 },
+                { header: 'Issues Reported', key: 'issues', width: 15 },
+                { header: 'Last Activity', key: 'lastActivity', width: 20 },
+            ];
+
+            reports.forEach((user) => {
+                summarySheet.addRow({
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    stadium: user.stadium?.name || '',
+                    department: user.department?.name || '',
+                    status: user.isActive ? 'Active' : 'Inactive',
+                    assignedCarts: user.assignedCarts,
+                    checkIns: user.activitySummary.totalCheckIns,
+                    checkOuts: user.activitySummary.totalCheckOuts,
+                    issues: user.activitySummary.issuesReported,
+                    lastActivity: user.activitySummary.lastActivity
+                        ? new Date(user.activitySummary.lastActivity).toLocaleString()
+                        : 'Never',
+                });
+            });
+
+            // Cart assignments sheet
+            detailsSheet.columns = [
+                { header: 'User Name', key: 'userName', width: 25 },
+                { header: 'User Email', key: 'userEmail', width: 30 },
+                { header: 'Car Number', key: 'carNumber', width: 15 },
+                { header: 'Car Type', key: 'carType', width: 15 },
+                { header: 'Status', key: 'status', width: 18 },
+            ];
+
+            reports.forEach((user) => {
+                if (user.cartDetails.length === 0) {
+                    detailsSheet.addRow({
+                        userName: user.name,
+                        userEmail: user.email,
+                        carNumber: '—',
+                        carType: '—',
+                        status: '—',
+                    });
+                } else {
+                    user.cartDetails.forEach((cart) => {
+                        detailsSheet.addRow({
+                            userName: user.name,
+                            userEmail: user.email,
+                            carNumber: cart.carNumber,
+                            carType: cart.carType,
+                            status: cart.status,
+                        });
+                    });
+                }
+            });
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=user_report.xlsx');
+            await workbook.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export user report' });
+        }
+    }
+
+    static async exportUserReportPdf(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId, role } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
+
+            const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename=user_report.pdf');
+
+            doc.pipe(res);
+
+            // Title
+            doc.fontSize(18).font('Helvetica-Bold').text('User Activity Report', { align: 'center' });
+            doc.moveDown();
+
+            // Date
+            doc.fontSize(10).font('Helvetica').text(`Generated: ${new Date().toLocaleString()}`, { align: 'right' });
+            doc.moveDown();
+
+            // Table headers
+            const headers = ['Name', 'Role', 'Stadium', 'Carts', 'Check-ins', 'Check-outs', 'Issues'];
+            const colWidths = [120, 60, 100, 50, 60, 60, 50];
+            let y = doc.y;
+
+            doc.font('Helvetica-Bold').fontSize(9);
+            let x = 30;
+            headers.forEach((header, i) => {
+                doc.text(header, x, y, { width: colWidths[i], align: 'center' });
+                x += colWidths[i];
+            });
+            y += 20;
+
+            // Table rows
+            doc.font('Helvetica').fontSize(8);
+            reports.forEach((user) => {
+                x = 30;
+                const rowData = [
+                    user.name,
+                    user.role,
+                    user.stadium?.name || '—',
+                    user.assignedCarts.toString(),
+                    user.activitySummary.totalCheckIns.toString(),
+                    user.activitySummary.totalCheckOuts.toString(),
+                    user.activitySummary.issuesReported.toString(),
+                ];
+                rowData.forEach((data, i) => {
+                    doc.text(data, x, y, { width: colWidths[i], align: i < 2 ? 'left' : 'center' });
+                    x += colWidths[i];
+                });
+                y += 15;
+
+                // Check if we need a new page
+                if (y > doc.page.height - 50) {
+                    doc.addPage();
+                    y = 30;
+                }
+            });
+
+            // Summary
+            y += 10;
+            doc.font('Helvetica-Bold').fontSize(9);
+            doc.text(`Total Users: ${reports.length}`, 30, y);
+
+            doc.end();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export user report PDF' });
         }
     }
 }

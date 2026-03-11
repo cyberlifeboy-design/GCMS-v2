@@ -194,6 +194,24 @@ export const reportsApi = {
         apiClient.get('/reports/full', { responseType: 'blob' }),
     getAuditLog: () =>
         apiClient.get('/reports/audit'),
+
+    // Stadium reports
+    getStadiumReports: () =>
+        apiClient.get('/reports/stadiums'),
+    exportStadiumReport: (format: 'xlsx' | 'pdf' = 'xlsx') =>
+        apiClient.get(`/reports/stadiums/export${format === 'pdf' ? '/pdf' : ''}`, { responseType: 'blob' }),
+
+    // Department reports
+    getDepartmentReports: (params?: Record<string, unknown>) =>
+        apiClient.get('/reports/departments', { params }),
+    exportDepartmentReport: () =>
+        apiClient.get('/reports/departments/export', { responseType: 'blob' }),
+
+    // User reports
+    getUserReports: (params?: Record<string, unknown>) =>
+        apiClient.get('/reports/users', { params }),
+    exportUserReport: (format: 'xlsx' | 'pdf' = 'xlsx') =>
+        apiClient.get(`/reports/users/export${format === 'pdf' ? '/pdf' : ''}`, { responseType: 'blob' }),
 };
 
 // Settings  (singleton: tournament name, branding images)

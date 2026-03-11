@@ -29,4 +29,34 @@ router.get('/activity/export', requireRole('SuperAdmin', 'Admin', 'Observer'), a
 // Export full system report
 router.get('/full', requireRole('SuperAdmin', 'Admin'), auditLog(), ReportsController.exportFullReport);
 
+// ==================== STADIUM REPORTS ====================
+
+// Get stadium-wise reports (JSON)
+router.get('/stadiums', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getStadiumReports);
+
+// Export stadium report (Excel)
+router.get('/stadiums/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportStadiumReport);
+
+// Export stadium report (PDF)
+router.get('/stadiums/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportStadiumReportPdf);
+
+// ==================== DEPARTMENT REPORTS ====================
+
+// Get department-wise reports (JSON)
+router.get('/departments', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getDepartmentReports);
+
+// Export department report (Excel)
+router.get('/departments/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportDepartmentReport);
+
+// ==================== USER REPORTS ====================
+
+// Get user activity reports (JSON)
+router.get('/users', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUserReports);
+
+// Export user report (Excel)
+router.get('/users/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportUserReport);
+
+// Export user report (PDF)
+router.get('/users/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportUserReportPdf);
+
 export default router;
