@@ -114,6 +114,15 @@ export const handoverApi = {
         apiClient.post('/handover/bulk-checkin', data),
     getHistory: (params?: Record<string, unknown>) =>
         apiClient.get('/handover/history', { params }),
+    // Pool management endpoints
+    getPoolStatus: () =>
+        apiClient.get('/handover/pool-status'),
+    getPoolDashboard: () =>
+        apiClient.get('/handover/pool-dashboard'),
+    getAvailableInPool: (stadiumId: string) =>
+        apiClient.get(`/handover/available/${stadiumId}`),
+    getInUse: (stadiumId: string) =>
+        apiClient.get(`/handover/in-use/${stadiumId}`),
 };
 
 // Maintenance  (statuses: Open / InProgress / Resolved)

@@ -273,9 +273,12 @@ export class FleetService {
             if (newValue?.assignedUserId) userIds.add(newValue.assignedUserId as string);
         });
 
+        // Convert Set to array
+        const userIdsArray = Array.from(userIds);
+
         // Get user details with department info
         const users = await prisma.user.findMany({
-            where: { id: { in: [...userIds] } },
+            where: { id: { in: userIdsArray } },
             select: {
                 id: true,
                 name: true,
@@ -289,7 +292,7 @@ export class FleetService {
         const userMap = new Map(users.map(u => [u.id, u]));
 
         // Get fleet details for cart numbers
-        const fleetIds = [...new Set(logs.map(l => l.entityId))];
+        const fleetIds = Array.from(new Set(logs.map(l => l.entityId)));
         const fleetItems = await prisma.fleet.findMany({
             where: { id: { in: fleetIds } },
             select: {

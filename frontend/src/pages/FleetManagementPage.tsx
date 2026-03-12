@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Users, Grid, History, X, ArrowRightLeft } from 'lucide-react';
+import { Loader2, Users, Grid, History as HistoryIcon, X, ArrowRightLeft } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { AssignmentHistory } from '@/components/fleet/AssignmentHistory';
@@ -249,10 +249,10 @@ export function FleetManagementPage() {
                 </div>
             </div>
 
-            <Tabs defaultValue="matrix" onValueChange={(v) => v === 'history' && loadHistory()}>
+            <Tabs defaultValue="matrix">
                 <TabsList>
                     <TabsTrigger value="matrix"><Grid className="w-4 h-4 mr-2 inline" />Assignment Matrix</TabsTrigger>
-                    <TabsTrigger value="history"><History className="w-4 h-4 mr-2 inline" />Assignment History</TabsTrigger>
+                    <TabsTrigger value="history"><HistoryIcon className="w-4 h-4 mr-2 inline" />Assignment History</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="matrix" className="space-y-4">

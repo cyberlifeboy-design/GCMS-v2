@@ -3,14 +3,14 @@ import { handoverApi, fleetApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
-import { LogOut, LogIn, History, Loader2, AlertTriangle } from 'lucide-react';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, Users, Building2, TrendingUp } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
@@ -18,7 +18,7 @@ import { Pagination } from '@/components/shared/Pagination';
 interface HandoverLog {
     id: string;
     fleetId: string;
-    fleet: { carNumber: string; carType: string };
+    fleet: { carNumber: string; carType: string; stadium?: { name: string } };
     userId: string;
     user?: { id: string; name: string; email?: string; role?: string };
     action: 'CheckedIn' | 'CheckedOut' | 'IssueReported';
@@ -32,6 +32,9 @@ interface FleetCart {
     carNumber: string;
     carType: string;
     status: string;
+    stadiumId: string;
+    stadium?: { id: string; name: string };
+    department?: { id: string; name: string };
     assignedUser?: {
         id: string;
         name: string;
@@ -39,6 +42,43 @@ interface FleetCart {
         email?: string;
         role?: string;
     };
+}
+
+interface PoolStatusStadium {
+    stadiumId: string;
+    stadiumName: string;
+    stadiumCode: string;
+    total: number;
+    available: number;
+    assigned: number;
+    dispatched: number;
+    underMaintenance: number;
+}
+
+interface UserAssignedCart {
+    id: string;
+    carNumber: string;
+    carType: string;
+    status: string;
+    stadiumId: string;
+    stadiumName: string;
+    departmentId?: string;
+    departmentName?: string;
+}
+
+interface RecentActivity {
+    id: string;
+    action: string;
+    carNumber: string;
+    userName: string;
+    timestamp: string;
+    stadiumName: string;
+}
+
+interface PoolDashboard {
+    stadiums: PoolStatusStadium[];
+    userAssignedCarts?: UserAssignedCart[];
+    recentActivity: RecentActivity[];
 }
 
 const actionColors: Record<string, string> = {
@@ -53,6 +93,13 @@ const actionLabels: Record<string, string> = {
     'IssueReported': 'Issue',
 };
 
+const statusColors: Record<string, string> = {
+    'Available': 'bg-green-100 text-green-800 border-green-300',
+    'Assigned': 'bg-blue-100 text-blue-800 border-blue-300',
+    'Dispatched': 'bg-amber-100 text-amber-800 border-amber-300',
+    'Under Maintenance': 'bg-red-100 text-red-800 border-red-300',
+};
+
 export function HandoverPage() {
     const { user: currentUser } = useAuthStore();
     const role = currentUser?.role;
@@ -64,6 +111,10 @@ export function HandoverPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [actionFilter, setActionFilter] = useState('all');
+
+    // Pool dashboard state
+    const [poolDashboard, setPoolDashboard] = useState<PoolDashboard | null>(null);
+    const [poolLoading, setPoolLoading] = useState(true);
 
     // Pagination state
     const [page, setPage] = useState(1);
@@ -87,6 +138,18 @@ export function HandoverPage() {
     // Bulk selection state
     const [selectedAvailable, setSelectedAvailable] = useState<string[]>([]);
     const [selectedDispatched, setSelectedDispatched] = useState<string[]>([]);
+
+    const loadPoolDashboard = async () => {
+        try {
+            setPoolLoading(true);
+            const res = await handoverApi.getPoolDashboard();
+            setPoolDashboard(res.data);
+        } catch (e) {
+            console.error('Failed to load pool dashboard:', e);
+        } finally {
+            setPoolLoading(false);
+        }
+    };
 
     const loadData = async () => {
         try {
@@ -114,6 +177,10 @@ export function HandoverPage() {
         }
     };
 
+    useEffect(() => {
+        loadPoolDashboard();
+    }, []);
+
     useEffect(() => { loadData(); }, [actionFilter, page]);
 
     const handleCheckin = async (e: React.FormEvent) => {
@@ -125,6 +192,7 @@ export function HandoverPage() {
             setCheckinOpen(false);
             setCheckinForm({ fleetId: '', conditionNotes: '' });
             loadData();
+            loadPoolDashboard();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Check-in failed');
         } finally {
@@ -150,6 +218,7 @@ export function HandoverPage() {
             setCheckoutOpen(false);
             setCheckoutForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] });
             loadData();
+            loadPoolDashboard();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Check-out failed');
         } finally {
@@ -177,14 +246,15 @@ export function HandoverPage() {
 
     const handleBulkCheckin = async () => {
         if (selectedAvailable.length === 0) return;
-        if (!confirm(`Check in ${selectedAvailable.length} selected cart(s)?`)) return;
+        if (!confirm(`Check out ${selectedAvailable.length} selected cart(s)?`)) return;
         setSubmitting(true);
         try {
             await handoverApi.bulkCheckIn({ fleetIds: selectedAvailable });
             setSelectedAvailable([]);
             loadData();
+            loadPoolDashboard();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Bulk check-in failed');
+            alert(err.response?.data?.error || 'Bulk check-out failed');
         } finally {
             setSubmitting(false);
         }
@@ -192,14 +262,15 @@ export function HandoverPage() {
 
     const handleBulkCheckout = async () => {
         if (selectedDispatched.length === 0) return;
-        if (!confirm(`Check out ${selectedDispatched.length} selected cart(s)?`)) return;
+        if (!confirm(`Return ${selectedDispatched.length} selected cart(s)?`)) return;
         setSubmitting(true);
         try {
             await handoverApi.bulkCheckOut({ fleetIds: selectedDispatched });
             setSelectedDispatched([]);
             loadData();
+            loadPoolDashboard();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Bulk check-out failed');
+            alert(err.response?.data?.error || 'Bulk return failed');
         } finally {
             setSubmitting(false);
         }
@@ -212,6 +283,13 @@ export function HandoverPage() {
         return matchSearch;
     });
 
+    // Pool stats summary
+    const totalCarts = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.total, 0) || 0;
+    const totalAvailable = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.available, 0) || 0;
+    const totalAssigned = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.assigned, 0) || 0;
+    const totalDispatched = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.dispatched, 0) || 0;
+    const totalMaintenance = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.underMaintenance, 0) || 0;
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -219,14 +297,226 @@ export function HandoverPage() {
                 {canHandover && (
                     <div className="flex gap-2">
                         <Button variant="outline" onClick={() => { setCheckinForm({ fleetId: '', conditionNotes: '' }); setCheckinOpen(true); }}>
-                            <LogIn className="w-4 h-4 mr-2" />Check In
+                            <LogIn className="w-4 h-4 mr-2" />Check Out
                         </Button>
                         <Button onClick={() => { setCheckoutForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] }); setCheckoutOpen(true); }}>
-                            <LogOut className="w-4 h-4 mr-2" />Check Out
+                            <LogOut className="w-4 h-4 mr-2" />Return
                         </Button>
                     </div>
                 )}
             </div>
+
+            {/* Pool Dashboard */}
+            {!poolLoading && poolDashboard && (
+                <div className="space-y-4">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <Card>
+                            <CardContent className="pt-4">
+                                <div className="flex items-center gap-2">
+                                    <Car className="w-5 h-5 text-gray-500" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Total Carts</p>
+                                        <p className="text-2xl font-bold">{totalCarts}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="pt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Available</p>
+                                        <p className="text-2xl font-bold text-green-600">{totalAvailable}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="pt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Assigned</p>
+                                        <p className="text-2xl font-bold text-blue-600">{totalAssigned}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="pt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-amber-500" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">In Use</p>
+                                        <p className="text-2xl font-bold text-amber-600">{totalDispatched}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="pt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Maintenance</p>
+                                        <p className="text-2xl font-bold text-red-600">{totalMaintenance}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* FA User's Assigned Carts */}
+                    {role === 'FA' && poolDashboard.userAssignedCarts && poolDashboard.userAssignedCarts.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <Users className="w-5 h-5" />
+                                    Your Assigned Carts
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {poolDashboard.userAssignedCarts.map(cart => (
+                                        <div key={cart.id} className="flex items-center justify-between p-3 rounded-lg border bg-slate-50">
+                                            <div>
+                                                <p className="font-mono font-semibold">{cart.carNumber}</p>
+                                                <p className="text-xs text-muted-foreground">{cart.stadiumName}</p>
+                                            </div>
+                                            <Badge className={statusColors[cart.status] || 'bg-gray-100 text-gray-800'}>
+                                                {cart.status}
+                                            </Badge>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Pool Status by Stadium */}
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <Building2 className="w-5 h-5" />
+                                Pool Status by Stadium
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Stadium</TableHead>
+                                        <TableHead className="text-center">Total</TableHead>
+                                        <TableHead className="text-center">Available</TableHead>
+                                        <TableHead className="text-center">Assigned</TableHead>
+                                        <TableHead className="text-center">In Use</TableHead>
+                                        <TableHead className="text-center">Maintenance</TableHead>
+                                        <TableHead className="text-center">Utilization</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {poolDashboard.stadiums.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                                No stadiums found
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : poolDashboard.stadiums.map(stadium => {
+                                        const utilization = stadium.total > 0 
+                                            ? Math.round((stadium.dispatched / stadium.total) * 100) 
+                                            : 0;
+                                        return (
+                                            <TableRow key={stadium.stadiumId}>
+                                                <TableCell className="font-medium">{stadium.stadiumName}</TableCell>
+                                                <TableCell className="text-center font-semibold">{stadium.total}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                        {stadium.available}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                                        {stadium.assigned}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                                                        {stadium.dispatched}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                                                        {stadium.underMaintenance}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                            <div 
+                                                                className="h-full bg-amber-500 rounded-full"
+                                                                style={{ width: `${utilization}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-xs text-muted-foreground">{utilization}%</span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+
+                    {/* Recent Activity */}
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <TrendingUp className="w-5 h-5" />
+                                Recent Activity
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Cart #</TableHead>
+                                        <TableHead>Action</TableHead>
+                                        <TableHead>User</TableHead>
+                                        <TableHead>Stadium</TableHead>
+                                        <TableHead>Time</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {poolDashboard.recentActivity.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                No recent activity
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : poolDashboard.recentActivity.slice(0, 10).map(activity => (
+                                        <TableRow key={activity.id}>
+                                            <TableCell className="font-mono font-semibold">{activity.carNumber}</TableCell>
+                                            <TableCell>
+                                                <Badge className={actionColors[activity.action]}>
+                                                    {actionLabels[activity.action]}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>{activity.userName}</TableCell>
+                                            <TableCell className="text-sm">{activity.stadiumName}</TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {new Date(activity.timestamp).toLocaleString()}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             <Tabs defaultValue="history">
                 <TabsList>

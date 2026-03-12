@@ -23,12 +23,14 @@ export class NotificationController {
 
     async markAsRead(req: Request, res: Response) {
         try {
-            const userId = (req as any).user?.userId;
+            const userId: string = (req as any).user?.userId;
             if (!userId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            const { id } = req.params;
+            const idParam = req.params.id;
+            const id: string = typeof idParam === 'string' ? idParam : Array.isArray(idParam) ? idParam[0] : '';
+            
             const notification = await notificationService.markAsRead(id, userId);
             res.json(notification);
         } catch (error: any) {

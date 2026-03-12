@@ -16,7 +16,7 @@ import { Pagination } from '@/components/shared/Pagination';
 interface MaintenanceLog {
     id: string;
     fleetId: string;
-    fleet: { carNumber: string; carType: string };
+    fleet: { carNumber: string; carType: string; stadium?: { id: string; name: string; code: string } };
     issueDescription: string;
     status: 'Open' | 'InProgress' | 'Resolved';
     photosUrls?: string[];
@@ -354,7 +354,9 @@ export function MaintenancePage() {
                                 <TableHead>Issue</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Reported By</TableHead>
-                                <TableHead>Reported At</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Venue</TableHead>
                                 <TableHead>Photos</TableHead>
                                 <TableHead>Resolution</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
@@ -362,50 +364,58 @@ export function MaintenancePage() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={9} className="text-center py-8">
+                                <TableRow><TableCell colSpan={11} className="text-center py-8">
                                     <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                                 </TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
-                            ) : filtered.map(issue => (
-                                <TableRow key={issue.id}>
-                                    <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
-                                    <TableCell>
-                                        <Badge className={carTypeColors[issue.fleet?.carType] || 'bg-gray-500 text-white'} variant="secondary">
-                                            {issue.fleet?.carType || '—'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="max-w-xs truncate">{issue.issueDescription}</TableCell>
-                                    <TableCell><Badge className={issueStatusColors[issue.status]}>{issue.status}</Badge></TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{issue.reportedBy?.name || '—'}</span>
-                                            {issue.reportedBy?.phone && <span className="text-[10px] text-muted-foreground">{issue.reportedBy.phone} ({issue.reportedBy.role})</span>}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-sm">{new Date(issue.reportedAt || issue.createdAt).toLocaleDateString()}</TableCell>
-                                    <TableCell>
-                                        <div className="flex gap-1">
-                                            {issue.photosUrls?.map((url, idx) => (
-                                                <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-8 h-8 border rounded overflow-hidden flex-shrink-0 bg-muted hover:opacity-80 transition-opacity">
-                                                    <img src={url} alt="issue" className="w-full h-full object-cover" />
-                                                </a>
-                                            )) || '—'}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
-                                        {issue.resolutionNotes || '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <Button variant="outline" size="sm" onClick={() => loadCartHistory(issue.fleetId, issue.fleet.carNumber)}>History</Button>
-                                            {canUpdateStatus && issue.status !== 'Resolved' && (
-                                                <Button variant="ghost" size="sm" onClick={() => openStatusModal(issue)}>Update</Button>
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
+                            ) : filtered.map(issue => {
+                                const reportedDate = issue.reportedAt || issue.createdAt;
+                                const dateObj = reportedDate ? new Date(reportedDate) : null;
+                                return (
+                                    <TableRow key={issue.id}>
+                                        <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
+                                        <TableCell>
+                                            <Badge className={carTypeColors[issue.fleet?.carType] || 'bg-gray-500 text-white'} variant="secondary">
+                                                {issue.fleet?.carType || '—'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs truncate">{issue.issueDescription}</TableCell>
+                                        <TableCell><Badge className={issueStatusColors[issue.status]}>{issue.status}</Badge></TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">{issue.reportedBy?.name || '—'}</span>
+                                                {issue.reportedBy?.phone && <span className="text-[10px] text-muted-foreground">{issue.reportedBy.phone} ({issue.reportedBy.role})</span>}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-sm">{dateObj?.toLocaleDateString() || '—'}</TableCell>
+                                        <TableCell className="text-sm">{dateObj?.toLocaleTimeString() || '—'}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="text-xs">{issue.fleet?.stadium?.code || '—'}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex gap-1">
+                                                {issue.photosUrls?.map((url, idx) => (
+                                                    <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-8 h-8 border rounded overflow-hidden flex-shrink-0 bg-muted hover:opacity-80 transition-opacity">
+                                                        <img src={url} alt="issue" className="w-full h-full object-cover" />
+                                                    </a>
+                                                )) || '—'}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
+                                            {issue.resolutionNotes || '—'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <Button variant="outline" size="sm" onClick={() => loadCartHistory(issue.fleetId, issue.fleet.carNumber)}>History</Button>
+                                                {canUpdateStatus && issue.status !== 'Resolved' && (
+                                                    <Button variant="ghost" size="sm" onClick={() => openStatusModal(issue)}>Update</Button>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                     <Pagination
@@ -497,35 +507,44 @@ export function MaintenancePage() {
                             <p className="text-center py-8 text-muted-foreground">No history found for this cart.</p>
                         ) : (
                             <div className="space-y-6 relative before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-0.5 before:bg-muted">
-                                {cartHistory.map((h, _i) => (
-                                    <div key={h.id} className="relative pl-10">
-                                        <div className={`absolute left-0 top-1 w-9 h-9 rounded-full border-4 border-background flex items-center justify-center ${issueStatusColors[h.status]}`}>
-                                            <div className="w-2 h-2 rounded-full bg-white" />
-                                        </div>
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm font-semibold">{h.issueDescription}</span>
-                                                <Badge variant="outline" className="text-[10px]">{new Date(h.reportedAt || h.createdAt).toLocaleDateString()}</Badge>
+                                {cartHistory.map((h, _i) => {
+                                    const reportedDate = h.reportedAt || h.createdAt;
+                                    const dateObj = reportedDate ? new Date(reportedDate) : null;
+                                    return (
+                                        <div key={h.id} className="relative pl-10">
+                                            <div className={`absolute left-0 top-1 w-9 h-9 rounded-full border-4 border-background flex items-center justify-center ${issueStatusColors[h.status]}`}>
+                                                <div className="w-2 h-2 rounded-full bg-white" />
                                             </div>
-                                            <p className="text-xs text-muted-foreground">Reported by {h.reportedBy?.name} ({h.reportedBy?.role})</p>
-                                            {h.photosUrls && h.photosUrls.length > 0 && (
-                                                <div className="flex gap-2 mt-2">
-                                                    {h.photosUrls.map((url, idx) => (
-                                                        <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-12 h-12 rounded border overflow-hidden">
-                                                            <img src={url} alt="issue" className="w-full h-full object-cover" />
-                                                        </a>
-                                                    ))}
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm font-semibold">{h.issueDescription}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="text-[10px]">{h.fleet?.stadium?.code || '—'}</Badge>
+                                                        <Badge variant="outline" className="text-[10px]">{dateObj?.toLocaleDateString()}</Badge>
+                                                    </div>
                                                 </div>
-                                            )}
-                                            {h.status === 'Resolved' && (
-                                                <div className="mt-2 p-2 bg-green-50 border border-green-100 rounded text-xs text-green-800">
-                                                    <strong>Resolved:</strong> {h.resolutionNotes}
-                                                    <div className="mt-1 text-[10px] text-green-600">Date: {h.resolvedAt ? new Date(h.resolvedAt).toLocaleDateString() : '—'}</div>
-                                                </div>
-                                            )}
+                                                <p className="text-xs text-muted-foreground">
+                                                    Reported by {h.reportedBy?.name} ({h.reportedBy?.role}) • {dateObj?.toLocaleTimeString()}
+                                                </p>
+                                                {h.photosUrls && h.photosUrls.length > 0 && (
+                                                    <div className="flex gap-2 mt-2">
+                                                        {h.photosUrls.map((url, idx) => (
+                                                            <a key={idx} href={url} target="_blank" rel="noreferrer" className="w-12 h-12 rounded border overflow-hidden">
+                                                                <img src={url} alt="issue" className="w-full h-full object-cover" />
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {h.status === 'Resolved' && (
+                                                    <div className="mt-2 p-2 bg-green-50 border border-green-100 rounded text-xs text-green-800">
+                                                        <strong>Resolved:</strong> {h.resolutionNotes}
+                                                        <div className="mt-1 text-[10px] text-green-600">Date: {h.resolvedAt ? new Date(h.resolvedAt).toLocaleDateString() : '—'}</div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

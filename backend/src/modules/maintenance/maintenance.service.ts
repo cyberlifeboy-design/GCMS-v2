@@ -48,6 +48,7 @@ export class MaintenanceService {
             where: { fleetId },
             include: {
                 reportedBy: { select: { id: true, name: true, phone: true, role: true } },
+                fleet: { include: { stadium: { select: { id: true, name: true, code: true } } } },
             },
             orderBy: { reportedAt: 'desc' },
         });

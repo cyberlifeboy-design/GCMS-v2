@@ -41,7 +41,23 @@ export class MaintenanceController {
 
     static async getByFleet(req: AuthRequest, res: Response) {
         try {
-            const history = await maintenanceService.getByFleet(req.params['fleetId'] as string);
+            const fleetId = req.params['fleetId'] as string;
+
+            // RBAC check: Admin can only view history for carts in their assigned stadium
+            if (req.user?.role === 'Admin' && req.user.stadiumId) {
+                // First verify the fleet belongs to the admin's stadium
+                const { prisma } = await import('../../config/database');
+                const fleet = await prisma.fleet.findUnique({
+                    where: { id: fleetId },
+                    select: { stadiumId: true },
+                });
+                if (!fleet || fleet.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'Access denied: You can only view maintenance history for carts in your assigned venue' });
+                    return;
+                }
+            }
+
+            const history = await maintenanceService.getByFleet(fleetId);
             res.status(200).json({ data: history });
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch fleet history' });
