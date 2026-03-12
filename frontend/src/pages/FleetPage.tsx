@@ -597,23 +597,31 @@ export function FleetPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">Fleet Management</h1>
-                {isAdmin && (
-                    <div className="flex gap-2">
-                        <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleBulkImport} className="hidden" />
-                        <Button variant="outline" onClick={() => {
-                            if (isSuperAdmin) {
-                                setBulkModal(true);
-                            } else {
-                                fileInputRef.current?.click();
-                            }
-                        }}>
-                            <Upload className="w-4 h-4 mr-2" />Bulk Import
+                <div className="flex gap-2">
+                    {!isFA && (
+                        <Button variant="outline" onClick={handleExportFleet} disabled={submitting}>
+                            {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                            Export All
                         </Button>
-                        <Button onClick={openCreate}>
-                            <Plus className="w-4 h-4 mr-2" />Add Cart
-                        </Button>
-                    </div>
-                )}
+                    )}
+                    {isAdmin && (
+                        <>
+                            <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleBulkImport} className="hidden" />
+                            <Button variant="outline" onClick={() => {
+                                if (isSuperAdmin) {
+                                    setBulkModal(true);
+                                } else {
+                                    fileInputRef.current?.click();
+                                }
+                            }}>
+                                <Upload className="w-4 h-4 mr-2" />Bulk Import
+                            </Button>
+                            <Button onClick={openCreate}>
+                                <Plus className="w-4 h-4 mr-2" />Add Cart
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {importResult && (

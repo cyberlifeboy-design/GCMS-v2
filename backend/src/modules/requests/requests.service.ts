@@ -56,6 +56,19 @@ export class RequestsService {
             },
         });
 
+        // Create notifications for admins about new request
+        await notificationService.createForRoles(
+            {
+                type: 'CarRequest',
+                title: 'New Car Request',
+                message: `${data.requesterName} (${request.department?.name}) requested ${data.cargoCount + data.fourSeaterCount + data.sixSeaterCount + data.accessibilityCount} carts`,
+                entityType: 'CarRequest',
+                entityId: request.id,
+            },
+            ['SuperAdmin', 'Admin'],
+            data.stadiumId,
+        );
+
         return request;
     }
 
