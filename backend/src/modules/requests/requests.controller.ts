@@ -21,6 +21,13 @@ const reviewRequestSchema = z.object({
     reviewNotes: z.string().optional(),
 });
 
+const updateQuantitiesSchema = z.object({
+    cargoCount: z.number().int().min(0).optional(),
+    fourSeaterCount: z.number().int().min(0).optional(),
+    sixSeaterCount: z.number().int().min(0).optional(),
+    accessibilityCount: z.number().int().min(0).optional(),
+});
+
 export class RequestsController {
     /**
      * Public endpoint: Create a new car request

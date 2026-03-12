@@ -211,6 +211,34 @@ export class RequestsService {
             where: { id },
         });
     }
+
+    /**
+     * Update request quantities (Admin/SuperAdmin can edit before approving)
+     */
+    async updateQuantities(
+        id: string,
+        data: {
+            cargoCount?: number;
+            fourSeaterCount?: number;
+            sixSeaterCount?: number;
+            accessibilityCount?: number;
+        }
+    ) {
+        return prisma.carRequest.update({
+            where: { id },
+            data: {
+                cargoCount: data.cargoCount,
+                fourSeaterCount: data.fourSeaterCount,
+                sixSeaterCount: data.sixSeaterCount,
+                accessibilityCount: data.accessibilityCount,
+            },
+            include: {
+                stadium: { select: { id: true, name: true, code: true } },
+                department: { select: { id: true, name: true, code: true } },
+                reviewedBy: { select: { id: true, name: true } },
+            },
+        });
+    }
 }
 
 export const requestsService = new RequestsService();
