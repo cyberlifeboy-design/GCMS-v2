@@ -86,7 +86,7 @@ export function SettingsPage() {
                     settingsApi.get(),
                     stadiumsApi.getAll(),
                 ]);
-                const d: Settings = settingsRes.data;
+                const d: Settings = settingsRes.data.data || {};
                 setTournamentName(d.tournamentName || '');
                 setLogoPrev(d.logoUrl || '');
                 setHeaderPrev(d.headerUrl || '');
@@ -358,12 +358,12 @@ export function SettingsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="defaultStadiumId">Default Stadium for New Users</Label>
-                                    <Select value={defaultStadiumId} onValueChange={setDefaultStadiumId}>
+                                    <Select value={defaultStadiumId || '__none__'} onValueChange={v => setDefaultStadiumId(v === '__none__' ? '' : v)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select default stadium" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">No default</SelectItem>
+                                            <SelectItem value="__none__">No default</SelectItem>
                                             {stadiums.map(s => (
                                                 <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                                             ))}
@@ -559,16 +559,16 @@ function RequestLinkGenerator({ stadiums }: { stadiums: Stadium[] }) {
                     </div>
                     <div className="space-y-2">
                         <Label>Department (Optional)</Label>
-                        <Select 
-                            value={selectedDepartmentId} 
-                            onValueChange={(v) => { setSelectedDepartmentId(v); setGeneratedLink(''); }}
+                        <Select
+                            value={selectedDepartmentId || '__all__'}
+                            onValueChange={(v) => { setSelectedDepartmentId(v === '__all__' ? '' : v); setGeneratedLink(''); }}
                             disabled={!selectedStadiumId}
                         >
                             <SelectTrigger>
                                 <SelectValue placeholder={selectedStadiumId ? "All departments" : "Select stadium first"} />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Departments</SelectItem>
+                                <SelectItem value="__all__">All Departments</SelectItem>
                                 {loadingDepartments ? (
                                     <SelectItem value="__loading__" disabled>Loading...</SelectItem>
                                 ) : (

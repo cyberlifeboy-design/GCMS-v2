@@ -175,12 +175,12 @@ export function RequestsManagementPage() {
                     <div className="flex flex-wrap gap-4">
                         <div className="space-y-2">
                             <Label>Status</Label>
-                            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <Select value={statusFilter || '__all__'} onValueChange={v => setStatusFilter(v === '__all__' ? '' : v)}>
                                 <SelectTrigger className="w-[150px]">
                                     <SelectValue placeholder="All statuses" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">All</SelectItem>
+                                    <SelectItem value="__all__">All</SelectItem>
                                     <SelectItem value="Pending">Pending</SelectItem>
                                     <SelectItem value="Approved">Approved</SelectItem>
                                     <SelectItem value="Rejected">Rejected</SelectItem>
@@ -190,12 +190,12 @@ export function RequestsManagementPage() {
                         {isSuperAdmin && (
                             <div className="space-y-2">
                                 <Label>Stadium</Label>
-                                <Select value={stadiumFilter} onValueChange={setStadiumFilter}>
+                                <Select value={stadiumFilter || '__all__'} onValueChange={v => setStadiumFilter(v === '__all__' ? '' : v)}>
                                     <SelectTrigger className="w-[200px]">
                                         <SelectValue placeholder="All stadiums" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="">All</SelectItem>
+                                        <SelectItem value="__all__">All</SelectItem>
                                         {stadiums.map((s) => (
                                             <SelectItem key={s.id} value={s.id}>
                                                 {s.name}

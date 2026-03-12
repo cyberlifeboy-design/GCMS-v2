@@ -499,12 +499,12 @@ export function FleetManagementPage() {
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label>Select FA User</Label>
-                            <Select value={assignUserId} onValueChange={setAssignUserId}>
+                            <Select value={assignUserId || '__none__'} onValueChange={v => setAssignUserId(v === '__none__' ? '' : v)}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Unassigned (clear)" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">Clear Assignment</SelectItem>
+                                    <SelectItem value="__none__">Clear Assignment</SelectItem>
                                     {faUsers
                                         .filter(u => !selectedStadium || selectedStadium === 'all' || u.stadium?.id === selectedStadium)
                                         .map(u => (

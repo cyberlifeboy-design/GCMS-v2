@@ -108,7 +108,7 @@ export function ReportsPage() {
         setLoadingStadium(true);
         try {
             const res = await reportsApi.getStadiumReports();
-            setStadiumReports(res.data);
+            setStadiumReports(res.data.data || res.data || []);
         } catch { } finally { setLoadingStadium(false); }
     };
 
@@ -118,7 +118,7 @@ export function ReportsPage() {
             const params: Record<string, string> = {};
             if (selectedStadiumFilter) params.stadiumId = selectedStadiumFilter;
             const res = await reportsApi.getDepartmentReports(params);
-            setDepartmentReports(res.data);
+            setDepartmentReports(res.data.data || res.data || []);
         } catch { } finally { setLoadingDept(false); }
     };
 
@@ -129,7 +129,7 @@ export function ReportsPage() {
             if (selectedStadiumFilter) params.stadiumId = selectedStadiumFilter;
             if (selectedRoleFilter) params.role = selectedRoleFilter;
             const res = await reportsApi.getUserReports(params);
-            setUserReports(res.data);
+            setUserReports(res.data.data || res.data || []);
         } catch { } finally { setLoadingUser(false); }
     };
 
@@ -355,12 +355,12 @@ export function ReportsPage() {
                                 <CardTitle>Department-wise Report</CardTitle>
                                 <div className="flex gap-2 items-center">
                                     {role === 'SuperAdmin' && (
-                                        <Select value={selectedStadiumFilter} onValueChange={setSelectedStadiumFilter}>
+                                        <Select value={selectedStadiumFilter || '__all__'} onValueChange={v => setSelectedStadiumFilter(v === '__all__' ? '' : v)}>
                                             <SelectTrigger className="w-48">
                                                 <SelectValue placeholder="All Stadiums" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="">All Stadiums</SelectItem>
+                                                <SelectItem value="__all__">All Stadiums</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     )}
@@ -453,12 +453,12 @@ export function ReportsPage() {
                             <div className="flex items-center justify-between">
                                 <CardTitle>User Activity Report</CardTitle>
                                 <div className="flex gap-2 items-center">
-                                    <Select value={selectedRoleFilter} onValueChange={setSelectedRoleFilter}>
+                                    <Select value={selectedRoleFilter || '__all__'} onValueChange={v => setSelectedRoleFilter(v === '__all__' ? '' : v)}>
                                         <SelectTrigger className="w-32">
                                             <SelectValue placeholder="All Roles" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">All Roles</SelectItem>
+                                            <SelectItem value="__all__">All Roles</SelectItem>
                                             <SelectItem value="FA">FA</SelectItem>
                                             <SelectItem value="Admin">Admin</SelectItem>
                                             <SelectItem value="Observer">Observer</SelectItem>

@@ -399,14 +399,15 @@ export function UsersPage() {
                         {isSuperAdmin && (
                             <div className="space-y-2">
                                 <Label>Stadium</Label>
-                                <Select value={formData.stadiumId} onValueChange={v => {
-                                    setFormData(f => ({ ...f, stadiumId: v, departmentId: '' }));
-                                    if (v) loadDepartments(v);
+                                <Select value={formData.stadiumId || '__none__'} onValueChange={v => {
+                                    const val = v === '__none__' ? '' : v;
+                                    setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
+                                    if (val) loadDepartments(val);
                                     else setDepartments([]);
                                 }}>
                                     <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="">No Stadium</SelectItem>
+                                        <SelectItem value="__none__">No Stadium</SelectItem>
                                         {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -422,13 +423,13 @@ export function UsersPage() {
                         <div className="space-y-2">
                             <Label>Department</Label>
                             <Select
-                                value={formData.departmentId}
-                                onValueChange={v => setFormData(f => ({ ...f, departmentId: v }))}
+                                value={formData.departmentId || '__none__'}
+                                onValueChange={v => setFormData(f => ({ ...f, departmentId: v === '__none__' ? '' : v }))}
                                 disabled={!formData.stadiumId && isSuperAdmin}
                             >
                                 <SelectTrigger><SelectValue placeholder={formData.stadiumId || !isSuperAdmin ? "Select department" : "Select stadium first"} /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">No Department</SelectItem>
+                                    <SelectItem value="__none__">No Department</SelectItem>
                                     {(isSuperAdmin ? departments.filter(d => d.stadiumId === formData.stadiumId) : departments).map(d => (
                                         <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                                     ))}
@@ -509,24 +510,25 @@ export function UsersPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Stadium</Label>
-                                    <Select value={editData.stadiumId} onValueChange={v => {
-                                        setEditData(d => ({ ...d, stadiumId: v, departmentId: '' }));
-                                        if (v) loadDepartments(v);
+                                    <Select value={editData.stadiumId || '__none__'} onValueChange={v => {
+                                        const val = v === '__none__' ? '' : v;
+                                        setEditData(d => ({ ...d, stadiumId: val, departmentId: '' }));
+                                        if (val) loadDepartments(val);
                                         else setDepartments([]);
                                     }}>
                                         <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">No Stadium</SelectItem>
+                                            <SelectItem value="__none__">No Stadium</SelectItem>
                                             {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Department</Label>
-                                    <Select value={editData.departmentId} onValueChange={v => setEditData(d => ({ ...d, departmentId: v }))}>
+                                    <Select value={editData.departmentId || '__none__'} onValueChange={v => setEditData(d => ({ ...d, departmentId: v === '__none__' ? '' : v }))}>
                                         <SelectTrigger><SelectValue placeholder={editData.stadiumId ? "Select department" : "Select stadium first"} /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">No Department</SelectItem>
+                                            <SelectItem value="__none__">No Department</SelectItem>
                                             {departments.filter(d => d.stadiumId === editData.stadiumId).map(d => (
                                                 <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                                             ))}
@@ -549,10 +551,10 @@ export function UsersPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Department</Label>
-                                    <Select value={editData.departmentId} onValueChange={v => setEditData(d => ({ ...d, departmentId: v }))}>
+                                    <Select value={editData.departmentId || '__none__'} onValueChange={v => setEditData(d => ({ ...d, departmentId: v === '__none__' ? '' : v }))}>
                                         <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">No Department</SelectItem>
+                                            <SelectItem value="__none__">No Department</SelectItem>
                                             {departments.map(d => (
                                                 <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                                             ))}

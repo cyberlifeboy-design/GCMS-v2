@@ -711,14 +711,14 @@ export function FleetPage() {
                         <div className="space-y-2">
                             <Label htmlFor="departmentId">Department</Label>
                             <Select
-                                value={formData.departmentId}
-                                onValueChange={v => setFormData(d => ({ ...d, departmentId: v }))}
+                                value={formData.departmentId || '__none__'}
+                                onValueChange={v => setFormData(d => ({ ...d, departmentId: v === '__none__' ? '' : v }))}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select department (optional)" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">— None —</SelectItem>
+                                    <SelectItem value="__none__">— None —</SelectItem>
                                     {departments.map(d => (
                                         <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                                     ))}
@@ -728,14 +728,14 @@ export function FleetPage() {
                         <div className="space-y-2">
                             <Label htmlFor="assignedUserId">Assign to FA</Label>
                             <Select
-                                value={formData.assignedUserId}
-                                onValueChange={v => setFormData(d => ({ ...d, assignedUserId: v }))}
+                                value={formData.assignedUserId || '__none__'}
+                                onValueChange={v => setFormData(d => ({ ...d, assignedUserId: v === '__none__' ? '' : v }))}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select FA (optional)" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">— Unassigned —</SelectItem>
+                                    <SelectItem value="__none__">— Unassigned —</SelectItem>
                                     {faUsers.map(u => (
                                         <SelectItem key={u.id} value={u.id}>
                                             {u.name}{u.department?.name ? ` (${u.department.name})` : ''}
@@ -766,10 +766,10 @@ export function FleetPage() {
                     <form onSubmit={handleAssign} className="space-y-4">
                         <div className="space-y-2">
                             <Label>Fleet Attendant</Label>
-                            <Select value={assignUserId} onValueChange={setAssignUserId}>
+                            <Select value={assignUserId || '__none__'} onValueChange={v => setAssignUserId(v === '__none__' ? '' : v)}>
                                 <SelectTrigger><SelectValue placeholder="Select FA user" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">— Unassign —</SelectItem>
+                                    <SelectItem value="__none__">— Unassign —</SelectItem>
                                     {faUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
