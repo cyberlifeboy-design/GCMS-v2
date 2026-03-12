@@ -9,6 +9,7 @@ export class FleetService {
 
         const where: any = {
             ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
+            ...(filters.departmentId && { departmentId: filters.departmentId }),
             ...(filters.assignedUserId && { assignedUserId: filters.assignedUserId }),
             ...(filters.status && { status: filters.status }),
             ...(filters.carType && {

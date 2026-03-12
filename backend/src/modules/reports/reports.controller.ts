@@ -49,6 +49,29 @@ export class ReportsController {
         }
     }
 
+    static async getActiveCarsUsage(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId, departmentId, carType, search } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            // Admin can only see their own stadium's active cars
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const activeCars = await reportsService.getActiveCarsUsage({
+                stadiumId: filterStadiumId,
+                departmentId,
+                carType,
+                search,
+            });
+            res.status(200).json(activeCars);
+        } catch (error) {
+            console.error('Failed to get active cars usage:', error);
+            res.status(500).json({ error: 'Failed to get active cars usage' });
+        }
+    }
+
     static async exportHandoverLogs(req: AuthRequest, res: Response) {
         try {
             const logs = await reportsService.getHandoverReports({});

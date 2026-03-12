@@ -103,6 +103,7 @@ export interface AuditLog {
 // Filter interfaces
 export interface FleetFilters {
     stadiumId?: string;
+    departmentId?: string;
     assignedUserId?: string;
     status?: string;
     carType?: string | string[];

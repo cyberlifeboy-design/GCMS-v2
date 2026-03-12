@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { reportsApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck } from 'lucide-react';
@@ -53,6 +54,7 @@ const COLORS = ['#1E88E5', '#43A047', '#FDD835', '#E53935', '#8E24AA'];
 
 export function DashboardPage() {
     const { user } = useAuthStore();
+    const navigate = useNavigate();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -75,11 +77,11 @@ export function DashboardPage() {
     const totalCarts = stats?.fleetByStatus.reduce((acc, curr) => acc + curr.count, 0) || 0;
 
     const summaryCards = [
-        { label: 'Active Stadiums', value: stats?.activeStadiumsCount || 0, icon: MapPin, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-        { label: 'Total Carts', value: totalCarts, icon: Car, color: 'text-blue-500', bg: 'bg-blue-50' },
-        { label: 'Active FAs', value: stats?.activeUsersCount || 0, icon: UserCheck, color: 'text-green-500', bg: 'bg-green-50' },
-        { label: 'Open Issues', value: stats?.openIssuesCount || 0, icon: Wrench, color: 'text-red-500', bg: 'bg-red-50' },
-        { label: 'VAP Required', value: stats?.vapCartsCount || 0, icon: Shield, color: 'text-purple-500', bg: 'bg-purple-50' },
+        { label: 'Active Stadiums', value: stats?.activeStadiumsCount || 0, icon: MapPin, color: 'text-cyan-500', bg: 'bg-cyan-50', path: '/stadiums' },
+        { label: 'Total Carts', value: totalCarts, icon: Car, color: 'text-blue-500', bg: 'bg-blue-50', path: '/fleet' },
+        { label: 'Active FAs', value: stats?.activeUsersCount || 0, icon: UserCheck, color: 'text-green-500', bg: 'bg-green-50', path: '/users' },
+        { label: 'Open Issues', value: stats?.openIssuesCount || 0, icon: Wrench, color: 'text-red-500', bg: 'bg-red-50', path: '/maintenance' },
+        { label: 'VAP Required', value: stats?.vapCartsCount || 0, icon: Shield, color: 'text-purple-500', bg: 'bg-purple-50', path: '/fleet?vap=true' },
     ];
 
     // Status color mapping
@@ -155,8 +157,12 @@ export function DashboardPage() {
 
             {/* Summary Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {summaryCards.map(({ label, value, icon: Icon, color, bg }) => (
-                    <Card key={label} className={`${bg} border-none shadow-sm`}>
+                {summaryCards.map(({ label, value, icon: Icon, color, bg, path }) => (
+                    <Card
+                        key={label}
+                        className={`${bg} border-none shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all duration-200`}
+                        onClick={() => navigate(path)}
+                    >
                         <CardContent className="pt-6">
                             <div className="flex items-center gap-4">
                                 <div className={`p-3 rounded-full bg-white shadow-sm`}>
@@ -183,22 +189,63 @@ export function DashboardPage() {
                         <Badge variant="secondary">{stats?.activeStadiumsCount || 0} venues</Badge>
                     </CardHeader>
                     <CardContent className="pt-4">
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto">
                             {stats?.stadiums.map((stadium) => (
-                                <div key={stadium.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                                    <div>
-                                        <p className="font-medium">{stadium.name}</p>
-                                        <p className="text-sm text-muted-foreground">{stadium.location}</p>
+                                <div key={stadium.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                                    {/* Header: Stadium Code & Name */}
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-3">
+                                            <Badge variant="default" className="text-base font-bold px-3 py-1 bg-cyan-600">
+                                                {stadium.code}
+                                            </Badge>
+                                            <div>
+                                                <p className="font-semibold">{stadium.name}</p>
+                                                <p className="text-sm text-muted-foreground">{stadium.location}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-2xl font-bold">{stadium.totalCarts}</p>
+                                            <p className="text-xs text-muted-foreground">total carts</p>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-4 text-right">
-                                        <div>
-                                            <p className="text-lg font-bold">{stadium.totalCarts}</p>
-                                            <p className="text-xs text-muted-foreground">carts</p>
+                                    
+                                    {/* Fleet Breakdown by Type */}
+                                    <div className="grid grid-cols-4 gap-2 mb-3">
+                                        <div className="bg-blue-100 dark:bg-blue-900/30 rounded p-2 text-center">
+                                            <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                                                {stadium.fleetBreakdown?.['4-Seater'] || 0}
+                                            </p>
+                                            <p className="text-xs text-blue-600 dark:text-blue-400">4-Seater</p>
                                         </div>
-                                        <div>
-                                            <p className="text-lg font-bold text-green-600">{stadium.activeFAs}</p>
-                                            <p className="text-xs text-muted-foreground">FAs</p>
+                                        <div className="bg-green-100 dark:bg-green-900/30 rounded p-2 text-center">
+                                            <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                                                {stadium.fleetBreakdown?.['6-Seater'] || 0}
+                                            </p>
+                                            <p className="text-xs text-green-600 dark:text-green-400">6-Seater</p>
                                         </div>
+                                        <div className="bg-orange-100 dark:bg-orange-900/30 rounded p-2 text-center">
+                                            <p className="text-lg font-bold text-orange-700 dark:text-orange-300">
+                                                {stadium.fleetBreakdown?.['Cargo'] || 0}
+                                            </p>
+                                            <p className="text-xs text-orange-600 dark:text-orange-400">Cargo</p>
+                                        </div>
+                                        <div className="bg-purple-100 dark:bg-purple-900/30 rounded p-2 text-center">
+                                            <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                                                {stadium.fleetBreakdown?.['Accessibility'] || 0}
+                                            </p>
+                                            <p className="text-xs text-purple-600 dark:text-purple-400">Accessible</p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* FA Count */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                                        <div className="flex items-center gap-2">
+                                            <UserCheck className="w-4 h-4 text-green-500" />
+                                            <span className="text-sm text-muted-foreground">FAs Assigned</span>
+                                        </div>
+                                        <Badge variant="outline" className="font-semibold">
+                                            {stadium.activeFAs} active
+                                        </Badge>
                                     </div>
                                 </div>
                             ))}

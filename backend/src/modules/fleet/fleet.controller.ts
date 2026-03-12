@@ -28,7 +28,7 @@ export class FleetController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
             const query = req.query as any;
-            const { stadiumId, assignedUserId, status, carType, requiresVAP, page, limit } = query;
+            const { stadiumId, departmentId, assignedUserId, status, carType, requiresVAP, page, limit } = query;
 
             // RBAC scoping
             let filterStadiumId = stadiumId as string | undefined;
@@ -50,6 +50,7 @@ export class FleetController {
 
             const filters: FleetFilters = {
                 stadiumId: filterStadiumId,
+                departmentId: departmentId as string,
                 assignedUserId: filterAssignedUserId,
                 status: status as string,
                 carType: carTypeFilter,

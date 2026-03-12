@@ -14,6 +14,9 @@ router.get('/audit', requireRole('SuperAdmin'), auditLog(), ReportsController.ex
 // Get utilization stats (SuperAdmin/Admin/Observer)
 router.get('/utilization', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUtilization);
 
+// Get active cars currently in use (SuperAdmin/Admin/Observer)
+router.get('/active-usage', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getActiveCarsUsage);
+
 // Export handover logs
 router.get('/handover/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportHandoverLogs);
 

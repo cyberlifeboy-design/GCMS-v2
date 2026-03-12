@@ -21,7 +21,7 @@ export function LoginPage() {
         const loadBranding = async () => {
             try {
                 const res = await settingsApi.get();
-                setBranding(res.data);
+                setBranding(res.data.data || {});
             } catch (e) {
                 console.error('Failed to load branding', e);
             }

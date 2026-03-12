@@ -196,20 +196,20 @@ export class ReportsService {
             orderBy: { name: 'asc' },
         });
 
-        // Get fleet status per stadium
-        const stadiumFleetStats = await this.prisma.fleet.groupBy({
-            by: ['stadiumId', 'status'],
+        // Get fleet type breakdown per stadium (grouped by carType)
+        const stadiumFleetByType = await this.prisma.fleet.groupBy({
+            by: ['stadiumId', 'carType'],
             where: { stadium: { isActive: true } },
             _count: { _all: true },
         });
 
-        // Build stadium list with fleet breakdown
-        const stadiumStatsMap = new Map<string, Record<string, number>>();
-        stadiumFleetStats.forEach(stat => {
-            if (!stadiumStatsMap.has(stat.stadiumId)) {
-                stadiumStatsMap.set(stat.stadiumId, {});
+        // Build stadium list with fleet breakdown by car type
+        const stadiumTypeMap = new Map<string, Record<string, number>>();
+        stadiumFleetByType.forEach(stat => {
+            if (!stadiumTypeMap.has(stat.stadiumId)) {
+                stadiumTypeMap.set(stat.stadiumId, {});
             }
-            stadiumStatsMap.get(stat.stadiumId)![stat.status] = stat._count._all;
+            stadiumTypeMap.get(stat.stadiumId)![stat.carType] = stat._count._all;
         });
 
         const stadiumsList = activeStadiums.map(stadium => ({
@@ -219,7 +219,7 @@ export class ReportsService {
             location: stadium.location,
             totalCarts: stadium._count.fleet,
             activeFAs: stadium._count.users,
-            fleetBreakdown: stadiumStatsMap.get(stadium.id) || {},
+            fleetBreakdown: stadiumTypeMap.get(stadium.id) || {},
         }));
 
         // 8. FA Fleet Overview

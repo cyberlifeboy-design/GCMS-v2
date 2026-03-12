@@ -209,3 +209,21 @@ model CarRequest {
   @@index([departmentId])
   @@index([requestToken])
 }
+
+// Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
+model Notification {
+  id           String    @id @default(cuid())
+  type         String    // IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
+  title        String
+  message      String
+  entityType   String?   // Fleet, MaintenanceLog, CarRequest, User
+  entityId     String?   // ID of the related entity
+  isRead       Boolean   @default(false)
+  userId       String?   // null for broadcast notifications (all users)
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
