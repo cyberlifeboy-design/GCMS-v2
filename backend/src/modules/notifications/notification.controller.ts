@@ -4,13 +4,15 @@ import { notificationService } from './notification.service';
 export class NotificationController {
     async getNotifications(req: Request, res: Response) {
         try {
-            const userId = (req as any).user?.id;
+            const userId = (req as any).user?.userId;
             if (!userId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            const page = parseInt(req.query.page as string) || 1;
-            const limit = parseInt(req.query.limit as string) || 20;
+            const pageQuery = req.query.page;
+            const limitQuery = req.query.limit;
+            const page = parseInt(Array.isArray(pageQuery) ? pageQuery[0] : (pageQuery as string) || '1') || 1;
+            const limit = parseInt(Array.isArray(limitQuery) ? limitQuery[0] : (limitQuery as string) || '20') || 20;
 
             const result = await notificationService.getForUser(userId, page, limit);
             res.json(result);
@@ -21,7 +23,7 @@ export class NotificationController {
 
     async markAsRead(req: Request, res: Response) {
         try {
-            const userId = (req as any).user?.id;
+            const userId = (req as any).user?.userId;
             if (!userId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
@@ -36,7 +38,7 @@ export class NotificationController {
 
     async markAllAsRead(req: Request, res: Response) {
         try {
-            const userId = (req as any).user?.id;
+            const userId = (req as any).user?.userId;
             if (!userId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }

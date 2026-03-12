@@ -331,9 +331,9 @@ export function FleetManagementPage() {
                                                     </span>
                                                 </div>
                                             </div>
-                                            {/* FA Users at this stadium */}
+                                            {/* Focal Points at this stadium */}
                                             <div className="mt-3 pt-3 border-t">
-                                                <p className="text-xs text-muted-foreground mb-1">FAs at this venue:</p>
+                                                <p className="text-xs text-muted-foreground mb-1">Focal Points at this venue:</p>
                                                 <div className="flex flex-wrap gap-1">
                                                     {faUsers
                                                         .filter(u => u.stadium?.id === stadiumId)
@@ -363,7 +363,7 @@ export function FleetManagementPage() {
                         <CardHeader className="pb-3">
                             <div className="flex gap-4 items-center flex-wrap">
                                 <Input
-                                    placeholder="Search by cart #, stadium, type, or FA name..."
+                                    placeholder="Search by cart #, stadium, type, or Focal Point..."
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
                                     className="max-w-sm"
@@ -381,10 +381,10 @@ export function FleetManagementPage() {
                                 </Select>
                                 <Select value={faFilter} onValueChange={setFaFilter}>
                                     <SelectTrigger className="w-48">
-                                        <SelectValue placeholder="All FAs" />
+                                        <SelectValue placeholder="All Focal Points" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="all">All FAs</SelectItem>
+                                        <SelectItem value="all">All Focal Points</SelectItem>
                                         <SelectItem value="assigned">Assigned</SelectItem>
                                         <SelectItem value="unassigned">Unassigned</SelectItem>
                                         {faUsers
@@ -549,14 +549,14 @@ export function FleetManagementPage() {
             <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Assign FA to Cart</DialogTitle>
+                        <DialogTitle>Assign Focal Point to Cart</DialogTitle>
                         <DialogDescription>
-                            Select an FA to assign to cart <strong>{selectedCart?.carNumber}</strong>
+                            Select a Focal Point to assign to cart <strong>{selectedCart?.carNumber}</strong>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Select FA User</Label>
+                            <Label>Select Focal Point</Label>
                             <Select value={assignUserId || '__none__'} onValueChange={v => setAssignUserId(v === '__none__' ? '' : v)}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Unassigned (clear)" />
@@ -592,17 +592,17 @@ export function FleetManagementPage() {
             <Dialog open={bulkAssignModalOpen} onOpenChange={setBulkAssignModalOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Bulk Assign FAs</DialogTitle>
+                        <DialogTitle>Bulk Assign Focal Points</DialogTitle>
                         <DialogDescription>
-                            Assign one FA to {selectedCarts.size} selected carts
+                            Assign one Focal Point to {selectedCarts.size} selected carts
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Select FA User</Label>
+                            <Label>Select Focal Point</Label>
                             <Select value={bulkAssignUserId} onValueChange={setBulkAssignUserId}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Choose FA..." />
+                                    <SelectValue placeholder="Choose Focal Point..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {faUsers

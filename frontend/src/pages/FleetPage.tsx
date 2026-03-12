@@ -269,6 +269,13 @@ export function FleetPage() {
         }
     }, [isSuperAdmin]);
 
+    // Load departments for non-SuperAdmin users (based on their assigned stadium)
+    useEffect(() => {
+        if (!isSuperAdmin && user?.stadiumId && departments.length === 0) {
+            loadDepartments(user.stadiumId);
+        }
+    }, [isSuperAdmin, user?.stadiumId]);
+
     // Handle stadium change in create/edit modal - reload FA users and departments
     const handleStadiumChange = async (stadiumId: string) => {
         setFormData(d => ({ ...d, stadiumId, assignedUserId: '', departmentId: '' }));

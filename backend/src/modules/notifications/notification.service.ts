@@ -19,9 +19,9 @@ export class NotificationService {
                 type: data.type,
                 title: data.title,
                 message: data.message,
-                ...(data.entityType ? { entityType: data.entityType } : {}),
-                ...(data.entityId ? { entityId: data.entityId } : {}),
-                ...(data.userId ? { userId: data.userId } : {}),
+                entityType: data.entityType ?? null,
+                entityId: data.entityId ?? null,
+                userId: data.userId ?? null,
                 isRead: false,
             },
         });
@@ -31,7 +31,7 @@ export class NotificationService {
      * Create a broadcast notification (for all users)
      */
     async createBroadcast(data: Omit<CreateNotificationData, 'userId'>) {
-        return this.create({ ...data, userId: null });
+        return this.create({ ...data, userId: undefined });
     }
 
     /**
@@ -43,8 +43,8 @@ export class NotificationService {
                 type: data.type,
                 title: data.title,
                 message: data.message,
-                ...(data.entityType ? { entityType: data.entityType } : {}),
-                ...(data.entityId ? { entityId: data.entityId } : {}),
+                entityType: data.entityType ?? null,
+                entityId: data.entityId ?? null,
                 userId,
                 isRead: false,
             })),
