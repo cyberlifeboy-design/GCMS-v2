@@ -16,6 +16,7 @@ import notificationRoutes from './modules/notifications/notification.routes';
 import announcementRoutes from './modules/announcements/announcements.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
+import { minioClient, BUCKETS } from './config/storage';
 import logger from './config/logger';
 
 dotenv.config();
@@ -76,6 +77,24 @@ app.get('/api/v1', (req: Request, res: Response) => {
             publicRequests: '/api/v1/public/requests',
         },
     });
+});
+
+// Storage proxy - serve MinIO files through the API
+const allowedBuckets = new Set(Object.values(BUCKETS));
+app.get('/api/v1/storage/:bucket/:filename', async (req: Request, res: Response) => {
+    const { bucket, filename } = req.params;
+    if (!allowedBuckets.has(bucket)) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    try {
+        const stat = await minioClient.statObject(bucket, filename);
+        res.setHeader('Content-Type', stat.metaData?.['content-type'] || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        const stream = await minioClient.getObject(bucket, filename);
+        stream.pipe(res);
+    } catch {
+        res.status(404).json({ error: 'File not found' });
+    }
 });
 
 // Mount routes

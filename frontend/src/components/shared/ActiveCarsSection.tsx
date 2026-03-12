@@ -42,8 +42,10 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
                     stadiumsApi.getAll(),
                     departmentsApi.getAll(),
                 ]);
-                setStadiums(stadiumsRes.data || []);
-                setDepartments(departmentsRes.data || []);
+                const stadiumData = stadiumsRes.data?.data || stadiumsRes.data;
+                setStadiums(Array.isArray(stadiumData) ? stadiumData : []);
+                const deptData = departmentsRes.data?.data || departmentsRes.data;
+                setDepartments(Array.isArray(deptData) ? deptData : []);
             } catch (e) {
                 console.error('Failed to load filter options:', e);
             }
@@ -114,12 +116,12 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
 
                     {/* Stadium Filter */}
                     {showStadiumFilter && (
-                        <Select value={filterStadium} onValueChange={setFilterStadium}>
+                        <Select value={filterStadium || 'all'} onValueChange={(v) => setFilterStadium(v === 'all' ? '' : v)}>
                             <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="All Stadiums" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Stadiums</SelectItem>
+                                <SelectItem value="all">All Stadiums</SelectItem>
                                 {stadiums.map((s) => (
                                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                                 ))}
@@ -128,12 +130,12 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
                     )}
 
                     {/* Department Filter */}
-                    <Select value={filterDepartment} onValueChange={setFilterDepartment}>
+                    <Select value={filterDepartment || 'all'} onValueChange={(v) => setFilterDepartment(v === 'all' ? '' : v)}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Departments" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Departments</SelectItem>
+                            <SelectItem value="all">All Departments</SelectItem>
                             {departments.map((d) => (
                                 <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                             ))}
@@ -141,12 +143,12 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
                     </Select>
 
                     {/* Car Type Filter */}
-                    <Select value={filterCarType} onValueChange={setFilterCarType}>
+                    <Select value={filterCarType || 'all'} onValueChange={(v) => setFilterCarType(v === 'all' ? '' : v)}>
                         <SelectTrigger className="w-[150px]">
                             <SelectValue placeholder="All Types" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Types</SelectItem>
+                            <SelectItem value="all">All Types</SelectItem>
                             <SelectItem value="4-Seater">4-Seater</SelectItem>
                             <SelectItem value="6-Seater">6-Seater</SelectItem>
                             <SelectItem value="Cargo">Cargo</SelectItem>

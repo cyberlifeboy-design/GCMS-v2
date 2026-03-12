@@ -40,7 +40,23 @@ export async function initializeMinIO(): Promise<void> {
             console.log(`✓ MinIO bucket exists: ${BUCKETS.INCIDENT_PHOTOS}`);
         }
 
-        // Bucket policy setup skipped for development - can be configured manually if needed
+        // Create maintenance photos bucket
+        const maintenanceExists = await minioClient.bucketExists(BUCKETS.MAINTENANCE_PHOTOS);
+        if (!maintenanceExists) {
+            await minioClient.makeBucket(BUCKETS.MAINTENANCE_PHOTOS, 'us-east-1');
+            console.log(`✓ Created MinIO bucket: ${BUCKETS.MAINTENANCE_PHOTOS}`);
+        } else {
+            console.log(`✓ MinIO bucket exists: ${BUCKETS.MAINTENANCE_PHOTOS}`);
+        }
+
+        // Create branding bucket
+        const brandingExists = await minioClient.bucketExists(BUCKETS.BRANDING);
+        if (!brandingExists) {
+            await minioClient.makeBucket(BUCKETS.BRANDING, 'us-east-1');
+            console.log(`✓ Created MinIO bucket: ${BUCKETS.BRANDING}`);
+        } else {
+            console.log(`✓ MinIO bucket exists: ${BUCKETS.BRANDING}`);
+        }
 
         console.log('✓ MinIO initialization complete');
     } catch (error) {
@@ -63,8 +79,8 @@ export async function uploadFile(
             'Content-Type': contentType,
         });
 
-        // Generate file URL
-        const url = `http://${process.env.MINIO_ENDPOINT || 'localhost'}:${process.env.MINIO_PORT || '9000'}/${bucket}/${fileName}`;
+        // Generate URL that routes through the backend storage proxy
+        const url = `/api/v1/storage/${bucket}/${fileName}`;
         return url;
     } catch (error) {
         console.error('File upload failed:', error);
