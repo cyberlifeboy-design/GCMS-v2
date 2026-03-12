@@ -621,6 +621,7 @@ export class ReportsController {
                     role: user.role,
                     stadium: user.stadium?.name || '',
                     department: user.department?.name || '',
+                    deptCode: user.department?.code || '',
                     status: user.isActive ? 'Active' : 'Inactive',
                     assignedCarts: user.assignedCarts,
                     checkIns: user.activitySummary.totalCheckIns,

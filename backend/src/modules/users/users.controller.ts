@@ -90,6 +90,12 @@ const updatePreferencesSchema = z.object({
             includeStatus: z.boolean().optional(),
         }).optional(),
     }).optional(),
+    emailNotifications: z.object({
+        maintenance: z.boolean().optional(),
+        handover: z.boolean().optional(),
+        requests: z.boolean().optional(),
+        assignments: z.boolean().optional(),
+    }).optional(),
 });
 
 export class UsersController {

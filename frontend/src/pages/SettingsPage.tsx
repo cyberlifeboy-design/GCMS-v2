@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Upload, Image, FileSpreadsheet, FileText, File, Link, Copy, Check, Bell, Clock, ToggleLeft, ToggleRight, Megaphone, Mail } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
+import { Loader2, Save, Upload, Image, FileSpreadsheet, FileText, File, Link, Copy, Check, Bell, Clock, ToggleLeft, ToggleRight, Megaphone, Mail, Sun, Moon, Monitor, ChevronDown, ChevronUp } from 'lucide-react';
+import { useAuthStore, ExportPreferences } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface Settings {
     tournamentName?: string;
@@ -56,6 +58,42 @@ export function SettingsPage() {
         handover: true,
         requests: true,
         assignments: true,
+    });
+
+    // Granular export preferences
+    const defaultExportPrefs: ExportPreferences = {
+        fleet: { enabled: true, includeCarNumber: true, includeStatus: true, includeAssignment: true, includeStadium: true, includeDepartment: true },
+        handover: { enabled: true, includeCarNumber: true, includeUser: true, includeAction: true, includeTimestamp: true, includeNotes: true },
+        maintenance: { enabled: true, includeCarNumber: true, includeIssue: true, includeStatus: true, includeReporter: true, includeDates: true },
+        request: { enabled: true, includeRequester: true, includeDepartment: true, includeStadium: true, includeQuantities: true, includeStatus: true, includeNotes: true },
+        users: { enabled: true, includeName: true, includeEmail: true, includeRole: true, includeStadium: true, includeDepartment: true, includeStatus: true },
+        department: { enabled: true, includeName: true, includeCode: true, includeStadium: true, includeFocalPoint: true },
+        stadium: { enabled: true, includeName: true, includeCode: true, includeLocation: true, includeStatus: true },
+    };
+
+    const [exportPrefs, setExportPrefs] = useState<ExportPreferences>(() => {
+        if (user?.exportPreferences) {
+            try {
+                const prefs = typeof user.exportPreferences === 'string'
+                    ? JSON.parse(user.exportPreferences)
+                    : user.exportPreferences;
+                return { ...defaultExportPrefs, ...prefs };
+            } catch {
+                return defaultExportPrefs;
+            }
+        }
+        return defaultExportPrefs;
+    });
+
+    // Expanded states for collapsible sections
+    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+        fleet: true,
+        handover: true,
+        maintenance: true,
+        request: true,
+        users: false,
+        department: false,
+        stadium: false,
     });
 
     // System settings
@@ -139,7 +177,10 @@ export function SettingsPage() {
         setSavingPreferences(true);
         setPreferencesSaved(false);
         try {
-            await usersApi.updatePreferences({ exportFormat });
+            await usersApi.updatePreferences({
+                exportFormat,
+                emailNotifications
+            });
             updateExportFormat(exportFormat);
             setPreferencesSaved(true);
             setTimeout(() => setPreferencesSaved(false), 3000);
@@ -277,7 +318,88 @@ export function SettingsPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="flex items-center gap-4">
+                    </CardContent>
+                </Card>
+
+                {/* Notification Preferences */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Mail className="w-5 h-5" />
+                            Email Notification Preferences
+                        </CardTitle>
+                        <CardDescription>
+                            Choose which notifications you want to receive via email
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="maintenanceNotifications">Maintenance Notifications</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Receive emails when new maintenance issues are reported
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="maintenanceNotifications"
+                                    checked={emailNotifications.maintenance}
+                                    onCheckedChange={(checked) =>
+                                        setEmailNotifications(prev => ({ ...prev, maintenance: checked }))
+                                    }
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="handoverNotifications">Handover Notifications</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Receive emails for check-in and check-out events
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="handoverNotifications"
+                                    checked={emailNotifications.handover}
+                                    onCheckedChange={(checked) =>
+                                        setEmailNotifications(prev => ({ ...prev, handover: checked }))
+                                    }
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="requestNotifications">Request Notifications</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Receive emails for car request approvals and rejections
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="requestNotifications"
+                                    checked={emailNotifications.requests}
+                                    onCheckedChange={(checked) =>
+                                        setEmailNotifications(prev => ({ ...prev, requests: checked }))
+                                    }
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="assignmentNotifications">Assignment Notifications</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Receive emails when cart assignments change
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="assignmentNotifications"
+                                    checked={emailNotifications.assignments}
+                                    onCheckedChange={(checked) =>
+                                        setEmailNotifications(prev => ({ ...prev, assignments: checked }))
+                                    }
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 pt-2">
                             <Button type="submit" disabled={savingPreferences}>
                                 {savingPreferences ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                                 Save Preferences
@@ -287,6 +409,54 @@ export function SettingsPage() {
                     </CardContent>
                 </Card>
             </form>
+
+            {/* Appearance - Theme Settings */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Sun className="w-5 h-5" />
+                        Appearance
+                    </CardTitle>
+                    <CardDescription>Customize your visual theme</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                        <Label>Theme</Label>
+                        <p className="text-sm text-muted-foreground">
+                            Choose between light and dark mode, or use your system preference.
+                        </p>
+                        <div className="flex gap-2">
+                            <Button
+                                variant={theme === 'light' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setTheme('light')}
+                                className="flex-1 justify-start"
+                            >
+                                <Sun className="w-4 h-4 mr-2" />
+                                Light
+                            </Button>
+                            <Button
+                                variant={theme === 'dark' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setTheme('dark')}
+                                className="flex-1 justify-start"
+                            >
+                                <Moon className="w-4 h-4 mr-2" />
+                                Dark
+                            </Button>
+                            <Button
+                                variant={theme === 'system' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setTheme('system')}
+                                className="flex-1 justify-start"
+                            >
+                                <Monitor className="w-4 h-4 mr-2" />
+                                System
+                            </Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* System Settings (SuperAdmin only) */}
             {isSuperAdmin && (

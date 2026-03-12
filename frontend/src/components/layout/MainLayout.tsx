@@ -63,7 +63,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const { user, logout } = useAuthStore();
     const location = useLocation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [branding, setBranding] = useState<{ tournamentName?: string; headerUrl?: string; footerUrl?: string }>({});
+    const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string }>({});
 
     useEffect(() => {
         const loadBranding = async () => {
