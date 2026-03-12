@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { notificationsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bell, CheckCheck, Wrench, ArrowRightLeft, Car, UserPlus, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 interface Notification {
     id: string;
@@ -35,10 +37,10 @@ const typeLinks: Record<string, string> = {
     RequestRejected: '/requests',
 };
 
-// Suppress unused variable warning - typeLinks may be used for navigation in future
-void typeLinks;
+
 
 export function NotificationCenterPage() {
+    const navigate = useNavigate();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -104,12 +106,16 @@ export function NotificationCenterPage() {
         if (diffMins < 60) return `${diffMins}m ago`;
         if (diffHours < 24) return `${diffHours}h ago`;
         if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
+        return formatDate(dateStr);
     };
 
     const handleNotificationClick = (notification: Notification) => {
         if (!notification.isRead) {
             markAsRead(notification.id);
+        }
+        const link = typeLinks[notification.type];
+        if (link) {
+            navigate(link);
         }
     };
 
@@ -163,11 +169,10 @@ export function NotificationCenterPage() {
                                 <div
                                     key={notification.id}
                                     onClick={() => handleNotificationClick(notification)}
-                                    className={`flex gap-4 p-4 rounded-lg cursor-pointer transition-colors ${
-                                        !notification.isRead
-                                            ? 'bg-primary/5 hover:bg-primary/10'
-                                            : 'hover:bg-muted'
-                                    }`}
+                                    className={`flex gap-4 p-4 rounded-lg cursor-pointer transition-colors ${!notification.isRead
+                                        ? 'bg-primary/5 hover:bg-primary/10'
+                                        : 'hover:bg-muted'
+                                        }`}
                                 >
                                     <div className="flex-shrink-0 mt-1">
                                         {typeIcons[notification.type] || <Bell className="w-5 h-5 text-gray-500" />}

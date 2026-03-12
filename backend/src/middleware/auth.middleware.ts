@@ -9,6 +9,7 @@ export interface AuthRequest extends Request {
         email: string;
         role: string;
         stadiumId?: string;
+        departmentId?: string;
     };
 }
 
@@ -35,11 +36,12 @@ export const authenticate = async (
             email: string;
             role: string;
             stadiumId?: string;
+            departmentId?: string;
         };
 
         const user = await prisma.user.findUnique({
             where: { id: decoded.userId },
-            select: { id: true, email: true, role: true, stadiumId: true, isActive: true },
+            select: { id: true, email: true, role: true, stadiumId: true, departmentId: true, isActive: true },
         });
 
         if (!user) {
@@ -59,6 +61,7 @@ export const authenticate = async (
             email: user.email,
             role: user.role,
             stadiumId: user.stadiumId || undefined,
+            departmentId: user.departmentId || undefined,
         };
 
         next();

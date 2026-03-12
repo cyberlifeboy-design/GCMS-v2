@@ -9,6 +9,16 @@ export interface CreateNotificationData {
     userId?: string; // null for broadcast notifications
 }
 
+const TYPE_TO_PREFERENCE_MAP: Record<string, string> = {
+    IssueReported: 'maintenance',
+    CheckIn: 'handover',
+    CheckOut: 'handover',
+    CarRequest: 'requests',
+    RequestApproved: 'requests',
+    RequestRejected: 'requests',
+    AssignmentChange: 'assignments',
+};
+
 export class NotificationService {
     /**
      * Create a notification
@@ -28,18 +38,29 @@ export class NotificationService {
     }
 
     /**
-     * Create a broadcast notification (for all users)
+     * Create a broadcast notification (for all active users)
+     * Fans out individual notifications to each active user for proper per-user read tracking
      */
     async createBroadcast(data: Omit<CreateNotificationData, 'userId'>) {
-        return this.create({ ...data, userId: undefined });
+        const users = await prisma.user.findMany({
+            where: { isActive: true },
+            select: { id: true },
+        });
+        if (users.length === 0) return { count: 0 };
+        return this.createForUsers(data, users.map(u => u.id));
     }
 
     /**
      * Create notifications for specific users (e.g., all admins)
      */
     async createForUsers(data: Omit<CreateNotificationData, 'userId'>, userIds: string[]) {
+        // Filter users based on their notification preferences
+        const filteredUserIds = await this.filterUsersByPreference(data.type, userIds);
+
+        if (filteredUserIds.length === 0) return { count: 0 };
+
         const notifications = await prisma.notification.createMany({
-            data: userIds.map(userId => ({
+            data: filteredUserIds.map(userId => ({
                 type: data.type,
                 title: data.title,
                 message: data.message,
@@ -53,6 +74,33 @@ export class NotificationService {
     }
 
     /**
+     * Filter users based on their notification preferences
+     */
+    private async filterUsersByPreference(type: string, userIds: string[]): Promise<string[]> {
+        const category = TYPE_TO_PREFERENCE_MAP[type];
+        if (!category) return userIds; // Default to send if no category mapping
+
+        const users = await prisma.user.findMany({
+            where: {
+                id: { in: userIds },
+                isActive: true,
+            },
+            select: {
+                id: true,
+                exportPreferences: true,
+            },
+        });
+
+        return users.filter(user => {
+            const preferences = user.exportPreferences as any;
+            if (!preferences || !preferences.emailNotifications) return true; // Default to true if not set
+
+            const categoryPreference = preferences.emailNotifications[category];
+            return categoryPreference !== false; // Only filter out if explicitly set to false
+        }).map(user => user.id);
+    }
+
+    /**
      * Create notifications for all users with specific roles
      */
     async createForRoles(data: Omit<CreateNotificationData, 'userId'>, roles: string[], stadiumId?: string) {
@@ -60,7 +108,7 @@ export class NotificationService {
         if (stadiumId) {
             where.stadiumId = stadiumId;
         }
-        
+
         const users = await prisma.user.findMany({
             where,
             select: { id: true },
@@ -72,39 +120,23 @@ export class NotificationService {
     }
 
     /**
-     * Get notifications for a user (includes broadcast notifications)
+     * Get notifications for a user
      */
     async getForUser(userId: string, page: number = 1, limit: number = 20) {
         const skip = (page - 1) * limit;
 
+        const where = { userId };
+
         const [data, total, unreadCount] = await Promise.all([
             prisma.notification.findMany({
-                where: {
-                    OR: [
-                        { userId },
-                        { userId: null }, // Broadcast notifications
-                    ],
-                },
+                where,
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take: limit,
             }),
+            prisma.notification.count({ where }),
             prisma.notification.count({
-                where: {
-                    OR: [
-                        { userId },
-                        { userId: null },
-                    ],
-                },
-            }),
-            prisma.notification.count({
-                where: {
-                    OR: [
-                        { userId },
-                        { userId: null },
-                    ],
-                    isRead: false,
-                },
+                where: { ...where, isRead: false },
             }),
         ]);
 
@@ -119,28 +151,12 @@ export class NotificationService {
      * Mark a notification as read
      */
     async markAsRead(notificationId: string, userId: string) {
-        // For broadcast notifications, we need to create a read record
-        // But for simplicity, we'll just mark it if it belongs to the user
         const notification = await prisma.notification.findUnique({
             where: { id: notificationId },
         });
 
         if (!notification) {
             throw new Error('Notification not found');
-        }
-
-        // If it's a broadcast notification (userId is null), we need special handling
-        // For now, we'll just mark it if userId matches or it's a broadcast
-        if (notification.userId === null) {
-            // For broadcast notifications, create a user-specific read copy
-            // Actually, let's use a simpler approach - just update the existing one
-            // This means broadcast notifications are marked read for everyone when one person reads
-            // A better approach would be to have a separate ReadReceipt table, but for simplicity:
-            // We'll mark it as read (affects all users) - this is a limitation
-            return prisma.notification.update({
-                where: { id: notificationId },
-                data: { isRead: true },
-            });
         }
 
         if (notification.userId !== userId) {
@@ -159,10 +175,7 @@ export class NotificationService {
     async markAllAsRead(userId: string) {
         return prisma.notification.updateMany({
             where: {
-                OR: [
-                    { userId },
-                    { userId: null },
-                ],
+                userId,
                 isRead: false,
             },
             data: { isRead: true },
@@ -174,7 +187,7 @@ export class NotificationService {
      */
     async getSummaryStats(stadiumId?: string) {
         const where: any = {};
-        
+
         // For stadium-scoped queries, we'd need to join with related entities
         // For simplicity, we'll return counts without stadium filter for now
 

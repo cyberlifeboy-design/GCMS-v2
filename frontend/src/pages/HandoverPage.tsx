@@ -15,6 +15,7 @@ import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, Users, Building2, 
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
+import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
 interface HandoverLog {
     id: string;
@@ -404,8 +405,8 @@ export function HandoverPage() {
                     {/* Handover Duration Settings (SuperAdmin only) */}
                     {currentUser?.role === 'SuperAdmin' && (
                         <Card>
-                            <CardHeader 
-                                className="cursor-pointer select-none" 
+                            <CardHeader
+                                className="cursor-pointer select-none"
                                 onClick={() => setSettingsExpanded(!settingsExpanded)}
                             >
                                 <div className="flex items-center justify-between">
@@ -587,8 +588,8 @@ export function HandoverPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : poolDashboard.stadiums.map(stadium => {
-                                        const utilization = stadium.total > 0 
-                                            ? Math.round((stadium.dispatched / stadium.total) * 100) 
+                                        const utilization = stadium.total > 0
+                                            ? Math.round((stadium.dispatched / stadium.total) * 100)
                                             : 0;
                                         return (
                                             <TableRow key={stadium.stadiumId}>
@@ -617,7 +618,7 @@ export function HandoverPage() {
                                                 <TableCell className="text-center">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                            <div 
+                                                            <div
                                                                 className="h-full bg-amber-500 rounded-full"
                                                                 style={{ width: `${utilization}%` }}
                                                             />
@@ -670,7 +671,7 @@ export function HandoverPage() {
                                             <TableCell>{activity.userName}</TableCell>
                                             <TableCell className="text-sm">{activity.stadiumName}</TableCell>
                                             <TableCell className="text-sm text-muted-foreground">
-                                                {new Date(activity.timestamp).toLocaleString()}
+                                                {formatDateTime(activity.timestamp)}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -741,7 +742,7 @@ export function HandoverPage() {
                                                 <Badge className={actionColors[log.action]}>{actionLabels[log.action]}</Badge>
                                             </TableCell>
                                             <TableCell>{log.user?.name}</TableCell>
-                                            <TableCell className="text-sm">{new Date(log.createdAt).toLocaleString()}</TableCell>
+                                            <TableCell className="text-sm">{formatDateTime(log.createdAt)}</TableCell>
                                             <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
                                                 {log.issueDescription || log.conditionNotes || '—'}
                                             </TableCell>

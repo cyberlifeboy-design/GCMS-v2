@@ -34,7 +34,7 @@ export class RequestsService {
      */
     async createRequest(data: CreateCarRequestData) {
         const requestToken = this.generateRequestToken();
-        
+
         const request = await prisma.carRequest.create({
             data: {
                 requesterName: data.requesterName,
@@ -120,7 +120,7 @@ export class RequestsService {
                 where,
                 include: {
                     stadium: { select: { id: true, name: true } },
-                    department: { select: { id: true, name: true } },
+                    department: { select: { id: true, name: true, code: true } },
                     reviewedBy: { select: { id: true, name: true } },
                 },
                 orderBy: { createdAt: 'desc' },

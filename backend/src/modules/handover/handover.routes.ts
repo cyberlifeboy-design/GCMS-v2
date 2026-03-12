@@ -23,4 +23,10 @@ router.post('/bulk-checkin', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(
 // GET /history — full log (RBAC scoped inside controller)
 router.get('/history', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getHistory);
 
+// Pool management
+router.get('/pool-status', requireRole('SuperAdmin', 'Admin', 'Observer'), HandoverController.getPoolStatus);
+router.get('/pool-dashboard', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getPoolDashboard);
+router.get('/available/:stadiumId', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getAvailableInPool);
+router.get('/in-use/:stadiumId', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getInUse);
+
 export default router;

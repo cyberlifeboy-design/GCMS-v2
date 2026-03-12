@@ -260,21 +260,21 @@ export function SettingsPage() {
     };
 
     const updateExportPref = (
-        reportType: keyof ExportPreferences,
+        reportType: keyof Omit<ExportPreferences, 'theme'>,
         field: string,
         value: boolean
     ) => {
         setExportPrefs(prev => ({
             ...prev,
             [reportType]: {
-                ...prev[reportType],
+                ...(prev[reportType] as any),
                 [field]: value,
             },
         }));
     };
 
-    const selectAllInReport = (reportType: keyof ExportPreferences, checked: boolean) => {
-        const report = exportPrefs[reportType];
+    const selectAllInReport = (reportType: keyof Omit<ExportPreferences, 'theme'>, checked: boolean) => {
+        const report = exportPrefs[reportType] as any;
         if (!report) return;
         const fields = Object.keys(report).filter(k => k !== 'enabled') as string[];
         const updates: Record<string, boolean> = { enabled: checked };
@@ -286,55 +286,69 @@ export function SettingsPage() {
     };
 
     const reportTypes: { key: keyof ExportPreferences; label: string; fields: { key: string; label: string }[] }[] = [
-        { key: 'fleet', label: 'Fleet Report', fields: [
-            { key: 'includeCarNumber', label: 'Car Number' },
-            { key: 'includeStatus', label: 'Status' },
-            { key: 'includeAssignment', label: 'Assignment' },
-            { key: 'includeStadium', label: 'Stadium' },
-            { key: 'includeDepartment', label: 'Department' },
-        ]},
-        { key: 'handover', label: 'Handover Report', fields: [
-            { key: 'includeCarNumber', label: 'Car Number' },
-            { key: 'includeUser', label: 'User' },
-            { key: 'includeAction', label: 'Action' },
-            { key: 'includeTimestamp', label: 'Timestamp' },
-            { key: 'includeNotes', label: 'Notes' },
-        ]},
-        { key: 'maintenance', label: 'Maintenance Report', fields: [
-            { key: 'includeCarNumber', label: 'Car Number' },
-            { key: 'includeIssue', label: 'Issue Description' },
-            { key: 'includeStatus', label: 'Status' },
-            { key: 'includeReporter', label: 'Reporter' },
-            { key: 'includeDates', label: 'Dates' },
-        ]},
-        { key: 'request', label: 'Request Report', fields: [
-            { key: 'includeRequester', label: 'Requester' },
-            { key: 'includeDepartment', label: 'Department' },
-            { key: 'includeStadium', label: 'Stadium' },
-            { key: 'includeQuantities', label: 'Quantities' },
-            { key: 'includeStatus', label: 'Status' },
-            { key: 'includeNotes', label: 'Notes' },
-        ]},
-        { key: 'users', label: 'Users Report', fields: [
-            { key: 'includeName', label: 'Name' },
-            { key: 'includeEmail', label: 'Email' },
-            { key: 'includeRole', label: 'Role' },
-            { key: 'includeStadium', label: 'Stadium' },
-            { key: 'includeDepartment', label: 'Department' },
-            { key: 'includeStatus', label: 'Status' },
-        ]},
-        { key: 'department', label: 'Department Report', fields: [
-            { key: 'includeName', label: 'Name' },
-            { key: 'includeCode', label: 'Code' },
-            { key: 'includeStadium', label: 'Stadium' },
-            { key: 'includeFocalPoint', label: 'Focal Point' },
-        ]},
-        { key: 'stadium', label: 'Stadium Report', fields: [
-            { key: 'includeName', label: 'Name' },
-            { key: 'includeCode', label: 'Code' },
-            { key: 'includeLocation', label: 'Location' },
-            { key: 'includeStatus', label: 'Status' },
-        ]},
+        {
+            key: 'fleet', label: 'Fleet Report', fields: [
+                { key: 'includeCarNumber', label: 'Car Number' },
+                { key: 'includeStatus', label: 'Status' },
+                { key: 'includeAssignment', label: 'Assignment' },
+                { key: 'includeStadium', label: 'Stadium' },
+                { key: 'includeDepartment', label: 'Department' },
+            ]
+        },
+        {
+            key: 'handover', label: 'Handover Report', fields: [
+                { key: 'includeCarNumber', label: 'Car Number' },
+                { key: 'includeUser', label: 'User' },
+                { key: 'includeAction', label: 'Action' },
+                { key: 'includeTimestamp', label: 'Timestamp' },
+                { key: 'includeNotes', label: 'Notes' },
+            ]
+        },
+        {
+            key: 'maintenance', label: 'Maintenance Report', fields: [
+                { key: 'includeCarNumber', label: 'Car Number' },
+                { key: 'includeIssue', label: 'Issue Description' },
+                { key: 'includeStatus', label: 'Status' },
+                { key: 'includeReporter', label: 'Reporter' },
+                { key: 'includeDates', label: 'Dates' },
+            ]
+        },
+        {
+            key: 'request', label: 'Request Report', fields: [
+                { key: 'includeRequester', label: 'Requester' },
+                { key: 'includeDepartment', label: 'Department' },
+                { key: 'includeStadium', label: 'Stadium' },
+                { key: 'includeQuantities', label: 'Quantities' },
+                { key: 'includeStatus', label: 'Status' },
+                { key: 'includeNotes', label: 'Notes' },
+            ]
+        },
+        {
+            key: 'users', label: 'Users Report', fields: [
+                { key: 'includeName', label: 'Name' },
+                { key: 'includeEmail', label: 'Email' },
+                { key: 'includeRole', label: 'Role' },
+                { key: 'includeStadium', label: 'Stadium' },
+                { key: 'includeDepartment', label: 'Department' },
+                { key: 'includeStatus', label: 'Status' },
+            ]
+        },
+        {
+            key: 'department', label: 'Department Report', fields: [
+                { key: 'includeName', label: 'Name' },
+                { key: 'includeCode', label: 'Code' },
+                { key: 'includeStadium', label: 'Stadium' },
+                { key: 'includeFocalPoint', label: 'Focal Point' },
+            ]
+        },
+        {
+            key: 'stadium', label: 'Stadium Report', fields: [
+                { key: 'includeName', label: 'Name' },
+                { key: 'includeCode', label: 'Code' },
+                { key: 'includeLocation', label: 'Location' },
+                { key: 'includeStatus', label: 'Status' },
+            ]
+        },
     ];
 
     const handleSave = async (e: React.FormEvent) => {
@@ -505,9 +519,9 @@ export function SettingsPage() {
                                         <div className="flex items-center gap-3">
                                             <Checkbox
                                                 id={`${report.key}-enabled`}
-                                                checked={exportPrefs[report.key]?.enabled ?? true}
+                                                checked={(exportPrefs[report.key] as any)?.enabled ?? true}
                                                 onCheckedChange={(checked) =>
-                                                    selectAllInReport(report.key, checked as boolean)
+                                                    selectAllInReport(report.key as any, checked as boolean)
                                                 }
                                                 onClick={(e) => e.stopPropagation()}
                                             />
@@ -528,9 +542,9 @@ export function SettingsPage() {
                                                     <div key={field.key} className="flex items-center gap-2">
                                                         <Checkbox
                                                             id={`${report.key}-${field.key}`}
-                                                            checked={exportPrefs[report.key]?.[field.key as keyof typeof exportPrefs.fleet] ?? true}
+                                                            checked={(exportPrefs[report.key] as any)?.[field.key] ?? true}
                                                             onCheckedChange={(checked) =>
-                                                                updateExportPref(report.key, field.key, checked as boolean)
+                                                                updateExportPref(report.key as any, field.key, checked as boolean)
                                                             }
                                                         />
                                                         <Label
@@ -658,7 +672,16 @@ export function SettingsPage() {
                             <Button
                                 variant={theme === 'light' ? 'default' : 'outline'}
                                 size="sm"
-                                onClick={() => setTheme('light')}
+                                onClick={async () => {
+                                    setTheme('light');
+                                    try {
+                                        await usersApi.updatePreferences({
+                                            exportPreferences: { ...exportPrefs, theme: 'light' }
+                                        });
+                                    } catch (err) {
+                                        console.error('Failed to sync theme preference', err);
+                                    }
+                                }}
                                 className="flex-1 justify-start"
                             >
                                 <Sun className="w-4 h-4 mr-2" />
@@ -667,7 +690,16 @@ export function SettingsPage() {
                             <Button
                                 variant={theme === 'dark' ? 'default' : 'outline'}
                                 size="sm"
-                                onClick={() => setTheme('dark')}
+                                onClick={async () => {
+                                    setTheme('dark');
+                                    try {
+                                        await usersApi.updatePreferences({
+                                            exportPreferences: { ...exportPrefs, theme: 'dark' }
+                                        });
+                                    } catch (err) {
+                                        console.error('Failed to sync theme preference', err);
+                                    }
+                                }}
                                 className="flex-1 justify-start"
                             >
                                 <Moon className="w-4 h-4 mr-2" />
@@ -676,7 +708,16 @@ export function SettingsPage() {
                             <Button
                                 variant={theme === 'system' ? 'default' : 'outline'}
                                 size="sm"
-                                onClick={() => setTheme('system')}
+                                onClick={async () => {
+                                    setTheme('system');
+                                    try {
+                                        await usersApi.updatePreferences({
+                                            exportPreferences: { ...exportPrefs, theme: 'system' }
+                                        });
+                                    } catch (err) {
+                                        console.error('Failed to sync theme preference', err);
+                                    }
+                                }}
                                 className="flex-1 justify-start"
                             >
                                 <Monitor className="w-4 h-4 mr-2" />
@@ -933,7 +974,7 @@ export function SettingsPage() {
                                         <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
                                             <Clock className="w-4 h-4 text-muted-foreground" />
                                             <span className="font-mono text-sm" suppressHydrationWarning>
-                                                {new Date().toLocaleString('en-US', { 
+                                                {new Date().toLocaleString('en-US', {
                                                     timeZone: timezone || 'UTC',
                                                     year: 'numeric',
                                                     month: '2-digit',

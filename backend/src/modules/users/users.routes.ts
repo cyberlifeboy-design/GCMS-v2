@@ -12,6 +12,7 @@ router.use(authenticate);
 router.get('/', requireRole('SuperAdmin', 'Admin'), UsersController.getAll);
 
 // Get specific user
+router.get('/export', requireRole('SuperAdmin', 'Admin'), UsersController.exportCsv);
 router.get('/:id', requireRole('SuperAdmin', 'Admin'), UsersController.getById);
 
 // Create single user

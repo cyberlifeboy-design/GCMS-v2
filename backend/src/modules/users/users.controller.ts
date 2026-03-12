@@ -355,7 +355,7 @@ export class UsersController {
                 return;
             }
             const validatedData = updatePreferencesSchema.parse(req.body);
-            
+
             // If emailNotifications is provided, merge it into exportPreferences
             const updateData: any = { ...validatedData };
             if (validatedData.emailNotifications) {
@@ -365,7 +365,7 @@ export class UsersController {
                 };
                 delete updateData.emailNotifications;
             }
-            
+
             const user = await usersService.update(userId, updateData);
             res.status(200).json(user);
         } catch (error) {
@@ -374,6 +374,53 @@ export class UsersController {
             } else {
                 res.status(500).json({ error: 'Failed to update preferences' });
             }
+        }
+    }
+
+    static async exportCsv(req: AuthRequest, res: Response) {
+        try {
+            let filterStadiumId: string | undefined;
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const users = await usersService.getAll({
+                stadiumId: filterStadiumId,
+            }, { limit: 10000 });
+
+            let userData = users.data;
+            // Admin sees only FA users and themselves
+            if (req.user?.role === 'Admin') {
+                userData = userData.filter((u: any) =>
+                    u.role === 'FA' || u.id === req.user!.userId
+                );
+            }
+
+            const headers = ['Name', 'Email', 'Phone', 'Role', 'Accreditation Number', 'Status', 'Blocked', 'Stadium', 'Department', 'Assign All Stadiums', 'Created At'];
+            const rows = userData.map((u: any) => [
+                u.name,
+                u.email,
+                u.phone || '',
+                u.role,
+                u.accreditationNumber || '',
+                u.isActive ? 'Active' : 'Inactive',
+                u.isBlocked ? 'Yes' : 'No',
+                u.stadium?.name || '',
+                u.department?.name || '',
+                u.assignAllStadiums ? 'Yes' : 'No',
+                new Date(u.createdAt).toLocaleDateString(),
+            ]);
+
+            const csvContent = [
+                headers.join(','),
+                ...rows.map((row: string[]) => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="users_export_${new Date().toISOString().split('T')[0]}.csv"`);
+            res.status(200).send(csvContent);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export users' });
         }
     }
 }

@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
+import { formatDate } from '@/lib/dateUtils';
 
 const downloadBlob = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -161,7 +162,7 @@ export function DashboardPage() {
                 <div>
                     <h1 className="text-3xl font-bold">Dashboard</h1>
                     <p className="text-muted-foreground mt-1">
-                        Site: <span className="font-semibold">{user?.stadiumId ? 'Venue Scoped' : 'All Venues'}</span> — 
+                        Site: <span className="font-semibold">{user?.stadiumId ? 'Venue Scoped' : 'All Venues'}</span> —
                         Role: <span className="text-xs uppercase px-1.5 py-0.5 bg-muted rounded">{user?.role}</span>
                     </p>
                 </div>
@@ -223,7 +224,7 @@ export function DashboardPage() {
                                             <p className="text-xs text-muted-foreground">total carts</p>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Fleet Breakdown by Type */}
                                     <div className="grid grid-cols-4 gap-2 mb-3">
                                         <div className="bg-blue-100 dark:bg-blue-900/30 rounded p-2 text-center">
@@ -251,7 +252,7 @@ export function DashboardPage() {
                                             <p className="text-xs text-purple-600 dark:text-purple-400">Accessible</p>
                                         </div>
                                     </div>
-                                    
+
                                     {/* FA Count */}
                                     <div className="flex items-center justify-between pt-2 border-t border-border">
                                         <div className="flex items-center gap-2">
@@ -379,9 +380,13 @@ export function DashboardPage() {
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={stats?.activityTimeline}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="date" tickFormatter={(str) => new Date(str).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })} />
-                            <YAxis />
-                            <Tooltip labelFormatter={(label) => new Date(label).toLocaleDateString()} />
+                            <XAxis
+                                dataKey="date"
+                                tickFormatter={(val) => formatDate(val)}
+                                tick={{ fontSize: 12 }}
+                            />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Tooltip labelFormatter={(label) => formatDate(label)} />
                             <Legend />
                             <Line type="monotone" dataKey="checkIn" name="Check-Ins" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} />
                             <Line type="monotone" dataKey="checkOut" name="Check-Outs" stroke="#3b82f6" strokeWidth={2} />
@@ -399,7 +404,7 @@ export function DashboardPage() {
                 </CardHeader>
                 <CardContent className="pt-4">
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        <div 
+                        <div
                             className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                             onClick={() => navigate('/maintenance')}
                         >
@@ -409,7 +414,7 @@ export function DashboardPage() {
                             <p className="text-2xl font-bold">{notifStats?.openIssues || 0}</p>
                             <p className="text-xs text-muted-foreground text-center">Open Issues</p>
                         </div>
-                        <div 
+                        <div
                             className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                             onClick={() => navigate('/handover')}
                         >
@@ -419,7 +424,7 @@ export function DashboardPage() {
                             <p className="text-2xl font-bold">{notifStats?.checkIns || 0}</p>
                             <p className="text-xs text-muted-foreground text-center">Check-Ins</p>
                         </div>
-                        <div 
+                        <div
                             className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                             onClick={() => navigate('/handover')}
                         >
@@ -429,7 +434,7 @@ export function DashboardPage() {
                             <p className="text-2xl font-bold">{notifStats?.checkOuts || 0}</p>
                             <p className="text-xs text-muted-foreground text-center">Check-Outs</p>
                         </div>
-                        <div 
+                        <div
                             className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                             onClick={() => navigate('/requests')}
                         >
@@ -439,7 +444,7 @@ export function DashboardPage() {
                             <p className="text-2xl font-bold">{notifStats?.carRequests || 0}</p>
                             <p className="text-xs text-muted-foreground text-center">Car Requests</p>
                         </div>
-                        <div 
+                        <div
                             className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                             onClick={() => navigate('/requests?status=Pending')}
                         >
@@ -449,7 +454,7 @@ export function DashboardPage() {
                             <p className="text-2xl font-bold">{notifStats?.pendingRequests || 0}</p>
                             <p className="text-xs text-muted-foreground text-center">Pending Requests</p>
                         </div>
-                        <div 
+                        <div
                             className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                             onClick={() => navigate('/maintenance?status=Open')}
                         >

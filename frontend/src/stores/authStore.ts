@@ -59,6 +59,7 @@ export interface ExportPreferences {
         includeLocation?: boolean;
         includeStatus?: boolean;
     };
+    theme?: 'light' | 'dark' | 'system';
 }
 
 export interface AuthUser {

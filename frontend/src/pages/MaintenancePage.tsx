@@ -12,6 +12,7 @@ import { Plus, Search, Download, Loader2, Wrench, CheckCircle, AlertTriangle, Cl
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
+import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
 interface MaintenanceLog {
     id: string;
@@ -388,8 +389,8 @@ export function MaintenancePage() {
                                                 {issue.reportedBy?.phone && <span className="text-[10px] text-muted-foreground">{issue.reportedBy.phone} ({issue.reportedBy.role})</span>}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-sm">{dateObj?.toLocaleDateString() || '—'}</TableCell>
-                                        <TableCell className="text-sm">{dateObj?.toLocaleTimeString() || '—'}</TableCell>
+                                        <TableCell className="text-sm">{formatDate(reportedDate)}</TableCell>
+                                        <TableCell className="text-sm">{formatDateTime(reportedDate).split(' ')[1] || '—'}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className="text-xs">{issue.fleet?.stadium?.code || '—'}</Badge>
                                         </TableCell>
@@ -520,11 +521,11 @@ export function MaintenancePage() {
                                                     <span className="text-sm font-semibold">{h.issueDescription}</span>
                                                     <div className="flex items-center gap-2">
                                                         <Badge variant="outline" className="text-[10px]">{h.fleet?.stadium?.code || '—'}</Badge>
-                                                        <Badge variant="outline" className="text-[10px]">{dateObj?.toLocaleDateString()}</Badge>
+                                                        <Badge variant="outline" className="text-[10px]">{formatDateTime(reportedDate)}</Badge>
                                                     </div>
                                                 </div>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Reported by {h.reportedBy?.name} ({h.reportedBy?.role}) • {dateObj?.toLocaleTimeString()}
+                                                    Reported by {h.reportedBy?.name} ({h.reportedBy?.role}) • {formatDateTime(reportedDate)}
                                                 </p>
                                                 {h.photosUrls && h.photosUrls.length > 0 && (
                                                     <div className="flex gap-2 mt-2">
@@ -538,7 +539,7 @@ export function MaintenancePage() {
                                                 {h.status === 'Resolved' && (
                                                     <div className="mt-2 p-2 bg-green-50 border border-green-100 rounded text-xs text-green-800">
                                                         <strong>Resolved:</strong> {h.resolutionNotes}
-                                                        <div className="mt-1 text-[10px] text-green-600">Date: {h.resolvedAt ? new Date(h.resolvedAt).toLocaleDateString() : '—'}</div>
+                                                        <div className="mt-1 text-[10px] text-green-600">Date: {formatDateTime(h.resolvedAt)}</div>
                                                     </div>
                                                 )}
                                             </div>

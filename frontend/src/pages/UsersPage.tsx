@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight, Edit2, Download, Ban, CheckCircle, UserPlus } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
+import { formatDate } from '@/lib/dateUtils';
 
 interface User {
     id: string;
@@ -356,7 +357,7 @@ export function UsersPage() {
                 u.stadium?.name || '',
                 u.department?.name || '',
                 u.assignAllStadiums ? 'Yes' : 'No',
-                new Date(u.createdAt).toLocaleDateString(),
+                formatDate(u.createdAt),
             ]);
 
             const csvContent = [

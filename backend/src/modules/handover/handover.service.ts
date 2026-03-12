@@ -40,7 +40,7 @@ export class HandoverService {
         userId: string;
         conditionNotes?: string;
     }) {
-        const vehicle = await prisma.fleet.findUnique({ 
+        const vehicle = await prisma.fleet.findUnique({
             where: { id: data.fleetId },
             include: { stadium: true }
         });
@@ -63,7 +63,7 @@ export class HandoverService {
 
             await tx.fleet.update({
                 where: { id: data.fleetId },
-                data: { 
+                data: {
                     status: 'Dispatched',
                     assignedUserId: data.userId, // Track who has the cart
                 },
@@ -90,7 +90,7 @@ export class HandoverService {
         if (log) {
             const user = log.user;
             const stadiumId = log.fleet?.stadium?.id;
-            
+
             await notificationService.createForRoles(
                 {
                     type: 'CheckIn',
@@ -115,7 +115,7 @@ export class HandoverService {
         issueDescription?: string;
         photosUrls?: string[];
     }) {
-        const vehicle = await prisma.fleet.findUnique({ 
+        const vehicle = await prisma.fleet.findUnique({
             where: { id: data.fleetId },
             include: { stadium: true }
         });
@@ -142,7 +142,7 @@ export class HandoverService {
             const nextStatus = data.hasIssue ? 'Under Maintenance' : 'Available';
             await tx.fleet.update({
                 where: { id: data.fleetId },
-                data: { 
+                data: {
                     status: nextStatus,
                     assignedUserId: null, // Clear assignment when returned
                 },
@@ -221,6 +221,7 @@ export class HandoverService {
     async getHistory(filters: {
         stadiumId?: string;
         userId?: string;
+        departmentId?: string;
         fleetId?: string;
         action?: string;
     }, pagination?: { page?: number; limit?: number }) {
@@ -235,7 +236,11 @@ export class HandoverService {
         };
 
         if (filters.stadiumId) {
-            where.fleet = { stadiumId: filters.stadiumId };
+            where.fleet = { ...where.fleet, stadiumId: filters.stadiumId };
+        }
+
+        if (filters.departmentId) {
+            where.fleet = { ...where.fleet, departmentId: filters.departmentId };
         }
 
         const [data, total] = await Promise.all([
@@ -322,7 +327,7 @@ export class HandoverService {
      * Get pool dashboard data
      * Returns pool status by stadium, user's assigned carts (for FA), and recent activity
      */
-    async getPoolDashboard(user: { userId: string; role: string; stadiumId?: string }): Promise<PoolDashboardData> {
+    async getPoolDashboard(user: { userId: string; role: string; stadiumId?: string; departmentId?: string }): Promise<PoolDashboardData> {
         const stadiums = await this.getPoolStatusByStadium();
 
         // Filter stadiums by user's stadium for Admin
@@ -366,7 +371,11 @@ export class HandoverService {
         if (user.role === 'Admin' && user.stadiumId) {
             activityWhere.fleet = { stadiumId: user.stadiumId };
         } else if (user.role === 'FA') {
-            activityWhere.userId = user.userId;
+            if (user.departmentId) {
+                activityWhere.fleet = { departmentId: user.departmentId };
+            } else {
+                activityWhere.userId = user.userId;
+            }
         }
 
         const recentLogs = await prisma.handoverLog.findMany({

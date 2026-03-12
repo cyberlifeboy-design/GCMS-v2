@@ -116,16 +116,19 @@ export class HandoverController {
 
             let stadiumId: string | undefined;
             let userId: string | undefined;
+            let departmentId: string | undefined;
 
             if (req.user?.role === 'Admin') {
                 stadiumId = req.user.stadiumId;
             } else if (req.user?.role === 'FA') {
-                userId = req.user.userId;
+                userId = query.userId as string; // Allow FAs to filter by user if they want
+                departmentId = req.user.departmentId;
             }
 
-            const filters: HandoverFilters = {
+            const filters: HandoverFilters & { departmentId?: string } = {
                 stadiumId,
                 userId,
+                departmentId,
                 fleetId: fleetId as string,
                 action: action as string,
             };
@@ -139,6 +142,59 @@ export class HandoverController {
             res.status(200).json(history);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch history' });
+        }
+    }
+
+    static async getPoolStatus(req: AuthRequest, res: Response) {
+        try {
+            const status = await handoverService.getPoolStatusByStadium();
+            res.status(200).json(status);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch pool status' });
+        }
+    }
+
+    static async getPoolDashboard(req: AuthRequest, res: Response) {
+        try {
+            const user = {
+                userId: req.user!.userId,
+                role: req.user!.role,
+                stadiumId: req.user!.stadiumId,
+                departmentId: req.user!.departmentId,
+            };
+            const dashboard = await handoverService.getPoolDashboard(user);
+            res.status(200).json(dashboard);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch pool dashboard' });
+        }
+    }
+
+    static async getAvailableInPool(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.params;
+            const user = {
+                userId: req.user!.userId,
+                role: req.user!.role,
+                departmentId: req.user!.departmentId,
+            };
+            const available = await handoverService.getAvailableInPool(stadiumId as string, user);
+            res.status(200).json({ data: available });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch available carts' });
+        }
+    }
+
+    static async getInUse(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.params;
+            const user = {
+                userId: req.user!.userId,
+                role: req.user!.role,
+            };
+            const inUse = await handoverService.getInUse(stadiumId as string, user);
+            res.status(200).json({ data: inUse });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch in-use carts' });
         }
     }
 }

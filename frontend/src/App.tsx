@@ -27,7 +27,19 @@ function HomeRedirect() {
     return <DashboardPage />;
 }
 
+import { useEffect } from 'react';
+import { useThemeStore } from '@/stores/themeStore';
+
 function AppContent() {
+    const { user } = useAuthStore();
+    const { setTheme } = useThemeStore();
+
+    useEffect(() => {
+        if (user?.exportPreferences?.theme) {
+            setTheme(user.exportPreferences.theme as any);
+        }
+    }, [user, setTheme]);
+
     return (
         <Suspense fallback={
             <div className="flex items-center justify-center h-screen">
@@ -38,7 +50,7 @@ function AppContent() {
                 {/* Public routes (no auth) */}
                 <Route path="/request" element={<PublicRequestPage />} />
                 <Route path="/request/confirm/:token" element={<PublicRequestPage />} />
-                
+
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />

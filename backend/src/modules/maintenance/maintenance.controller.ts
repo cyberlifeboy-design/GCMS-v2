@@ -23,9 +23,10 @@ export class MaintenanceController {
         try {
             const { status, fleetId, page, limit } = req.query as any;
 
-            // RBAC scoping  
+            // RBAC scoping: Admin sees only their assigned stadium
+            // SuperAdmin and Observer have full access to all stadiums
             let stadiumId: string | undefined;
-            if (req.user?.role === 'Admin') {
+            if (req.user?.role === 'Admin' && req.user.stadiumId) {
                 stadiumId = req.user.stadiumId;
             }
 
@@ -44,6 +45,7 @@ export class MaintenanceController {
             const fleetId = req.params['fleetId'] as string;
 
             // RBAC check: Admin can only view history for carts in their assigned stadium
+            // SuperAdmin and Observer have full access
             if (req.user?.role === 'Admin' && req.user.stadiumId) {
                 // First verify the fleet belongs to the admin's stadium
                 const { prisma } = await import('../../config/database');
@@ -116,7 +118,7 @@ export class MaintenanceController {
     static async exportCsv(req: AuthRequest, res: Response) {
         try {
             let stadiumId = req.query.stadiumId as string | undefined;
-            if (req.user?.role === 'Admin') stadiumId = req.user.stadiumId;
+            if (req.user?.role === 'Admin' && req.user.stadiumId) stadiumId = req.user.stadiumId;
             const status = req.query.status as string | undefined;
 
             const csv = await maintenanceService.exportToCsv({ stadiumId, status });

@@ -95,12 +95,20 @@ export class AuthController {
 
     static async getCurrentUser(req: Request, res: Response): Promise<void> {
         try {
-            const user = (req as any).user;
-            if (!user) {
+            const authUser = (req as any).user;
+            if (!authUser) {
                 res.status(401).json({ error: 'Not authenticated' });
                 return;
             }
-            res.status(200).json({ user });
+
+            // Fetch full user data from database
+            const fullUser = await AuthService.getUserById(authUser.userId);
+            if (!fullUser) {
+                res.status(401).json({ error: 'User not found' });
+                return;
+            }
+
+            res.status(200).json({ user: fullUser });
         } catch (error) {
             res.status(500).json({ error: 'Failed to get user info' });
         }

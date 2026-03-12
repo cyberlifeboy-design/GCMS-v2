@@ -25,6 +25,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { formatDate } from '@/lib/dateUtils';
 
 interface CarRequest {
     id: string;
@@ -237,7 +238,7 @@ export function RequestsManagementPage() {
 
         const baseUrl = window.location.origin;
         let link = `${baseUrl}/request`;
-        
+
         if (linkStadiumId === '__all__') {
             // All stadiums - no stadium filter in link
             if (linkDepartmentId) {
@@ -254,7 +255,7 @@ export function RequestsManagementPage() {
 
     const handleEmailLink = () => {
         if (!emailRecipient || !generatedLink) return;
-        
+
         const subject = encodeURIComponent('Car Request Link');
         const body = encodeURIComponent(`Please use the following link to submit your car request:\n\n${generatedLink}`);
         window.location.href = `mailto:${emailRecipient}?subject=${subject}&body=${body}`;
@@ -294,9 +295,7 @@ export function RequestsManagementPage() {
         setCreateUserOpen(true);
     };
 
-    const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleString();
-    };
+
 
     const getStatusBadge = (status: string) => {
         const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {

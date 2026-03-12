@@ -26,6 +26,7 @@ interface TokenPayload {
     email: string;
     role: string;
     stadiumId?: string;
+    departmentId?: string;
 }
 
 export class AuthService {
@@ -89,6 +90,7 @@ export class AuthService {
             email: user.email,
             role: user.role,
             stadiumId: user.stadiumId || undefined,
+            departmentId: user.departmentId || undefined,
         };
 
         const accessToken = jwt.sign(tokenPayload, authConfig.jwt.accessTokenSecret, {
@@ -154,6 +156,7 @@ export class AuthService {
                 email: storedToken.user.email,
                 role: storedToken.user.role,
                 stadiumId: storedToken.user.stadiumId || undefined,
+                departmentId: storedToken.user.departmentId || undefined,
             };
 
             const accessToken = jwt.sign(tokenPayload, authConfig.jwt.accessTokenSecret, {
@@ -230,5 +233,28 @@ export class AuthService {
         await prisma.refreshToken.deleteMany({
             where: { expiresAt: { lt: new Date() } },
         });
+    }
+
+    static async getUserById(userId: string) {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: { stadium: true },
+        });
+
+        if (!user) return null;
+
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            phone: user.phone,
+            isActive: user.isActive,
+            exportFormat: user.exportFormat,
+            exportPreferences: user.exportPreferences,
+            stadiumId: user.stadiumId,
+            departmentId: user.departmentId,
+            stadium: user.stadium,
+        };
     }
 }

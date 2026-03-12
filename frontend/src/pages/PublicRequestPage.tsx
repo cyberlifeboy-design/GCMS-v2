@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, CheckCircle, XCircle, Mail, Phone, Building, MapPin } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 interface Stadium {
     id: string;
@@ -145,7 +146,7 @@ export function PublicRequestPage() {
                         </p>
                         <div className="bg-muted p-3 rounded-md">
                             <p className="text-sm text-muted-foreground mb-2">Track your request:</p>
-                            <a 
+                            <a
                                 href={trackingUrl}
                                 className="text-primary hover:underline text-sm break-all"
                             >
@@ -417,7 +418,7 @@ export function RequestConfirmationPage() {
                             <div>
                                 <CardTitle>Request Status</CardTitle>
                                 <CardDescription>
-                                    Submitted on {new Date(request.createdAt).toLocaleDateString()}
+                                    Submitted on {formatDate(request.createdAt)}
                                 </CardDescription>
                             </div>
                             <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[request.status] || 'bg-gray-100'}`}>

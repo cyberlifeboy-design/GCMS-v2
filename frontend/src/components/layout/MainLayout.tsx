@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { formatDate } from '@/lib/dateUtils';
 
 function DateTimeDisplay() {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -12,26 +14,10 @@ function DateTimeDisplay() {
     useEffect(() => {
         const timer = setInterval(() => {
             setCurrentDate(new Date());
-        }, 60000); // Update every minute
+        }, 10000); // Update every 10 seconds for better precision
 
         return () => clearInterval(timer);
     }, []);
-
-    const formatDate = (date: Date) => {
-        return date.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-        });
-    };
-
-    const formatTime = (date: Date) => {
-        return date.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    };
 
     return (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -39,7 +25,12 @@ function DateTimeDisplay() {
             <span>{formatDate(currentDate)}</span>
             <span className="text-muted-foreground/50">|</span>
             <Clock className="w-4 h-4" />
-            <span>{formatTime(currentDate)}</span>
+            <span>{new Intl.DateTimeFormat('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: useSettingsStore.getState().timezone || 'UTC',
+            }).format(currentDate)}</span>
         </div>
     );
 }
@@ -65,17 +56,20 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
 
+    const { fetchSettings } = useSettingsStore();
+
     useEffect(() => {
-        const loadBranding = async () => {
+        const loadSettings = async () => {
             try {
+                await fetchSettings();
                 const res = await settingsApi.get();
                 setBranding(res.data.data || {});
             } catch (e) {
                 console.error('Failed to load branding', e);
             }
         };
-        loadBranding();
-    }, []);
+        loadSettings();
+    }, [fetchSettings]);
 
     const handleNavClick = () => {
         setSidebarOpen(false);
@@ -125,10 +119,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                 </h1>
                             </div>
                             {branding.logoUrl && (
-                                <img 
-                                    src={branding.logoUrl} 
-                                    alt="Logo" 
-                                    className="w-10 h-10 object-contain flex-shrink-0" 
+                                <img
+                                    src={branding.logoUrl}
+                                    alt="Logo"
+                                    className="w-10 h-10 object-contain flex-shrink-0"
                                 />
                             )}
                         </div>
@@ -190,10 +184,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         <div className="flex items-center gap-2">
                             <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS Fleet Management'}</h1>
                             {branding.logoUrl && (
-                                <img 
-                                    src={branding.logoUrl} 
-                                    alt="Logo" 
-                                    className="w-6 h-6 object-contain" 
+                                <img
+                                    src={branding.logoUrl}
+                                    alt="Logo"
+                                    className="w-6 h-6 object-contain"
                                 />
                             )}
                         </div>
