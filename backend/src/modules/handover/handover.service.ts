@@ -1,6 +1,39 @@
 import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
 
+export interface PoolStatusByStadium {
+    stadiumId: string;
+    stadiumName: string;
+    stadiumCode: string;
+    total: number;
+    available: number;
+    assigned: number;
+    dispatched: number;
+    underMaintenance: number;
+}
+
+export interface PoolDashboardData {
+    stadiums: PoolStatusByStadium[];
+    userAssignedCarts?: Array<{
+        id: string;
+        carNumber: string;
+        carType: string;
+        status: string;
+        stadiumId: string;
+        stadiumName: string;
+        departmentId?: string;
+        departmentName?: string;
+    }>;
+    recentActivity: Array<{
+        id: string;
+        action: string;
+        carNumber: string;
+        userName: string;
+        timestamp: Date;
+        stadiumName: string;
+    }>;
+}
+
 export class HandoverService {
     async checkIn(data: {
         fleetId: string;
@@ -225,6 +258,195 @@ export class HandoverService {
             data,
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
+    }
+
+    /**
+     * Get pool status for all stadiums
+     * Shows total, available, assigned, dispatched, and maintenance counts per stadium
+     */
+    async getPoolStatusByStadium(): Promise<PoolStatusByStadium[]> {
+        const stadiums = await prisma.stadium.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true, code: true },
+            orderBy: { name: 'asc' },
+        });
+
+        const fleet = await prisma.fleet.findMany({
+            select: {
+                stadiumId: true,
+                status: true,
+            },
+        });
+
+        // Aggregate counts by stadium
+        const statusByStadium: Record<string, PoolStatusByStadium> = {};
+
+        for (const stadium of stadiums) {
+            statusByStadium[stadium.id] = {
+                stadiumId: stadium.id,
+                stadiumName: stadium.name,
+                stadiumCode: stadium.code,
+                total: 0,
+                available: 0,
+                assigned: 0,
+                dispatched: 0,
+                underMaintenance: 0,
+            };
+        }
+
+        for (const cart of fleet) {
+            const stadiumStatus = statusByStadium[cart.stadiumId];
+            if (stadiumStatus) {
+                stadiumStatus.total++;
+                switch (cart.status) {
+                    case 'Available':
+                        stadiumStatus.available++;
+                        break;
+                    case 'Assigned':
+                        stadiumStatus.assigned++;
+                        break;
+                    case 'Dispatched':
+                        stadiumStatus.dispatched++;
+                        break;
+                    case 'Under Maintenance':
+                        stadiumStatus.underMaintenance++;
+                        break;
+                }
+            }
+        }
+
+        return Object.values(statusByStadium);
+    }
+
+    /**
+     * Get pool dashboard data
+     * Returns pool status by stadium, user's assigned carts (for FA), and recent activity
+     */
+    async getPoolDashboard(user: { userId: string; role: string; stadiumId?: string }): Promise<PoolDashboardData> {
+        const stadiums = await this.getPoolStatusByStadium();
+
+        // Filter stadiums by user's stadium for Admin
+        let filteredStadiums = stadiums;
+        if (user.role === 'Admin' && user.stadiumId) {
+            filteredStadiums = stadiums.filter(s => s.stadiumId === user.stadiumId);
+        }
+
+        // Get user's assigned carts for FA users
+        let userAssignedCarts: PoolDashboardData['userAssignedCarts'] = undefined;
+        if (user.role === 'FA') {
+            const assigned = await prisma.fleet.findMany({
+                where: { assignedUserId: user.userId },
+                select: {
+                    id: true,
+                    carNumber: true,
+                    carType: true,
+                    status: true,
+                    stadiumId: true,
+                    stadium: { select: { name: true } },
+                    departmentId: true,
+                    department: { select: { name: true } },
+                },
+                orderBy: { carNumber: 'asc' },
+            });
+
+            userAssignedCarts = assigned.map(cart => ({
+                id: cart.id,
+                carNumber: cart.carNumber,
+                carType: cart.carType,
+                status: cart.status,
+                stadiumId: cart.stadiumId,
+                stadiumName: cart.stadium.name,
+                departmentId: cart.departmentId || undefined,
+                departmentName: cart.department?.name || undefined,
+            }));
+        }
+
+        // Get recent activity (last 50 actions)
+        const activityWhere: any = {};
+        if (user.role === 'Admin' && user.stadiumId) {
+            activityWhere.fleet = { stadiumId: user.stadiumId };
+        } else if (user.role === 'FA') {
+            activityWhere.userId = user.userId;
+        }
+
+        const recentLogs = await prisma.handoverLog.findMany({
+            where: activityWhere,
+            include: {
+                fleet: { include: { stadium: { select: { name: true } } } },
+                user: { select: { name: true } },
+            },
+            orderBy: { timestamp: 'desc' },
+            take: 50,
+        });
+
+        const recentActivity = recentLogs.map(log => ({
+            id: log.id,
+            action: log.action,
+            carNumber: log.fleet?.carNumber || 'Unknown',
+            userName: log.user?.name || 'Unknown',
+            timestamp: log.timestamp,
+            stadiumName: log.fleet?.stadium?.name || 'Unknown',
+        }));
+
+        return {
+            stadiums: filteredStadiums,
+            userAssignedCarts,
+            recentActivity,
+        };
+    }
+
+    /**
+     * Get carts available in pool for a specific stadium
+     * Available = carts with status 'Available' or 'Assigned' (not dispatched)
+     */
+    async getAvailableInPool(stadiumId: string, user: { userId: string; role: string; departmentId?: string }) {
+        const where: any = {
+            stadiumId,
+            status: { in: ['Available', 'Assigned'] },
+        };
+
+        // FA users can only see carts from their department or unassigned
+        if (user.role === 'FA' && user.departmentId) {
+            where.OR = [
+                { departmentId: user.departmentId },
+                { departmentId: null }, // Unassigned carts are available to all FA
+            ];
+        }
+
+        return prisma.fleet.findMany({
+            where,
+            include: {
+                stadium: { select: { id: true, name: true, code: true } },
+                department: { select: { id: true, name: true, code: true } },
+                assignedUser: { select: { id: true, name: true, phone: true, email: true, role: true } },
+            },
+            orderBy: { carNumber: 'asc' },
+        });
+    }
+
+    /**
+     * Get carts currently in use (dispatched) for a specific stadium
+     */
+    async getInUse(stadiumId: string, user: { userId: string; role: string }) {
+        const where: any = {
+            stadiumId,
+            status: 'Dispatched',
+        };
+
+        // FA users can only see their own dispatched carts
+        if (user.role === 'FA') {
+            where.assignedUserId = user.userId;
+        }
+
+        return prisma.fleet.findMany({
+            where,
+            include: {
+                stadium: { select: { id: true, name: true, code: true } },
+                department: { select: { id: true, name: true, code: true } },
+                assignedUser: { select: { id: true, name: true, phone: true, email: true, role: true } },
+            },
+            orderBy: { carNumber: 'asc' },
+        });
     }
 }
 

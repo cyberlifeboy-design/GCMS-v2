@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Users, Grid, History, X, ArrowRightLeft } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
+import { AssignmentHistory } from '@/components/fleet/AssignmentHistory';
 
 interface FleetCart {
     id: string;
@@ -40,16 +41,6 @@ interface Stadium {
     code: string;
 }
 
-interface AssignmentLog {
-    id: string;
-    action: string;
-    fleetId: string;
-    user: { id: string; name: string; email: string; role: string };
-    oldValue: any;
-    newValue: any;
-    timestamp: string;
-}
-
 const STATUS_COLORS: Record<string, string> = {
     'Available': 'text-green-600 font-semibold',
     'Assigned': 'text-purple-600 font-semibold',
@@ -69,9 +60,7 @@ export function FleetManagementPage() {
     const [selectedStadium, setSelectedStadium] = useState<string>('all');
     const [fleet, setFleet] = useState<FleetCart[]>([]);
     const [faUsers, setFaUsers] = useState<FAUser[]>([]);
-    const [history, setHistory] = useState<AssignmentLog[]>([]);
     const [loading, setLoading] = useState(true);
-    const [historyLoading, setHistoryLoading] = useState(false);
 
     // Selection for bulk operations
     const [selectedCarts, setSelectedCarts] = useState<Set<string>>(new Set());
@@ -128,22 +117,6 @@ export function FleetManagementPage() {
             console.error('Failed to load fleet', e);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const loadHistory = async () => {
-        try {
-            setHistoryLoading(true);
-            const params: Record<string, unknown> = { limit: 50 };
-            if (selectedStadium !== 'all') {
-                // Note: history endpoint may need stadium filtering server-side
-            }
-            const res = await fleetApi.getAssignmentHistory(params);
-            setHistory(res.data.data || []);
-        } catch (e) {
-            console.error('Failed to load history', e);
-        } finally {
-            setHistoryLoading(false);
         }
     };
 
@@ -499,49 +472,7 @@ export function FleetManagementPage() {
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Assignment History</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {historyLoading ? (
-                                <div className="flex items-center justify-center py-8">
-                                    <Loader2 className="w-6 h-6 animate-spin" />
-                                </div>
-                            ) : history.length === 0 ? (
-                                <p className="text-center text-muted-foreground py-8">No assignment history found</p>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date/Time</TableHead>
-                                            <TableHead>Action</TableHead>
-                                            <TableHead>Cart</TableHead>
-                                            <TableHead>By User</TableHead>
-                                            <TableHead>Details</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {history.map(log => (
-                                            <TableRow key={log.id}>
-                                                <TableCell className="text-sm">
-                                                    {new Date(log.timestamp).toLocaleString()}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge>{log.action}</Badge>
-                                                </TableCell>
-                                                <TableCell className="font-mono">{log.fleetId.slice(0, 8)}...</TableCell>
-                                                <TableCell>{log.user?.name || 'System'}</TableCell>
-                                                <TableCell className="text-sm text-muted-foreground">
-                                                    {log.oldValue?.assignedUser || 'None'} → {log.newValue?.assignedUser || 'None'}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <AssignmentHistory stadiumId={selectedStadium !== 'all' ? selectedStadium : undefined} />
                 </TabsContent>
             </Tabs>
 
@@ -575,7 +506,7 @@ export function FleetManagementPage() {
                             </Select>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Current: {selectedCart?.assignedUser?.name || 'Unassigned'}
+                            Current Focal Point: {selectedCart?.assignedUser?.name || 'Unassigned'}
                         </p>
                     </div>
                     <DialogFooter>

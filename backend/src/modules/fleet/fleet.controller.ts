@@ -287,27 +287,28 @@ export class FleetController {
 
     static async getAssignmentHistory(req: AuthRequest, res: Response) {
         try {
-            const { fleetId, userId, limit } = req.query;
+            const { fleetId, userId, carNumber, startDate, endDate, limit } = req.query;
 
-            // RBAC scoping
+            // RBAC scoping for stadium
             let filterFleetId = fleetId as string | undefined;
+            let filterStadiumId: string | undefined;
 
-            if (req.user?.role === 'Admin' && req.user.stadiumId) {
-                // Admin can only see history for their stadium's fleet
-                const stadiumFleet = await prisma.fleet.findFirst({
-                    where: { id: fleetId as string, stadiumId: req.user.stadiumId },
-                    select: { id: true },
-                });
-                if (fleetId && !stadiumFleet) {
-                    res.status(403).json({ error: 'Access denied' });
-                    return;
-                }
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
             }
+
+            // Parse date filters
+            const parsedStartDate = startDate ? new Date(startDate as string) : undefined;
+            const parsedEndDate = endDate ? new Date(endDate as string) : undefined;
 
             const history = await fleetService.getAssignmentHistory({
                 fleetId: filterFleetId,
                 userId: userId as string,
+                carNumber: carNumber as string,
+                startDate: parsedStartDate,
+                endDate: parsedEndDate,
                 limit: limit ? parseInt(limit as string) : undefined,
+                stadiumId: filterStadiumId,
             });
 
             res.status(200).json({ data: history });

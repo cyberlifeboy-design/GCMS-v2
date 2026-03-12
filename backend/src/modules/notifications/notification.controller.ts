@@ -9,10 +9,10 @@ export class NotificationController {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            const pageQuery = req.query.page;
-            const limitQuery = req.query.limit;
-            const page = parseInt(Array.isArray(pageQuery) ? pageQuery[0] : (pageQuery as string) || '1') || 1;
-            const limit = parseInt(Array.isArray(limitQuery) ? limitQuery[0] : (limitQuery as string) || '20') || 20;
+            const pageParam = req.query.page;
+            const limitParam = req.query.limit;
+            const page = parseInt(typeof pageParam === 'string' ? pageParam : '1') || 1;
+            const limit = parseInt(typeof limitParam === 'string' ? limitParam : '20') || 20;
 
             const result = await notificationService.getForUser(userId, page, limit);
             res.json(result);
