@@ -137,7 +137,7 @@ export class RequestsService {
      * Approve a request
      */
     async approveRequest(id: string, reviewedById: string, reviewNotes?: string) {
-        return prisma.carRequest.update({
+        const request = await prisma.carRequest.update({
             where: { id },
             data: {
                 status: 'Approved',
@@ -146,18 +146,33 @@ export class RequestsService {
                 reviewNotes,
             },
             include: {
-                stadium: { select: { name: true } },
+                stadium: { select: { name: true, id: true } },
                 department: { select: { name: true } },
                 reviewedBy: { select: { name: true } },
             },
         });
+
+        // Create notification
+        await notificationService.createForRoles(
+            {
+                type: 'RequestApproved',
+                title: 'Car Request Approved',
+                message: `Request from ${request.requesterName} (${request.department?.name}) approved`,
+                entityType: 'CarRequest',
+                entityId: id,
+            },
+            ['SuperAdmin', 'Admin'],
+            request.stadiumId || undefined,
+        );
+
+        return request;
     }
 
     /**
      * Reject a request
      */
     async rejectRequest(id: string, reviewedById: string, reviewNotes?: string) {
-        return prisma.carRequest.update({
+        const request = await prisma.carRequest.update({
             where: { id },
             data: {
                 status: 'Rejected',
@@ -166,11 +181,26 @@ export class RequestsService {
                 reviewNotes,
             },
             include: {
-                stadium: { select: { name: true } },
+                stadium: { select: { name: true, id: true } },
                 department: { select: { name: true } },
                 reviewedBy: { select: { name: true } },
             },
         });
+
+        // Create notification
+        await notificationService.createForRoles(
+            {
+                type: 'RequestRejected',
+                title: 'Car Request Rejected',
+                message: `Request from ${request.requesterName} (${request.department?.name}) rejected`,
+                entityType: 'CarRequest',
+                entityId: id,
+            },
+            ['SuperAdmin', 'Admin'],
+            request.stadiumId || undefined,
+        );
+
+        return request;
     }
 
     /**

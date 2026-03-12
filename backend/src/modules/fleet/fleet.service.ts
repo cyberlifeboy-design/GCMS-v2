@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { FleetFilters, PaginatedResult, PaginationParams } from '../../types';
+import { notificationService } from '../notifications/notification.service';
 
 export class FleetService {
     async getAll(filters: FleetFilters, pagination?: PaginationParams): Promise<PaginatedResult<any>> {
@@ -24,8 +25,8 @@ export class FleetService {
             prisma.fleet.findMany({
                 where,
                 include: {
-                    stadium: true,
-                    department: { select: { id: true, name: true } },
+                    stadium: { select: { id: true, name: true, code: true } },
+                    department: { select: { id: true, name: true, code: true } },
                     assignedUser: {
                         select: { id: true, name: true, phone: true, email: true, role: true },
                     },
@@ -47,8 +48,8 @@ export class FleetService {
         return prisma.fleet.findUnique({
             where: { id },
             include: {
-                stadium: true,
-                department: { select: { id: true, name: true } },
+                stadium: { select: { id: true, name: true, code: true } },
+                department: { select: { id: true, name: true, code: true } },
                 assignedUser: {
                     select: { id: true, name: true, phone: true, email: true, role: true },
                 },
@@ -75,7 +76,7 @@ export class FleetService {
                 assignedUserId: data.assignedUserId || null,
                 departmentId: data.departmentId || null,
             },
-            include: { stadium: true, department: { select: { id: true, name: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
+            include: { stadium: { select: { id: true, name: true, code: true } }, department: { select: { id: true, name: true, code: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 
@@ -91,7 +92,7 @@ export class FleetService {
         return prisma.fleet.update({
             where: { id },
             data,
-            include: { stadium: true, department: { select: { id: true, name: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
+            include: { stadium: { select: { id: true, name: true, code: true } }, department: { select: { id: true, name: true, code: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
 
@@ -101,11 +102,31 @@ export class FleetService {
 
     async assignUser(fleetId: string, userId: string | null) {
         const newStatus = userId ? 'Assigned' : 'Available';
-        return prisma.fleet.update({
+        const fleet = await prisma.fleet.update({
             where: { id: fleetId },
             data: { assignedUserId: userId, status: newStatus },
-            include: { assignedUser: { select: { id: true, name: true, phone: true } } },
+            include: { 
+                assignedUser: { select: { id: true, name: true, phone: true } },
+                stadium: { select: { id: true, name: true } },
+            },
         });
+
+        // Create notification for assignment change
+        if (userId) {
+            await notificationService.createForRoles(
+                {
+                    type: 'AssignmentChange',
+                    title: 'Cart Assignment',
+                    message: `${fleet.carNumber} assigned to ${fleet.assignedUser?.name || 'Unknown'}`,
+                    entityType: 'Fleet',
+                    entityId: fleetId,
+                },
+                ['SuperAdmin', 'Admin'],
+                fleet.stadiumId || undefined,
+            );
+        }
+
+        return fleet;
     }
 
     async bulkCreate(carts: Array<{

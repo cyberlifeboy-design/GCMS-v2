@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi } from '@/lib/api';
+import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi, reportsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -638,7 +638,7 @@ export function FleetPage() {
                 {!isFA && (
                     <Card>
                         <CardHeader>
-                            <div className="flex gap-4 flex-wrap">
+                            <div className="flex gap-4 flex-wrap items-center">
                                 <div className="relative flex-1 min-w-[200px]">
                                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
@@ -649,7 +649,7 @@ export function FleetPage() {
                                     />
                                 </div>
                                 <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
-                                    <SelectTrigger className="w-48">
+                                    <SelectTrigger className="w-40">
                                         <SelectValue placeholder="All Statuses" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -661,6 +661,26 @@ export function FleetPage() {
                                     selected={carTypeFilter}
                                     onChange={handleCarTypeFilterChange}
                                 />
+                                {isSuperAdmin && (
+                                    <Select value={stadiumFilter} onValueChange={handleStadiumFilterChange}>
+                                        <SelectTrigger className="w-40">
+                                            <SelectValue placeholder="All Stadiums" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Stadiums</SelectItem>
+                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                                <Select value={departmentFilter} onValueChange={v => { setDepartmentFilter(v); setPage(1); }}>
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue placeholder="All Departments" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Departments</SelectItem>
+                                        {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">

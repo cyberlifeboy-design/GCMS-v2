@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Users, Grid, History, X, ArrowRightLeft } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { carTypeColors } from '@/lib/constants';
 
 interface FleetCart {
     id: string;
@@ -56,12 +57,7 @@ const STATUS_COLORS: Record<string, string> = {
     'Under Maintenance': 'text-red-600 font-semibold',
 };
 
-const TYPE_COLORS: Record<string, string> = {
-    'Cargo': 'bg-orange-100 text-orange-800',
-    'Accessibility': 'bg-purple-100 text-purple-800',
-    '6-Seater': 'bg-cyan-100 text-cyan-800',
-    '4-Seater': 'bg-teal-100 text-teal-800',
-};
+const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
 
 export function FleetManagementPage() {
     const { user } = useAuthStore();
@@ -90,6 +86,8 @@ export function FleetManagementPage() {
 
     // Search/filter
     const [searchTerm, setSearchTerm] = useState('');
+    const [carTypeFilter, setCarTypeFilter] = useState<string>('all');
+    const [faFilter, setFaFilter] = useState<string>('all');
 
     // Load stadiums on mount
     useEffect(() => {
@@ -236,8 +234,19 @@ export function FleetManagementPage() {
             cart.assignedUser?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             cart.carType.toLowerCase().includes(searchTerm.toLowerCase());
         const matchStadium = selectedStadium === 'all' || cart.stadiumId === selectedStadium;
-        return matchSearch && matchStadium;
+        const matchCarType = carTypeFilter === 'all' || cart.carType === carTypeFilter;
+        const matchFa = faFilter === 'all' ||
+            (faFilter === 'unassigned' && !cart.assignedUser) ||
+            (faFilter === 'assigned' && cart.assignedUser) ||
+            cart.assignedUser?.id === faFilter;
+        return matchSearch && matchStadium && matchCarType && matchFa;
     });
+
+    // Car type breakdown counts
+    const carTypeBreakdown = CAR_TYPES.reduce((acc, type) => {
+        acc[type] = filteredFleet.filter(c => c.carType === type).length;
+        return acc;
+    }, {} as Record<string, number>);
 
     // Group by stadium for matrix view
     const fleetByStadium = filteredFleet.reduce((acc, cart) => {

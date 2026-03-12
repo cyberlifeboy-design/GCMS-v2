@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox } from 'lucide-react';
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
 const navItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'Observer'] },
@@ -53,6 +54,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     <img src={branding.headerUrl} alt="Header Branding" className="w-full h-full object-cover" />
                 </div>
             )}
+
+            {/* Top Bar with Notifications */}
+            <div className="hidden lg:flex items-center justify-end px-6 py-2 border-b bg-card">
+                <NotificationCenter />
+            </div>
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Mobile overlay */}

@@ -259,4 +259,16 @@ export const requestsApi = {
         apiClient.delete(`/requests/${id}`),
 };
 
+// Notifications
+export const notificationsApi = {
+    getAll: (params?: { page?: number; limit?: number }) =>
+        apiClient.get('/notifications', { params }),
+    getStats: () =>
+        apiClient.get('/notifications/stats'),
+    markAsRead: (id: string) =>
+        apiClient.patch(`/notifications/${id}/read`),
+    markAllAsRead: () =>
+        apiClient.patch('/notifications/read-all'),
+};
+
 export default apiClient;
