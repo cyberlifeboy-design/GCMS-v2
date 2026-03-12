@@ -146,26 +146,31 @@ export class ReportsController {
 
     static async exportFleetOverview(req: AuthRequest, res: Response) {
         try {
-            const stats = await reportsService.getDashboardStats({});
-            const fleet = await reportsService.getFleetList({});
+            const { stadiumId, departmentId, status, carType } = req.query as any;
+
+            // RBAC scoping
+            let filterStadiumId = stadiumId;
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            // Support comma-separated carType for multi-select filter
+            let carTypeFilter: string | string[] | undefined;
+            if (carType) {
+                const types = (carType as string).split(',').map(t => t.trim()).filter(Boolean);
+                carTypeFilter = types.length === 1 ? types[0] : types;
+            }
+
+            const filters: { stadiumId?: string; departmentId?: string; status?: string; carType?: string | string[] } = {};
+            if (filterStadiumId) filters.stadiumId = filterStadiumId;
+            if (departmentId) filters.departmentId = departmentId;
+            if (status) filters.status = status;
+            if (carTypeFilter) filters.carType = carTypeFilter;
+
+            const fleet = await reportsService.getFleetList(filters);
 
             const workbook = new ExcelJS.Workbook();
-            const summarySheet = workbook.addWorksheet('Summary');
             const fleetSheet = workbook.addWorksheet('Fleet');
-
-            // Summary sheet
-            summarySheet.columns = [
-                { header: 'Metric', key: 'metric', width: 25 },
-                { header: 'Value', key: 'value', width: 15 },
-            ];
-            summarySheet.addRow({ metric: 'Total Carts', value: stats.fleetByStatus.reduce((acc, s) => acc + s.count, 0) });
-            summarySheet.addRow({ metric: 'Available', value: stats.fleetByStatus.find(s => s.status === 'Available')?.count || 0 });
-            summarySheet.addRow({ metric: 'Assigned', value: stats.fleetByStatus.find(s => s.status === 'Assigned')?.count || 0 });
-            summarySheet.addRow({ metric: 'Dispatched', value: stats.fleetByStatus.find(s => s.status === 'Dispatched')?.count || 0 });
-            summarySheet.addRow({ metric: 'Under Maintenance', value: stats.fleetByStatus.find(s => s.status === 'Under Maintenance')?.count || 0 });
-            summarySheet.addRow({ metric: 'VAP Required', value: stats.vapCartsCount });
-            summarySheet.addRow({ metric: 'Active Users', value: stats.activeUsersCount });
-            summarySheet.addRow({ metric: 'Open Issues', value: stats.openIssuesCount });
 
             // Fleet sheet
             fleetSheet.columns = [
@@ -174,6 +179,7 @@ export class ReportsController {
                 { header: 'Status', key: 'status', width: 18 },
                 { header: 'VAP Required', key: 'requiresVAP', width: 12 },
                 { header: 'Stadium', key: 'stadium', width: 20 },
+                { header: 'Department', key: 'department', width: 20 },
                 { header: 'Assigned User', key: 'assignedUser', width: 20 },
             ];
             fleet.forEach((cart) => {
@@ -183,12 +189,13 @@ export class ReportsController {
                     status: cart.status,
                     requiresVAP: cart.requiresVAP ? 'Yes' : 'No',
                     stadium: cart.stadium?.name || '',
+                    department: cart.department?.name || '',
                     assignedUser: cart.assignedUser?.name || '',
                 });
             });
 
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', 'attachment; filename=fleet_overview.xlsx');
+            res.setHeader('Content-Disposition', 'attachment; filename=fleet_report.xlsx');
             await workbook.xlsx.write(res);
             res.end();
         } catch (error) {

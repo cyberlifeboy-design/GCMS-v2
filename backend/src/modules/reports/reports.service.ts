@@ -62,6 +62,18 @@ interface UserReport {
     };
 }
 
+interface ActiveCarUsage {
+    id: string;
+    carNumber: string;
+    carType: string;
+    status: string;
+    faName: string;
+    faContact: string | null;
+    faDepartment: string | null;
+    stadium: { id: string; name: string };
+    checkOutTime: Date;
+}
+
 export class ReportsService {
     private prisma: PrismaClient;
 
@@ -299,16 +311,26 @@ export class ReportsService {
         return Object.entries(timeline).map(([date, counts]) => ({ date, ...counts }));
     }
 
-    async getFleetList(filters: { stadiumId?: string } = {}) {
-        const where = filters.stadiumId ? { stadiumId: filters.stadiumId } : {};
+    async getFleetList(filters: { stadiumId?: string; departmentId?: string; status?: string; carType?: string | string[] } = {}) {
+        const where: any = {
+            ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
+            ...(filters.departmentId && { departmentId: filters.departmentId }),
+            ...(filters.status && { status: filters.status }),
+            ...(filters.carType && {
+                carType: Array.isArray(filters.carType)
+                    ? { in: filters.carType }
+                    : filters.carType
+            }),
+        };
 
         return this.prisma.fleet.findMany({
             where,
             include: {
                 stadium: { select: { id: true, name: true } },
+                department: { select: { id: true, name: true } },
                 assignedUser: { select: { id: true, name: true } },
             },
-            orderBy: { carNumber: 'asc' },
+            orderBy: [{ stadium: { name: 'asc' } }, { carNumber: 'asc' }],
         });
     }
 
@@ -561,6 +583,99 @@ export class ReportsService {
         );
 
         return reports;
+    }
+
+    /**
+     * Get active cars currently in use (Dispatched status)
+     * Cars that have been checked out but not yet checked back in
+     */
+    async getActiveCarsUsage(filters: { stadiumId?: string; departmentId?: string; carType?: string; search?: string } = {}): Promise<ActiveCarUsage[]> {
+        const where: any = {
+            status: 'Dispatched', // Active cars are those currently dispatched/checked out
+        };
+
+        // Apply stadium filter
+        if (filters.stadiumId) {
+            where.stadiumId = filters.stadiumId;
+        }
+
+        // Apply department filter
+        if (filters.departmentId) {
+            where.departmentId = filters.departmentId;
+        }
+
+        // Apply car type filter
+        if (filters.carType) {
+            where.carType = filters.carType;
+        }
+
+        // Apply search filter (car number or FA name)
+        if (filters.search) {
+            // We'll need to do this after fetching due to Prisma limitations with relation filtering
+        }
+
+        const dispatchedCarts = await this.prisma.fleet.findMany({
+            where,
+            include: {
+                stadium: { select: { id: true, name: true } },
+                assignedUser: {
+                    select: {
+                        id: true,
+                        name: true,
+                        phone: true,
+                        department: { select: { id: true, name: true } },
+                    },
+                },
+            },
+            orderBy: { carNumber: 'asc' },
+        });
+
+        // Get the most recent check-out log for each cart to find checkOutTime
+        const cartIds = dispatchedCarts.map(c => c.id);
+        const recentCheckOuts = await this.prisma.handoverLog.findMany({
+            where: {
+                fleetId: { in: cartIds },
+                action: 'CheckedOut',
+            },
+            orderBy: [{ fleetId: 'asc' }, { timestamp: 'desc' }],
+            select: {
+                fleetId: true,
+                timestamp: true,
+            },
+        });
+
+        // Map to get latest check-out time per cart
+        const latestCheckOutMap = new Map<string, Date>();
+        for (const log of recentCheckOuts) {
+            if (!latestCheckOutMap.has(log.fleetId)) {
+                latestCheckOutMap.set(log.fleetId, log.timestamp);
+            }
+        }
+
+        const activeCars: ActiveCarUsage[] = dispatchedCarts
+            .filter(cart => {
+                // Apply search filter after fetching
+                if (filters.search) {
+                    const searchLower = filters.search.toLowerCase();
+                    const carMatch = cart.carNumber.toLowerCase().includes(searchLower);
+                    const faMatch = cart.assignedUser?.name?.toLowerCase().includes(searchLower);
+                    return carMatch || faMatch;
+                }
+                return true;
+            })
+            .map(cart => ({
+                id: cart.id,
+                carNumber: cart.carNumber,
+                carType: cart.carType,
+                status: cart.status,
+                faName: cart.assignedUser?.name || 'Unknown',
+                faContact: cart.assignedUser?.phone || null,
+                faDepartment: cart.assignedUser?.department?.name || null,
+                stadium: cart.stadium,
+                checkOutTime: latestCheckOutMap.get(cart.id) || cart.updatedAt,
+            }));
+
+        return activeCars;
     }
 }
 

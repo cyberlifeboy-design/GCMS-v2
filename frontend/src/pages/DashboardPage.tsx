@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Badge } from '@/components/ui/badge';
+import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
 
 const downloadBlob = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -348,6 +349,9 @@ export function DashboardPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Active Cars in Use */}
+            <ActiveCarsSection refreshKey={0} />
 
             {/* Activity Timeline */}
             <Card>

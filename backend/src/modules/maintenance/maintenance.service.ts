@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { uploadFile } from '../../config/storage';
+import { notificationService } from '../notifications/notification.service';
 
 export class MaintenanceService {
     async getAll(filters: {
@@ -69,8 +70,8 @@ export class MaintenanceService {
                     status: 'Open',
                 },
                 include: {
-                    reportedBy: { select: { id: true, name: true, phone: true, role: true } },
-                    fleet: true,
+                    reportedBy: { select: { id: true, name: true, phone: true, role: true, stadiumId: true } },
+                    fleet: { include: { stadium: true } },
                 },
             });
 
@@ -80,6 +81,23 @@ export class MaintenanceService {
                     data: { status: 'Under Maintenance' },
                 });
             }
+
+            // Create notifications for all admins and the reporter
+            const reporter = log.reportedBy;
+            const stadiumId = log.fleet?.stadiumId;
+            
+            // Notify all admins (SuperAdmin and Admin roles)
+            await notificationService.createForRoles(
+                {
+                    type: 'IssueReported',
+                    title: 'New Maintenance Issue Reported',
+                    message: `${log.fleet?.carNumber || 'Cart'}: ${data.issueDescription.substring(0, 100)}${data.issueDescription.length > 100 ? '...' : ''}`,
+                    entityType: 'MaintenanceLog',
+                    entityId: log.id,
+                },
+                ['SuperAdmin', 'Admin'],
+                stadiumId || undefined,
+            );
 
             return log;
         });

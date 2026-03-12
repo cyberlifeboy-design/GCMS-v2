@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench } from 'lucide-react';
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
@@ -27,10 +27,10 @@ interface FleetCart {
 }
 
 const statusColors: Record<string, string> = {
-    'Available': 'bg-green-500 text-white',
-    'Assigned': 'bg-purple-500 text-white',
-    'Dispatched': 'bg-blue-500 text-white',
-    'Under Maintenance': 'bg-red-500 text-white',
+    'Available': 'text-green-600 font-semibold',
+    'Assigned': 'text-purple-600 font-semibold',
+    'Dispatched': 'text-blue-600 font-semibold',
+    'Under Maintenance': 'text-red-600 font-semibold',
 };
 
 const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
@@ -148,6 +148,8 @@ export function FleetPage() {
         const carType = searchParams.get('carType');
         return carType ? carType.split(',').filter(t => CAR_TYPES.includes(t as typeof CAR_TYPES[number])) : [];
     });
+    const [stadiumFilter, setStadiumFilter] = useState(() => searchParams.get('stadium') || 'all');
+    const [departmentFilter, setDepartmentFilter] = useState(() => searchParams.get('department') || 'all');
 
     // Pagination state
     const [page, setPage] = useState(() => {
@@ -180,9 +182,11 @@ export function FleetPage() {
         const params = new URLSearchParams();
         if (statusFilter !== 'all') params.set('status', statusFilter);
         if (carTypeFilter.length > 0) params.set('carType', carTypeFilter.join(','));
+        if (stadiumFilter !== 'all') params.set('stadium', stadiumFilter);
+        if (departmentFilter !== 'all') params.set('department', departmentFilter);
         if (page > 1) params.set('page', page.toString());
         setSearchParams(params, { replace: true });
-    }, [statusFilter, carTypeFilter, page, setSearchParams]);
+    }, [statusFilter, carTypeFilter, stadiumFilter, departmentFilter, page, setSearchParams]);
 
     const loadFleet = async () => {
         try {
@@ -190,6 +194,8 @@ export function FleetPage() {
             const params: Record<string, unknown> = {
                 ...(statusFilter !== 'all' && { status: statusFilter }),
                 ...(carTypeFilter.length > 0 && { carType: carTypeFilter.join(',') }),
+                ...(stadiumFilter !== 'all' && { stadiumId: stadiumFilter }),
+                ...(departmentFilter !== 'all' && { departmentId: departmentFilter }),
                 page,
                 limit: pagination.limit
             };
@@ -254,7 +260,7 @@ export function FleetPage() {
         } else {
             loadFleet();
         }
-    }, [statusFilter, carTypeFilter, page]);
+    }, [statusFilter, carTypeFilter, stadiumFilter, departmentFilter, page]);
 
     // Load stadiums for SuperAdmin (to select venue when creating carts)
     useEffect(() => {
@@ -276,6 +282,48 @@ export function FleetPage() {
     const handleCarTypeFilterChange = (types: string[]) => {
         setCarTypeFilter(types);
         setPage(1); // Reset to first page when filter changes
+    };
+
+    // Handle stadium filter change - reload departments
+    const handleStadiumFilterChange = async (stadiumId: string) => {
+        setStadiumFilter(stadiumId);
+        setDepartmentFilter('all');
+        setPage(1);
+        if (stadiumId && stadiumId !== 'all') {
+            await loadDepartments(stadiumId);
+        } else {
+            setDepartments([]);
+        }
+    };
+
+    // Export fleet to Excel
+    const handleExportFleet = async () => {
+        try {
+            setSubmitting(true);
+            const params = new URLSearchParams();
+            if (statusFilter !== 'all') params.set('status', statusFilter);
+            if (carTypeFilter.length > 0) params.set('carType', carTypeFilter.join(','));
+            if (stadiumFilter !== 'all') params.set('stadiumId', stadiumFilter);
+            if (departmentFilter !== 'all') params.set('departmentId', departmentFilter);
+
+            const res = await reportsApi.exportFleet(params.toString());
+            const blob = new Blob([res.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `fleet_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert('Failed to export fleet');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const filteredFleet = fleet.filter(c =>
@@ -494,12 +542,12 @@ export function FleetPage() {
                         </TableCell></TableRow>
                     ) : data.map(cart => (
                         <TableRow key={cart.id}>
-                            <TableCell className="font-mono font-semibold">{cart.carNumber}</TableCell>
+                            <TableCell className="text-center text-lg font-bold">{cart.carNumber}</TableCell>
                             <TableCell>
                                 <Badge className={carTypeColors[cart.carType]} variant="secondary">{cart.carType}</Badge>
                             </TableCell>
                             <TableCell>
-                                <Badge className={statusColors[cart.status]}>{cart.status}</Badge>
+                                <span className={statusColors[cart.status]}>{cart.status}</span>
                             </TableCell>
                             <TableCell>
                                 {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}

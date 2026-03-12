@@ -184,12 +184,14 @@ export const usersApi = {
 export const reportsApi = {
     getUtilization: (params?: Record<string, unknown>) =>
         apiClient.get('/reports/utilization', { params }),
+    getActiveCarsUsage: (params?: Record<string, unknown>) =>
+        apiClient.get('/reports/active-usage', { params }),
     exportHandover: () =>
         apiClient.get('/reports/handover/export', { responseType: 'blob' }),
     exportMaintenance: () =>
         apiClient.get('/reports/maintenance/export', { responseType: 'blob' }),
-    exportFleet: () =>
-        apiClient.get('/reports/fleet/export', { responseType: 'blob' }),
+    exportFleet: (queryString?: string) =>
+        apiClient.get(`/reports/fleet/export${queryString ? `?${queryString}` : ''}`, { responseType: 'blob' }),
     exportActivity: () =>
         apiClient.get('/reports/activity/export', { responseType: 'blob' }),
     exportFull: () =>

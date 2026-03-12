@@ -50,10 +50,10 @@ interface AssignmentLog {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-    'Available': 'bg-green-500 text-white',
-    'Assigned': 'bg-blue-500 text-white',
-    'Dispatched': 'bg-yellow-500 text-white',
-    'Under Maintenance': 'bg-red-500 text-white',
+    'Available': 'text-green-600 font-semibold',
+    'Assigned': 'text-purple-600 font-semibold',
+    'Dispatched': 'text-blue-600 font-semibold',
+    'Under Maintenance': 'text-red-600 font-semibold',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -349,9 +349,9 @@ export function FleetManagementPage() {
                                                         <TableCell>{cart.stadium?.name || '—'}</TableCell>
                                                     )}
                                                     <TableCell>
-                                                        <Badge className={STATUS_COLORS[cart.status] || 'bg-gray-400'}>
+                                                        <span className={STATUS_COLORS[cart.status] || 'text-gray-600'}>
                                                             {cart.status}
-                                                        </Badge>
+                                                        </span>
                                                     </TableCell>
                                                     <TableCell>
                                                         {cart.assignedUser ? (

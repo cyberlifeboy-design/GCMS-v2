@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { notificationService } from '../notifications/notification.service';
 
 export class HandoverService {
     async checkIn(data: {
@@ -6,7 +7,10 @@ export class HandoverService {
         userId: string;
         conditionNotes?: string;
     }) {
-        const vehicle = await prisma.fleet.findUnique({ where: { id: data.fleetId } });
+        const vehicle = await prisma.fleet.findUnique({ 
+            where: { id: data.fleetId },
+            include: { stadium: true }
+        });
         if (!vehicle) throw new Error('Vehicle not found');
 
         const allowedStatuses = ['Available', 'Assigned'];
@@ -14,7 +18,7 @@ export class HandoverService {
             throw new Error(`Vehicle is not available for check-in (Current status: ${vehicle.status})`);
         }
 
-        await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             await tx.handoverLog.create({
                 data: {
                     fleetId: data.fleetId,
@@ -31,6 +35,8 @@ export class HandoverService {
                     assignedUserId: data.userId, // Track who has the cart
                 },
             });
+
+            return { vehicle };
         });
 
         // Fetch the created log with relations after transaction completes
@@ -42,10 +48,28 @@ export class HandoverService {
             },
             orderBy: { timestamp: 'desc' },
             include: {
-                fleet: { select: { id: true, carNumber: true, carType: true, status: true } },
+                fleet: { select: { id: true, carNumber: true, carType: true, status: true, stadium: { select: { id: true, name: true } } } },
                 user: { select: { id: true, name: true, email: true, role: true } },
             },
         });
+
+        // Create notification for check-in
+        if (log) {
+            const user = log.user;
+            const stadiumId = log.fleet?.stadium?.id;
+            
+            await notificationService.createForRoles(
+                {
+                    type: 'CheckIn',
+                    title: 'Cart Checked In',
+                    message: `${user.name} checked out ${log.fleet?.carNumber || 'cart'}`,
+                    entityType: 'HandoverLog',
+                    entityId: log.id,
+                },
+                ['SuperAdmin', 'Admin'],
+                stadiumId,
+            );
+        }
 
         return log;
     }
@@ -58,7 +82,10 @@ export class HandoverService {
         issueDescription?: string;
         photosUrls?: string[];
     }) {
-        const vehicle = await prisma.fleet.findUnique({ where: { id: data.fleetId } });
+        const vehicle = await prisma.fleet.findUnique({ 
+            where: { id: data.fleetId },
+            include: { stadium: true }
+        });
         if (!vehicle) throw new Error('Vehicle not found');
         if (vehicle.status !== 'Dispatched') {
             throw new Error(`Vehicle is not Dispatched (Current status: ${vehicle.status})`);
@@ -74,7 +101,7 @@ export class HandoverService {
                     photosUrls: data.photosUrls || [],
                 },
                 include: {
-                    fleet: { select: { carNumber: true, carType: true } },
+                    fleet: { select: { carNumber: true, carType: true, stadium: { select: { id: true, name: true } } } },
                     user: { select: { id: true, name: true, email: true, role: true } },
                 },
             });
@@ -109,6 +136,22 @@ export class HandoverService {
                     },
                 });
             }
+
+            return log;
+        }).then(async (log) => {
+            // Create notification for check-out
+            const stadiumId = log.fleet?.stadium?.id;
+            await notificationService.createForRoles(
+                {
+                    type: 'CheckOut',
+                    title: 'Cart Returned',
+                    message: `${log.user.name} returned ${log.fleet?.carNumber || 'cart'}${data.hasIssue ? ' (with issue)' : ''}`,
+                    entityType: 'HandoverLog',
+                    entityId: log.id,
+                },
+                ['SuperAdmin', 'Admin'],
+                stadiumId,
+            );
 
             return log;
         });

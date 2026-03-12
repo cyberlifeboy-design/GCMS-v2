@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import crypto from 'crypto';
+import { notificationService } from '../notifications/notification.service';
 
 export interface CreateCarRequestData {
     requesterName: string;
