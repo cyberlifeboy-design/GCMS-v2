@@ -51,7 +51,16 @@ export class NotificationController {
     async getSummaryStats(req: Request, res: Response) {
         try {
             const user = (req as any).user;
-            const stadiumId = user?.stadiumId || req.query.stadiumId as string;
+            let stadiumId: string | undefined;
+            
+            if (user?.stadiumId) {
+                stadiumId = user.stadiumId;
+            } else {
+                const queryStadiumId = req.query.stadiumId;
+                if (typeof queryStadiumId === 'string') {
+                    stadiumId = queryStadiumId;
+                }
+            }
             
             const stats = await notificationService.getSummaryStats(stadiumId);
             res.json(stats);

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { reportsApi } from '@/lib/api';
+import { reportsApi, notificationsApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck } from 'lucide-react';
+import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck, Bell, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -39,6 +39,15 @@ interface FAFleetInfo {
     carts: Array<{ id: string; carNumber: string; carType: string; status: string }>;
 }
 
+interface NotificationStats {
+    issuesReported: number;
+    checkIns: number;
+    checkOuts: number;
+    carRequests: number;
+    pendingRequests: number;
+    openIssues: number;
+}
+
 interface DashboardStats {
     fleetByType: Array<{ type: string, count: number }>;
     fleetByStatus: Array<{ status: string, count: number }>;
@@ -57,13 +66,18 @@ export function DashboardPage() {
     const { user } = useAuthStore();
     const navigate = useNavigate();
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [notifStats, setNotifStats] = useState<NotificationStats | null>(null);
     const [loading, setLoading] = useState(true);
 
     const loadStats = async () => {
         try {
             setLoading(true);
-            const res = await reportsApi.getUtilization();
-            setStats(res.data);
+            const [statsRes, notifRes] = await Promise.all([
+                reportsApi.getUtilization(),
+                notificationsApi.getStats()
+            ]);
+            setStats(statsRes.data);
+            setNotifStats(notifRes.data);
         } catch (e) {
             console.error(e);
         } finally {
@@ -373,6 +387,79 @@ export function DashboardPage() {
                             <Line type="monotone" dataKey="checkOut" name="Check-Outs" stroke="#3b82f6" strokeWidth={2} />
                         </LineChart>
                     </ResponsiveContainer>
+                </CardContent>
+            </Card>
+
+            {/* Notification Summary */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-primary" /> System Activity Summary
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div 
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/maintenance')}
+                        >
+                            <div className="p-3 rounded-full bg-red-100 mb-2">
+                                <Wrench className="w-5 h-5 text-red-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.openIssues || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Open Issues</p>
+                        </div>
+                        <div 
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/handover')}
+                        >
+                            <div className="p-3 rounded-full bg-green-100 mb-2">
+                                <ArrowRightLeft className="w-5 h-5 text-green-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.checkIns || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Check-Ins</p>
+                        </div>
+                        <div 
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/handover')}
+                        >
+                            <div className="p-3 rounded-full bg-blue-100 mb-2">
+                                <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.checkOuts || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Check-Outs</p>
+                        </div>
+                        <div 
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/requests')}
+                        >
+                            <div className="p-3 rounded-full bg-purple-100 mb-2">
+                                <Car className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.carRequests || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Car Requests</p>
+                        </div>
+                        <div 
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/requests?status=Pending')}
+                        >
+                            <div className="p-3 rounded-full bg-yellow-100 mb-2">
+                                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.pendingRequests || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Pending Requests</p>
+                        </div>
+                        <div 
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/maintenance?status=Open')}
+                        >
+                            <div className="p-3 rounded-full bg-orange-100 mb-2">
+                                <AlertCircle className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.issuesReported || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Issues Reported</p>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
         </div>

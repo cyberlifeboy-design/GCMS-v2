@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, Wrench, ArrowRightLeft, Car, UserPlus, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Bell, X, CheckCheck, Wrench, ArrowRightLeft, Car, UserPlus, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { notificationsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 

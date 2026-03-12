@@ -21,8 +21,8 @@ interface FleetCart {
     carType: 'Cargo' | 'Accessibility' | '6-Seater' | '4-Seater';
     status: 'Available' | 'Assigned' | 'Dispatched' | 'Under Maintenance';
     requiresVAP: boolean;
-    stadium?: { id: string; name: string };
-    department?: { id: string; name: string };
+    stadium?: { id: string; name: string; code: string };
+    department?: { id: string; name: string; code?: string };
     assignedUser?: { id: string; name: string; email: string };
 }
 
@@ -525,7 +525,7 @@ export function FleetPage() {
                         <TableHead>Type</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>VAP</TableHead>
-                        <TableHead>Assigned FA</TableHead>
+                        <TableHead>FA Focal Point</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead>Stadium</TableHead>
                         {(isAdmin || isFA) && <TableHead className="text-right">Actions</TableHead>}
@@ -553,8 +553,8 @@ export function FleetPage() {
                                 {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
                             </TableCell>
                             <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                            <TableCell>{cart.department?.code || cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                            <TableCell>{cart.stadium?.code || cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                             {(isAdmin || isFA) && (
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-1">

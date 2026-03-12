@@ -164,7 +164,7 @@ export class FleetService {
     async getAssignedToUser(userId: string) {
         return prisma.fleet.findMany({
             where: { assignedUserId: userId },
-            include: { stadium: true },
+            include: { stadium: { select: { id: true, name: true, code: true } }, department: { select: { id: true, name: true, code: true } } },
             orderBy: { carNumber: 'asc' },
         });
     }
@@ -178,7 +178,7 @@ export class FleetService {
                 where,
                 include: {
                     stadium: { select: { id: true, name: true, code: true } },
-                    department: { select: { id: true, name: true } },
+                    department: { select: { id: true, name: true, code: true } },
                     assignedUser: { select: { id: true, name: true, email: true, phone: true, role: true } },
                 },
                 orderBy: [{ stadium: { name: 'asc' } }, { carNumber: 'asc' }],

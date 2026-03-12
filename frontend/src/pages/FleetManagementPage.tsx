@@ -22,7 +22,7 @@ interface FleetCart {
     requiresVAP: boolean;
     stadiumId: string;
     stadium: { id: string; name: string; code: string };
-    department?: { id: string; name: string };
+    department?: { id: string; name: string; code?: string };
     assignedUser?: { id: string; name: string; email: string; phone?: string } | null;
 }
 
@@ -283,116 +283,26 @@ export function FleetManagementPage() {
                 </TabsList>
 
                 <TabsContent value="matrix" className="space-y-4">
-                    {/* Filters */}
+                    {/* Car Type Breakdown Summary */}
                     <Card>
-                        <CardHeader className="pb-3">
-                            <div className="flex gap-4 items-center">
-                                <Input
-                                    placeholder="Search by cart #, stadium, type, or FA name..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="max-w-sm"
-                                />
-                                {isSuperAdmin && (
-                                    <Select value={selectedStadium} onValueChange={setSelectedStadium}>
-                                        <SelectTrigger className="w-48">
-                                            <SelectValue placeholder="All Stadiums" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Stadiums</SelectItem>
-                                            {stadiums.map(s => (
-                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            </div>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-lg">Car Type Breakdown</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0">
-                            {loading ? (
-                                <div className="flex items-center justify-center py-12">
-                                    <Loader2 className="w-8 h-8 animate-spin" />
-                                </div>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-10">
-                                                <Checkbox
-                                                    checked={selectedCarts.size === filteredFleet.length && filteredFleet.length > 0}
-                                                    onCheckedChange={toggleAllVisible}
-                                                />
-                                            </TableHead>
-                                            <TableHead>Cart #</TableHead>
-                                            <TableHead>Type</TableHead>
-                                            {isSuperAdmin && <TableHead>Stadium</TableHead>}
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Assigned FA</TableHead>
-                                            <TableHead>VAP</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {filteredFleet.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground">
-                                                    No carts found
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            filteredFleet.map(cart => (
-                                                <TableRow key={cart.id} className={selectedCarts.has(cart.id) ? 'bg-blue-50' : ''}>
-                                                    <TableCell>
-                                                        <Checkbox
-                                                            checked={selectedCarts.has(cart.id)}
-                                                            onCheckedChange={() => toggleCartSelection(cart.id)}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell className="font-mono font-medium">{cart.carNumber}</TableCell>
-                                                    <TableCell>
-                                                        <Badge className={TYPE_COLORS[cart.carType] || 'bg-gray-100'}>
-                                                            {cart.carType}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    {isSuperAdmin && (
-                                                        <TableCell>{cart.stadium?.name || '—'}</TableCell>
-                                                    )}
-                                                    <TableCell>
-                                                        <span className={STATUS_COLORS[cart.status] || 'text-gray-600'}>
-                                                            {cart.status}
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {cart.assignedUser ? (
-                                                            <div>
-                                                                <span className="font-medium">{cart.assignedUser.name}</span>
-                                                                <span className="text-xs text-muted-foreground ml-2">
-                                                                    {cart.assignedUser.email}
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-muted-foreground italic">Unassigned</span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {cart.requiresVAP && <Badge variant="outline" className="text-orange-600 border-orange-400">VAP</Badge>}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" onClick={() => openAssignModal(cart)}>
-                                                            <ArrowRightLeft className="w-4 h-4 mr-1" />
-                                                            Assign
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            )}
+                        <CardContent>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {CAR_TYPES.map(type => (
+                                    <div key={type} className="flex items-center gap-3">
+                                        <Badge className={`${carTypeColors[type]} text-sm px-3 py-1`} variant="secondary">
+                                            {type}
+                                        </Badge>
+                                        <span className="text-2xl font-bold">{carTypeBreakdown[type] || 0}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </CardContent>
                     </Card>
 
-                    {/* Matrix by Stadium View */}
+                    {/* Assignments by Stadium - moved to top */}
                     {isSuperAdmin && selectedStadium === 'all' && Object.keys(fleetByStadium).length > 0 && (
                         <Card>
                             <CardHeader>
@@ -447,6 +357,145 @@ export function FleetManagementPage() {
                             </CardContent>
                         </Card>
                     )}
+
+                    {/* Filters */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex gap-4 items-center flex-wrap">
+                                <Input
+                                    placeholder="Search by cart #, stadium, type, or FA name..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    className="max-w-sm"
+                                />
+                                <Select value={carTypeFilter} onValueChange={setCarTypeFilter}>
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue placeholder="All Types" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Types</SelectItem>
+                                        {CAR_TYPES.map(type => (
+                                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Select value={faFilter} onValueChange={setFaFilter}>
+                                    <SelectTrigger className="w-48">
+                                        <SelectValue placeholder="All FAs" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All FAs</SelectItem>
+                                        <SelectItem value="assigned">Assigned</SelectItem>
+                                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                                        {faUsers
+                                            .filter(u => !selectedStadium || selectedStadium === 'all' || u.stadium?.id === selectedStadium)
+                                            .map(u => (
+                                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                            ))
+                                        }
+                                    </SelectContent>
+                                </Select>
+                                {isSuperAdmin && (
+                                    <Select value={selectedStadium} onValueChange={setSelectedStadium}>
+                                        <SelectTrigger className="w-48">
+                                            <SelectValue placeholder="All Stadiums" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Stadiums</SelectItem>
+                                            {stadiums.map(s => (
+                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {loading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="w-8 h-8 animate-spin" />
+                                </div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-10">
+                                                <Checkbox
+                                                    checked={selectedCarts.size === filteredFleet.length && filteredFleet.length > 0}
+                                                    onCheckedChange={toggleAllVisible}
+                                                />
+                                            </TableHead>
+                                            <TableHead>Cart #</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            {isSuperAdmin && <TableHead>Stadium</TableHead>}
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Focal Point</TableHead>
+                                            <TableHead>Dept</TableHead>
+                                            <TableHead>VAP</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredFleet.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-muted-foreground">
+                                                    No carts found
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filteredFleet.map(cart => (
+                                                <TableRow key={cart.id} className={selectedCarts.has(cart.id) ? 'bg-blue-50' : ''}>
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={selectedCarts.has(cart.id)}
+                                                            onCheckedChange={() => toggleCartSelection(cart.id)}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-center text-lg font-bold">{cart.carNumber}</TableCell>
+                                                    <TableCell>
+                                                        <Badge className={carTypeColors[cart.carType] || 'bg-gray-100 text-gray-800'} variant="secondary">
+                                                            {cart.carType}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    {isSuperAdmin && (
+                                                        <TableCell>{cart.stadium?.code || cart.stadium?.name || '—'}</TableCell>
+                                                    )}
+                                                    <TableCell>
+                                                        <span className={STATUS_COLORS[cart.status] || 'text-gray-600'}>
+                                                            {cart.status}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {cart.assignedUser ? (
+                                                            <span className="font-medium">{cart.assignedUser.name}</span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground italic">Unassigned</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {cart.department ? (
+                                                            <Badge variant="outline">{cart.department.code || cart.department.name}</Badge>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">—</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {cart.requiresVAP && <Badge variant="outline" className="text-orange-600 border-orange-400">VAP</Badge>}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button variant="outline" size="sm" onClick={() => openAssignModal(cart)}>
+                                                            <ArrowRightLeft className="w-4 h-4 mr-1" />
+                                                            Assign
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">

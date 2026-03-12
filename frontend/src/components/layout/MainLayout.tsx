@@ -138,7 +138,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                             <Menu className="w-6 h-6" />
                         </button>
                         <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS'}</h1>
-                        <div className="w-10" /> {/* Spacer for centering */}
+                        <NotificationCenter />
                     </header>
 
                     {/* Page content */}
