@@ -28,7 +28,7 @@ export class SettingsController {
     static async get(req: AuthRequest, res: Response) {
         try {
             const settings = await settingsService.get();
-            res.status(200).json(settings);
+            res.status(200).json({ data: settings });
         } catch (error) {
             res.status(500).json({ error: 'Failed to get settings' });
         }
