@@ -523,7 +523,7 @@ export class ReportsService {
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 departmentId: true,
-                department: { select: { id: true, name: true } },
+                department: { select: { id: true, name: true, code: true } },
                 isActive: true,
             },
             orderBy: { name: 'asc' },
@@ -677,7 +677,6 @@ export class ReportsService {
 
         return activeCars;
     }
-}
 
     /**
      * Get all fleet data for label generation

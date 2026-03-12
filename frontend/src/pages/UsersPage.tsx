@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usersApi, stadiumsApi, departmentsApi } from '@/lib/api';
+import { usersApi, stadiumsApi, departmentsApi, requestsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight, Edit2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight, Edit2, Download, Ban, CheckCircle, UserPlus } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
 
@@ -18,9 +19,23 @@ interface User {
     email: string;
     phone?: string;
     role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
+    accreditationNumber?: string;
     isActive: boolean;
+    isBlocked?: boolean;
+    assignAllStadiums?: boolean;
     stadium?: { id: string; name: string };
     department?: { id: string; name: string };
+    createdAt: string;
+}
+
+interface CarRequest {
+    id: string;
+    requesterName: string;
+    requesterEmail: string;
+    requesterPhone?: string;
+    stadium: { id: string; name: string };
+    department: { id: string; name: string };
+    status: string;
     createdAt: string;
 }
 
@@ -32,6 +47,7 @@ const roleColors: Record<string, string> = {
 };
 
 const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer'] as const;
+const ROLE_ORDER = ['SuperAdmin', 'Admin', 'Observer', 'FA'] as const;
 
 type UserFormData = {
     name: string;
@@ -39,12 +55,14 @@ type UserFormData = {
     password: string;
     phone: string;
     role: string;
+    accreditationNumber: string;
     stadiumId: string;
     departmentId: string;
+    assignAllStadiums: boolean;
 };
 
 const EMPTY_FORM: UserFormData = {
-    name: '', email: '', password: '', phone: '', role: 'FA', stadiumId: '', departmentId: '',
+    name: '', email: '', password: '', phone: '', role: 'FA', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false,
 };
 
 export function UsersPage() {
@@ -68,11 +86,17 @@ export function UsersPage() {
     const [editOpen, setEditOpen] = useState(false);
     const [editUser, setEditUser] = useState<User | null>(null);
     const [bulkOpen, setBulkOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
-    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', stadiumId: '', departmentId: '' });
+    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false });
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string; stadiumId: string }>>([]);
+
+    // Import from requests
+    const [pendingRequests, setPendingRequests] = useState<CarRequest[]>([]);
+    const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set());
+    const [loadingRequests, setLoadingRequests] = useState(false);
 
     // Bulk
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,9 +162,22 @@ export function UsersPage() {
         const matchSearch =
             u.name?.toLowerCase().includes(search.toLowerCase()) ||
             u.email?.toLowerCase().includes(search.toLowerCase()) ||
-            u.phone?.includes(search);
+            u.phone?.includes(search) ||
+            u.accreditationNumber?.toLowerCase().includes(search.toLowerCase());
         return matchSearch;
     });
+
+    // Group users by role
+    const groupedUsers = () => {
+        const groups: Record<string, User[]> = {};
+        ROLE_ORDER.forEach(r => { groups[r] = []; });
+        filtered.forEach(u => {
+            if (groups[u.role]) {
+                groups[u.role].push(u);
+            }
+        });
+        return groups;
+    };
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -152,8 +189,10 @@ export function UsersPage() {
                 password: formData.password || 'changeme123',
                 phone: formData.phone || undefined,
                 role: formData.role,
+                accreditationNumber: formData.accreditationNumber || undefined,
                 stadiumId: isSuperAdmin ? formData.stadiumId || undefined : currentUser?.stadiumId,
                 departmentId: formData.departmentId || undefined,
+                assignAllStadiums: formData.assignAllStadiums,
             });
             setCreateOpen(false);
             setFormData(EMPTY_FORM);
@@ -174,6 +213,15 @@ export function UsersPage() {
         }
     };
 
+    const handleToggleBlocked = async (u: User) => {
+        try {
+            await usersApi.setBlocked(u.id, !u.isBlocked);
+            setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isBlocked: !u.isBlocked } : x));
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update block status');
+        }
+    };
+
     const openEdit = (u: User) => {
         setEditUser(u);
         setEditData({
@@ -181,8 +229,10 @@ export function UsersPage() {
             email: u.email || '',
             phone: u.phone || '',
             role: u.role || 'FA',
+            accreditationNumber: u.accreditationNumber || '',
             stadiumId: u.stadium?.id || '',
             departmentId: u.department?.id || '',
+            assignAllStadiums: u.assignAllStadiums || false,
         });
         setEditOpen(true);
     };
@@ -197,8 +247,10 @@ export function UsersPage() {
                 email: editData.email,
                 phone: editData.phone || undefined,
                 role: editData.role as any,
+                accreditationNumber: editData.accreditationNumber || undefined,
                 stadiumId: isSuperAdmin ? editData.stadiumId || undefined : undefined,
                 departmentId: editData.departmentId || undefined,
+                assignAllStadiums: editData.assignAllStadiums,
             });
             setEditOpen(false);
             setEditUser(null);
@@ -253,21 +305,103 @@ export function UsersPage() {
         reader.readAsText(f);
     };
 
+    // Load pending requests for import
+    const loadPendingRequests = async () => {
+        setLoadingRequests(true);
+        try {
+            const res = await requestsApi.getAll({ status: 'Approved' });
+            setPendingRequests(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingRequests(false);
+        }
+    };
+
+    const handleImportFromRequests = async () => {
+        if (selectedRequests.size === 0) {
+            alert('Please select at least one request to import');
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const result = await usersApi.importFromRequests(Array.from(selectedRequests));
+            alert(result.data.message);
+            setImportOpen(false);
+            setSelectedRequests(new Set());
+            loadUsers();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to import users');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    // Export users to Excel
+    const handleExport = async () => {
+        try {
+            const res = await usersApi.getAll({ limit: 1000 }); // Get all users
+            const usersData = res.data.data || [];
+
+            // Create CSV content
+            const headers = ['Name', 'Email', 'Phone', 'Role', 'Accreditation Number', 'Status', 'Blocked', 'Stadium', 'Department', 'Assign All Stadiums', 'Created At'];
+            const rows = usersData.map((u: User) => [
+                u.name,
+                u.email,
+                u.phone || '',
+                u.role,
+                u.accreditationNumber || '',
+                u.isActive ? 'Active' : 'Inactive',
+                u.isBlocked ? 'Yes' : 'No',
+                u.stadium?.name || '',
+                u.department?.name || '',
+                u.assignAllStadiums ? 'Yes' : 'No',
+                new Date(u.createdAt).toLocaleDateString(),
+            ]);
+
+            const csvContent = [
+                headers.join(','),
+                ...rows.map((row: string[]) => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            // Download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to export users');
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">User Management</h1>
-                {canManage && (
-                    <div className="flex gap-2">
-                        <input type="file" accept=".csv,.json" ref={fileInputRef} onChange={handleFileRead} className="hidden" />
-                        <Button variant="outline" onClick={() => { setBulkData(''); setBulkError(''); setBulkOpen(true); }}>
-                            <Upload className="w-4 h-4 mr-2" />Bulk Upload
+                <div className="flex gap-2 flex-wrap">
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="w-4 h-4 mr-2" />Export
+                    </Button>
+                    {isSuperAdmin && (
+                        <Button variant="outline" onClick={() => { loadPendingRequests(); setImportOpen(true); }}>
+                            <UserPlus className="w-4 h-4 mr-2" />Import from Requests
                         </Button>
-                        <Button onClick={() => { setFormData(EMPTY_FORM); setCreateOpen(true); }}>
-                            <Plus className="w-4 h-4 mr-2" />Add User
-                        </Button>
-                    </div>
-                )}
+                    )}
+                    {canManage && (
+                        <>
+                            <input type="file" accept=".csv,.json" ref={fileInputRef} onChange={handleFileRead} className="hidden" />
+                            <Button variant="outline" onClick={() => { setBulkData(''); setBulkError(''); setBulkOpen(true); }}>
+                                <Upload className="w-4 h-4 mr-2" />Bulk Upload
+                            </Button>
+                            <Button onClick={() => { setFormData(EMPTY_FORM); setCreateOpen(true); }}>
+                                <Plus className="w-4 h-4 mr-2" />Add User
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
 
             <Card>
@@ -276,7 +410,7 @@ export function UsersPage() {
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by name, email, or phone…"
+                                placeholder="Search by name, email, phone, or accreditation number…"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 className="pl-10"
@@ -292,69 +426,106 @@ export function UsersPage() {
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Phone</TableHead>
-                                <TableHead>Role</TableHead>
-                                <TableHead>Stadium</TableHead>
-                                <TableHead>Department</TableHead>
-                                <TableHead>Status</TableHead>
-                                {canManage && <TableHead className="text-right">Actions</TableHead>}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8">
-                                    <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                                </TableCell></TableRow>
-                            ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8 text-muted-foreground">No users found</TableCell></TableRow>
-                            ) : filtered.map(u => (
-                                <TableRow key={u.id}>
-                                    <TableCell className="font-medium">{u.name}</TableCell>
-                                    <TableCell>{u.email}</TableCell>
-                                    <TableCell>{u.phone || '—'}</TableCell>
-                                    <TableCell><Badge className={roleColors[u.role]}>{u.role}</Badge></TableCell>
-                                    <TableCell>{u.stadium?.name || '—'}</TableCell>
-                                    <TableCell>{u.department?.name || '—'}</TableCell>
-                                    <TableCell>
-                                        <Badge className={u.isActive ? 'bg-green-500 text-white' : 'bg-red-400 text-white'}>
-                                            {u.isActive ? 'Active' : 'Inactive'}
-                                        </Badge>
-                                    </TableCell>
-                                    {canManage && (
-                                        <TableCell className="text-right">
-                                            <div className="flex gap-1 justify-end">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => openEdit(u)}
-                                                    title="Edit user"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </Button>
-                                                {u.id !== currentUser?.id && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleToggleActive(u)}
-                                                        title={u.isActive ? 'Deactivate' : 'Activate'}
-                                                    >
-                                                        {u.isActive
-                                                            ? <ToggleRight className="w-5 h-5 text-green-600" />
-                                                            : <ToggleLeft className="w-5 h-5 text-gray-400" />}
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    )}
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                    {(() => {
+                        const groups = groupedUsers();
+                        return ROLE_ORDER.map(roleKey => {
+                            const roleUsers = groups[roleKey];
+                            if (roleUsers.length === 0) return null;
+                            return (
+                                <div key={roleKey} className="border-b last:border-b-0">
+                                    <div className="bg-muted/50 px-4 py-2 font-semibold text-sm flex items-center gap-2">
+                                        <Badge className={roleColors[roleKey]}>{roleKey}</Badge>
+                                        <span className="text-muted-foreground">({roleUsers.length})</span>
+                                    </div>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Name</TableHead>
+                                                <TableHead>Email</TableHead>
+                                                <TableHead>Phone</TableHead>
+                                                <TableHead>Accreditation #</TableHead>
+                                                <TableHead>Stadium</TableHead>
+                                                <TableHead>Department</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Blocked</TableHead>
+                                                {canManage && <TableHead className="text-right">Actions</TableHead>}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {roleUsers.map(u => (
+                                                <TableRow key={u.id}>
+                                                    <TableCell className="font-medium">{u.name}</TableCell>
+                                                    <TableCell>{u.email}</TableCell>
+                                                    <TableCell>{u.phone || '—'}</TableCell>
+                                                    <TableCell>{u.accreditationNumber || '—'}</TableCell>
+                                                    <TableCell>{u.assignAllStadiums ? 'All Stadiums' : (u.stadium?.name || '—')}</TableCell>
+                                                    <TableCell>{u.department?.name || '—'}</TableCell>
+                                                    <TableCell>
+                                                        <Badge className={u.isActive ? 'bg-green-500 text-white' : 'bg-red-400 text-white'}>
+                                                            {u.isActive ? 'Active' : 'Inactive'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {u.isBlocked ? (
+                                                            <Badge className="bg-red-600 text-white"><Ban className="w-3 h-3 mr-1" />Blocked</Badge>
+                                                        ) : (
+                                                            <Badge className="bg-gray-200 text-gray-600">No</Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    {canManage && (
+                                                        <TableCell className="text-right">
+                                                            <div className="flex gap-1 justify-end">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => openEdit(u)}
+                                                                    title="Edit user"
+                                                                >
+                                                                    <Edit2 className="w-4 h-4" />
+                                                                </Button>
+                                                                {u.id !== currentUser?.id && (
+                                                                    <>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            onClick={() => handleToggleBlocked(u)}
+                                                                            title={u.isBlocked ? 'Unblock user' : 'Block user'}
+                                                                        >
+                                                                            {u.isBlocked
+                                                                                ? <CheckCircle className="w-4 h-4 text-green-600" />
+                                                                                : <Ban className="w-4 h-4 text-gray-400" />}
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            onClick={() => handleToggleActive(u)}
+                                                                            title={u.isActive ? 'Deactivate' : 'Activate'}
+                                                                        >
+                                                                            {u.isActive
+                                                                                ? <ToggleRight className="w-5 h-5 text-green-600" />
+                                                                                : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                                                        </Button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                    )}
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            );
+                        });
+                    })()}
+                    {loading && (
+                        <div className="text-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                        </div>
+                    )}
+                    {!loading && filtered.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">No users found</div>
+                    )}
                     <Pagination
                         page={page}
                         totalPages={pagination.totalPages}
@@ -386,6 +557,10 @@ export function UsersPage() {
                             <Input value={formData.phone} onChange={e => setFormData(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 0100" />
                         </div>
                         <div className="space-y-2">
+                            <Label>Accreditation Number (Optional)</Label>
+                            <Input value={formData.accreditationNumber} onChange={e => setFormData(f => ({ ...f, accreditationNumber: e.target.value }))} placeholder="ACC-12345" />
+                        </div>
+                        <div className="space-y-2">
                             <Label>Role *</Label>
                             <Select value={formData.role} onValueChange={v => setFormData(f => ({ ...f, role: v }))}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -397,21 +572,33 @@ export function UsersPage() {
                             </Select>
                         </div>
                         {isSuperAdmin && (
-                            <div className="space-y-2">
-                                <Label>Stadium</Label>
-                                <Select value={formData.stadiumId || '__none__'} onValueChange={v => {
-                                    const val = v === '__none__' ? '' : v;
-                                    setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
-                                    if (val) loadDepartments(val);
-                                    else setDepartments([]);
-                                }}>
-                                    <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="__none__">No Stadium</SelectItem>
-                                        {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <>
+                                <div className="space-y-2">
+                                    <Label>Stadium</Label>
+                                    <Select value={formData.stadiumId || '__none__'} onValueChange={v => {
+                                        const val = v === '__none__' ? '' : v;
+                                        setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
+                                        if (val) loadDepartments(val);
+                                        else setDepartments([]);
+                                    }}>
+                                        <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__none__">No Stadium</SelectItem>
+                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id="assignAllStadiums"
+                                        checked={formData.assignAllStadiums}
+                                        onCheckedChange={(checked) => setFormData(f => ({ ...f, assignAllStadiums: !!checked }))}
+                                    />
+                                    <Label htmlFor="assignAllStadiums" className="text-sm font-normal cursor-pointer">
+                                        Assign to all stadiums
+                                    </Label>
+                                </div>
+                            </>
                         )}
                         {isAdmin && !isSuperAdmin && (
                             <div className="space-y-2">
@@ -456,7 +643,7 @@ export function UsersPage() {
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>Bulk Upload Users</DialogTitle>
-                        <DialogDescription>Upload a CSV or paste a JSON array. Fields: name, email, role, password, phone (optional).</DialogDescription>
+                        <DialogDescription>Upload a CSV or paste a JSON array. Fields: name, email, role, password, phone, accreditationNumber (optional).</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleBulkCreate} className="space-y-4">
                         <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
@@ -464,7 +651,7 @@ export function UsersPage() {
                         </Button>
                         <textarea
                             className="w-full h-44 p-3 border rounded-md font-mono text-sm"
-                            placeholder={`JSON example:\n[\n  {"name":"Jane","email":"jane@gcms.com","role":"FA","password":"pass123"}\n]`}
+                            placeholder={`JSON example:\n[\n  {"name":"Jane","email":"jane@gcms.com","role":"FA","password":"pass123","accreditationNumber":"ACC-001"}\n]`}
                             value={bulkData}
                             onChange={e => setBulkData(e.target.value)}
                         />
@@ -474,6 +661,91 @@ export function UsersPage() {
                             <Button type="submit">Upload</Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Import from Requests Modal */}
+            <Dialog open={importOpen} onOpenChange={setImportOpen}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Import Users from Car Requests</DialogTitle>
+                        <DialogDescription>Select approved car requests to create FA Focal Point users.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        {loadingRequests ? (
+                            <div className="flex justify-center py-8">
+                                <Loader2 className="w-6 h-6 animate-spin" />
+                            </div>
+                        ) : pendingRequests.length === 0 ? (
+                            <p className="text-muted-foreground text-center py-8">No approved requests available to import.</p>
+                        ) : (
+                            <>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-sm text-muted-foreground">{selectedRequests.size} selected</span>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setSelectedRequests(new Set(pendingRequests.map(r => r.id)))}
+                                        >
+                                            Select All
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setSelectedRequests(new Set())}
+                                        >
+                                            Clear Selection
+                                        </Button>
+                                    </div>
+                                </div>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-10"></TableHead>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Email</TableHead>
+                                            <TableHead>Phone</TableHead>
+                                            <TableHead>Stadium</TableHead>
+                                            <TableHead>Department</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {pendingRequests.map(r => (
+                                            <TableRow
+                                                key={r.id}
+                                                className={selectedRequests.has(r.id) ? 'bg-muted/50' : ''}
+                                            >
+                                                <TableCell>
+                                                    <Checkbox
+                                                        checked={selectedRequests.has(r.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            const newSet = new Set(selectedRequests);
+                                                            if (checked) newSet.add(r.id);
+                                                            else newSet.delete(r.id);
+                                                            setSelectedRequests(newSet);
+                                                        }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>{r.requesterName}</TableCell>
+                                                <TableCell>{r.requesterEmail}</TableCell>
+                                                <TableCell>{r.requesterPhone || '—'}</TableCell>
+                                                <TableCell>{r.stadium?.name}</TableCell>
+                                                <TableCell>{r.department?.name}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+                        <Button onClick={handleImportFromRequests} disabled={submitting || selectedRequests.size === 0}>
+                            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Import Selected ({selectedRequests.size})
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
@@ -496,6 +768,10 @@ export function UsersPage() {
                         <div className="space-y-2">
                             <Label>Phone</Label>
                             <Input value={editData.phone} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} placeholder="+1 555 0100" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Accreditation Number</Label>
+                            <Input value={editData.accreditationNumber} onChange={e => setEditData(d => ({ ...d, accreditationNumber: e.target.value }))} placeholder="ACC-12345" />
                         </div>
                         {isSuperAdmin && (
                             <>
@@ -522,6 +798,16 @@ export function UsersPage() {
                                             {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id="editAssignAllStadiums"
+                                        checked={editData.assignAllStadiums}
+                                        onCheckedChange={(checked) => setEditData(d => ({ ...d, assignAllStadiums: !!checked }))}
+                                    />
+                                    <Label htmlFor="editAssignAllStadiums" className="text-sm font-normal cursor-pointer">
+                                        Assign to all stadiums
+                                    </Label>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Department</Label>

@@ -62,4 +62,12 @@ router.get('/users/export', requireRole('SuperAdmin', 'Admin', 'Observer'), audi
 // Export user report (PDF)
 router.get('/users/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportUserReportPdf);
 
+// ==================== PRINT LABELS ====================
+
+// Export print labels (Word)
+router.get('/labels/docx', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsDocx);
+
+// Export print labels (PowerPoint)
+router.get('/labels/pptx', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsPptx);
+
 export default router;

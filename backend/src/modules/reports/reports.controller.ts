@@ -605,6 +605,7 @@ export class ReportsController {
                 { header: 'Role', key: 'role', width: 12 },
                 { header: 'Stadium', key: 'stadium', width: 20 },
                 { header: 'Department', key: 'department', width: 20 },
+                { header: 'Dept Code', key: 'deptCode', width: 12 },
                 { header: 'Status', key: 'status', width: 10 },
                 { header: 'Assigned Carts', key: 'assignedCarts', width: 15 },
                 { header: 'Check-ins', key: 'checkIns', width: 12 },
@@ -697,8 +698,8 @@ export class ReportsController {
             doc.moveDown();
 
             // Table headers
-            const headers = ['Name', 'Role', 'Stadium', 'Carts', 'Check-ins', 'Check-outs', 'Issues'];
-            const colWidths = [120, 60, 100, 50, 60, 60, 50];
+            const headers = ['Name', 'Role', 'Stadium', 'Dept', 'Dept Code', 'Carts', 'Check-ins', 'Check-outs', 'Issues'];
+            const colWidths = [100, 50, 90, 90, 60, 40, 55, 55, 45];
             let y = doc.y;
 
             doc.font('Helvetica-Bold').fontSize(9);
@@ -717,6 +718,8 @@ export class ReportsController {
                     user.name,
                     user.role,
                     user.stadium?.name || '—',
+                    user.department?.name || '—',
+                    user.department?.code || '—',
                     user.assignedCarts.toString(),
                     user.activitySummary.totalCheckIns.toString(),
                     user.activitySummary.totalCheckOuts.toString(),
@@ -743,6 +746,230 @@ export class ReportsController {
             doc.end();
         } catch (error) {
             res.status(500).json({ error: 'Failed to export user report PDF' });
+        }
+    }
+
+    // ==================== PRINT LABELS ====================
+
+    static async exportLabelsDocx(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            // RBAC scoping
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            // Get fleet data and system settings
+            const [labelsData, settings] = await Promise.all([
+                reportsService.getLabelsData({ stadiumId: filterStadiumId }),
+                prisma.systemSettings.findFirst(),
+            ]);
+
+            // Create Word document with landscape orientation
+            const doc = new Document({
+                sections: [{
+                    properties: {
+                        page: {
+                            size: {
+                                orientation: PageOrientation.LANDSCAPE,
+                            },
+                            margin: {
+                                top: 720, // 0.5 inch
+                                right: 720,
+                                bottom: 720,
+                                left: 720,
+                            },
+                        },
+                    },
+                    headers: settings?.headerUrl ? {
+                        default: new Header({
+                            children: [
+                                new Paragraph({
+                                    alignment: AlignmentType.CENTER,
+                                    children: [
+                                        new TextRun({
+                                            text: settings.tournamentName || 'Golf Cart Management System',
+                                            bold: true,
+                                            size: 28,
+                                        }),
+                                    ],
+                                }),
+                            ],
+                        }),
+                    } : undefined,
+                    footers: settings?.footerText ? {
+                        default: new Footer({
+                            children: [
+                                new Paragraph({
+                                    alignment: AlignmentType.CENTER,
+                                    children: [
+                                        new TextRun({
+                                            text: settings.footerText,
+                                            size: 20,
+                                        }),
+                                    ],
+                                }),
+                            ],
+                        }),
+                    } : undefined,
+                    children: labelsData.flatMap((label, index) => {
+                        // Each label is a centered paragraph with car number and FA code
+                        // We add a page break after every 6 labels (2 columns x 3 rows)
+                        const labelParagraphs = [
+                            new Paragraph({
+                                alignment: AlignmentType.CENTER,
+                                spacing: { after: 200 },
+                                children: [
+                                    new TextRun({
+                                        text: label.carNumber,
+                                        bold: true,
+                                        size: 56, // Large font
+                                    }),
+                                ],
+                            }),
+                            new Paragraph({
+                                alignment: AlignmentType.CENTER,
+                                spacing: { after: 400 },
+                                children: [
+                                    new TextRun({
+                                        text: label.faAccreditationNumber ? `FA: ${label.faAccreditationNumber}` : 'FA: —',
+                                        bold: true,
+                                        size: 36,
+                                    }),
+                                ],
+                            }),
+                        ];
+
+                        // Add page break after every 6 labels
+                        if ((index + 1) % 6 === 0 && index < labelsData.length - 1) {
+                            labelParagraphs.push(
+                                new Paragraph({
+                                    children: [new TextRun({ break: 1 })],
+                                })
+                            );
+                        }
+
+                        return labelParagraphs;
+                    }),
+                }],
+            });
+
+            const buffer = await Packer.toBuffer(doc);
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+            res.setHeader('Content-Disposition', 'attachment; filename=labels.docx');
+            res.send(buffer);
+        } catch (error) {
+            console.error('Failed to export labels DOCX:', error);
+            res.status(500).json({ error: 'Failed to export labels' });
+        }
+    }
+
+    static async exportLabelsPptx(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            // RBAC scoping
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            // Get fleet data and system settings
+            const [labelsData, settings] = await Promise.all([
+                reportsService.getLabelsData({ stadiumId: filterStadiumId }),
+                prisma.systemSettings.findFirst(),
+            ]);
+
+            // Create PowerPoint presentation
+            const pptx = new PptxGenJS();
+            pptx.layout = 'LAYOUT_4x3'; // Landscape
+            pptx.defineLayout({ name: 'LABEL', width: 10, height: 7.5 });
+
+            // Add slide master with header/footer
+            pptx.defineSlideMaster({
+                title: 'LABEL_MASTER',
+                background: { color: 'FFFFFF' },
+                objects: settings?.headerUrl ? [
+                    {
+                        text: {
+                            text: settings.tournamentName || 'Golf Cart Management System',
+                            options: {
+                                x: 0.5,
+                                y: 0.3,
+                                w: 9,
+                                h: 0.5,
+                                fontSize: 24,
+                                bold: true,
+                                align: 'center',
+                            },
+                        },
+                    },
+                ] : [],
+            });
+
+            // Each slide contains 6 labels (2 columns x 3 rows)
+            const labelsPerSlide = 6;
+            for (let i = 0; i < labelsData.length; i += labelsPerSlide) {
+                const slideLabels = labelsData.slice(i, i + labelsPerSlide);
+                const slide = pptx.addSlide({ masterName: 'LABEL_MASTER' });
+
+                // Add footer if configured
+                if (settings?.footerText) {
+                    slide.addText(settings.footerText, {
+                        x: 0.5,
+                        y: 6.8,
+                        w: 9,
+                        h: 0.3,
+                        fontSize: 12,
+                        align: 'center',
+                    });
+                }
+
+                // Add labels in a 2x3 grid
+                slideLabels.forEach((label, idx) => {
+                    const col = idx % 2;
+                    const row = Math.floor(idx / 2);
+                    const x = col * 4.5 + 0.5;
+                    const y = row * 2 + 1.5;
+
+                    // Car number - large and bold
+                    slide.addText(label.carNumber, {
+                        x: x,
+                        y: y,
+                        w: 4,
+                        h: 0.8,
+                        fontSize: 48,
+                        bold: true,
+                        align: 'center',
+                        valign: 'middle',
+                    });
+
+                    // FA accreditation number
+                    slide.addText(
+                        label.faAccreditationNumber ? `FA: ${label.faAccreditationNumber}` : 'FA: —',
+                        {
+                            x: x,
+                            y: y + 0.8,
+                            w: 4,
+                            h: 0.5,
+                            fontSize: 24,
+                            bold: true,
+                            align: 'center',
+                            valign: 'middle',
+                        }
+                    );
+                });
+            }
+
+            const buffer = await pptx.write({ outputType: 'arraybuffer' }) as Buffer;
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+            res.setHeader('Content-Disposition', 'attachment; filename=labels.pptx');
+            res.send(buffer);
+        } catch (error) {
+            console.error('Failed to export labels PPTX:', error);
+            res.status(500).json({ error: 'Failed to export labels' });
         }
     }
 }

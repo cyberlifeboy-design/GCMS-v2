@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText } from 'lucide-react';
+import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 interface UtilizationData {
@@ -56,7 +56,7 @@ interface UserReport {
     email: string;
     role: string;
     stadium: { id: string; name: string } | null;
-    department: { id: string; name: string } | null;
+    department: { id: string; name: string; code: string | null } | null;
     isActive: boolean;
     assignedCarts: number;
     cartDetails: Array<{
@@ -184,6 +184,16 @@ export function ReportsPage() {
         finally { setExporting(null); }
     };
 
+    const handleExportLabels = async (format: 'docx' | 'pptx') => {
+        setExporting('labels');
+        try {
+            const res = await reportsApi.exportLabels(format);
+            const ext = format === 'pptx' ? 'pptx' : 'docx';
+            downloadBlob(res.data, `labels_${new Date().toISOString().split('T')[0]}.${ext}`);
+        } catch { alert('Export failed'); }
+        finally { setExporting(null); }
+    };
+
     if (!canViewReports) {
         return (
             <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -240,7 +250,7 @@ export function ReportsPage() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="stadiums" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="stadiums" className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Stadium Reports
@@ -252,6 +262,10 @@ export function ReportsPage() {
                     <TabsTrigger value="users" className="flex items-center gap-2">
                         <Users className="w-4 h-4" />
                         User Reports
+                    </TabsTrigger>
+                    <TabsTrigger value="labels" className="flex items-center gap-2">
+                        <Tag className="w-4 h-4" />
+                        Print Labels
                     </TabsTrigger>
                 </TabsList>
 
@@ -402,6 +416,7 @@ export function ReportsPage() {
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Department</TableHead>
+                                                <TableHead>Code</TableHead>
                                                 <TableHead>Stadium</TableHead>
                                                 <TableHead className="text-center">Total Carts</TableHead>
                                                 <TableHead className="text-center">Available</TableHead>
@@ -418,6 +433,7 @@ export function ReportsPage() {
                                             {departmentReports.map((dept) => (
                                                 <TableRow key={dept.id}>
                                                     <TableCell className="font-medium">{dept.name}</TableCell>
+                                                    <TableCell>{dept.code || '—'}</TableCell>
                                                     <TableCell>{dept.stadium.name}</TableCell>
                                                     <TableCell className="text-center">{dept.totalCarts}</TableCell>
                                                     <TableCell className="text-center text-green-600">
@@ -515,6 +531,7 @@ export function ReportsPage() {
                                                 <TableHead>Role</TableHead>
                                                 <TableHead>Stadium</TableHead>
                                                 <TableHead>Department</TableHead>
+                                                <TableHead>Dept Code</TableHead>
                                                 <TableHead className="text-center">Assigned Carts</TableHead>
                                                 <TableHead className="text-center">Check-ins</TableHead>
                                                 <TableHead className="text-center">Check-outs</TableHead>
@@ -532,6 +549,7 @@ export function ReportsPage() {
                                                     </TableCell>
                                                     <TableCell>{u.stadium?.name || '—'}</TableCell>
                                                     <TableCell>{u.department?.name || '—'}</TableCell>
+                                                    <TableCell>{u.department?.code || '—'}</TableCell>
                                                     <TableCell className="text-center">{u.assignedCarts}</TableCell>
                                                     <TableCell className="text-center">{u.activitySummary.totalCheckIns}</TableCell>
                                                     <TableCell className="text-center">{u.activitySummary.totalCheckOuts}</TableCell>
@@ -547,6 +565,66 @@ export function ReportsPage() {
                                     </Table>
                                 </div>
                             )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Print Labels Tab */}
+                <TabsContent value="labels">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Print Labels</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                Generate printable labels for golf cars with car number and FA accreditation code.
+                                Labels are formatted in landscape orientation with tournament header/footer.
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium mb-2">Export Format</p>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleExportLabels('docx')}
+                                                disabled={exporting === 'labels'}
+                                            >
+                                                {exporting === 'labels' ? (
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <FileText className="w-4 h-4 mr-2" />
+                                                )}
+                                                Word Document
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleExportLabels('pptx')}
+                                                disabled={exporting === 'labels'}
+                                            >
+                                                {exporting === 'labels' ? (
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                                )}
+                                                PowerPoint
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-muted p-4 rounded-lg">
+                                    <h4 className="font-medium mb-2">Label Format</h4>
+                                    <ul className="text-sm text-muted-foreground space-y-1">
+                                        <li>• Page orientation: Landscape</li>
+                                        <li>• Header: Tournament name (from system settings)</li>
+                                        <li>• Footer: Tournament footer text (from system settings)</li>
+                                        <li>• Center: Golf car number and FA code in bold, large font</li>
+                                        <li>• Each page contains up to 6 labels</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>

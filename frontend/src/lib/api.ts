@@ -185,6 +185,10 @@ export const usersApi = {
         apiClient.post('/users/bulk', users),
     setStatus: (id: string, isActive: boolean) =>
         apiClient.patch(`/users/${id}/status`, { isActive }),
+    setBlocked: (id: string, isBlocked: boolean) =>
+        apiClient.patch(`/users/${id}/blocked`, { isBlocked }),
+    importFromRequests: (requestIds: string[]) =>
+        apiClient.post('/users/import-requests', { requestIds }),
     updatePreferences: (data: { exportFormat?: string }) =>
         apiClient.patch('/users/me/preferences', data),
 };
@@ -225,6 +229,10 @@ export const reportsApi = {
         apiClient.get('/reports/users', { params }),
     exportUserReport: (format: 'xlsx' | 'pdf' = 'xlsx') =>
         apiClient.get(`/reports/users/export${format === 'pdf' ? '/pdf' : ''}`, { responseType: 'blob' }),
+
+    // Print Labels
+    exportLabels: (format: 'docx' | 'pptx' = 'docx', params?: Record<string, unknown>) =>
+        apiClient.get(`/reports/labels/${format}`, { params, responseType: 'blob' }),
 };
 
 // Settings  (singleton: tournament name, branding images)

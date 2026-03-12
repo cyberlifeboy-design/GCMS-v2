@@ -353,18 +353,11 @@ export function DepartmentsPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None</SelectItem>
-                                        {faUsers
-                                            .filter(u => {
-                                                // Filter FA users by department's stadium if admin
-                                                if (!isSuperAdmin) return true;
-                                                // SuperAdmin sees all FA users
-                                                return true;
-                                            })
-                                            .map(u => (
-                                                <SelectItem key={u.id} value={u.id}>
-                                                    {u.name} ({u.email})
-                                                </SelectItem>
-                                            ))}
+                                        {faUsers.map(u => (
+                                            <SelectItem key={u.id} value={u.id}>
+                                                {u.name} ({u.email})
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-muted-foreground">Only FA role users can be assigned as focal point.</p>
