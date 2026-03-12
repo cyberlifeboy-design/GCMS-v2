@@ -16,6 +16,12 @@ const updateSettingsSchema = z.object({
     enableHandoverPhotos: z.boolean().optional(),
     systemAnnouncement: z.string().optional().nullable(),
     announcementExpiry: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
+    // Handover duration settings
+    handoverDefaultDurationDays: z.number().int().min(1).optional(),
+    handoverEventStartDate: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
+    handoverEventEndDate: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
+    enableHandoverReminder: z.boolean().optional(),
+    handoverReminderHoursBefore: z.number().int().min(1).optional(),
 });
 
 export class SettingsController {

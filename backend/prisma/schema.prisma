@@ -168,6 +168,14 @@ model SystemSettings {
   // System announcements
   systemAnnouncement            String?   // Optional system-wide announcement text
   announcementExpiry            DateTime? // When announcement expires
+  
+  // Handover Duration Settings
+  handoverDefaultDurationDays   Int       @default(1) // Default max handover duration in days
+  handoverEventStartDate        DateTime? // Start date for event/tournament handover period
+  handoverEventEndDate          DateTime? // End date for event/tournament handover period
+  enableHandoverReminder        Boolean   @default(true) // Send reminder before timeout
+  handoverReminderHoursBefore   Int       @default(1) // Hours before timeout to send reminder
+  
   updatedAt                     DateTime  @updatedAt
   updatedById                   String?
 }

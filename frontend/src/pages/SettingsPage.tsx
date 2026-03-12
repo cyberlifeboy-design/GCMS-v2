@@ -25,6 +25,12 @@ interface Settings {
     systemAnnouncement?: string;
     announcementExpiry?: string;
     theme?: 'light' | 'dark' | 'system';
+    // Handover duration settings
+    handoverDefaultDurationDays?: number;
+    handoverEventStartDate?: string;
+    handoverEventEndDate?: string;
+    enableHandoverReminder?: boolean;
+    handoverReminderHoursBefore?: number;
 }
 
 interface Stadium {
@@ -121,6 +127,12 @@ export function SettingsPage() {
     const [enableHandoverPhotos, setEnableHandoverPhotos] = useState(true);
     const [systemAnnouncement, setSystemAnnouncement] = useState('');
     const [announcementExpiry, setAnnouncementExpiry] = useState('');
+    // Handover duration settings
+    const [handoverDefaultDurationDays, setHandoverDefaultDurationDays] = useState(1);
+    const [handoverEventStartDate, setHandoverEventStartDate] = useState('');
+    const [handoverEventEndDate, setHandoverEventEndDate] = useState('');
+    const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
+    const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
 
     useEffect(() => {
         // Set export format from user data
@@ -162,6 +174,19 @@ export function SettingsPage() {
                 setEnableHandoverPhotos(d.enableHandoverPhotos ?? true);
                 setSystemAnnouncement(d.systemAnnouncement || '');
                 setAnnouncementExpiry(d.announcementExpiry ? d.announcementExpiry.slice(0, 16) : '');
+                // Handover duration settings
+                const settings = settingsRes.data.data as Settings & {
+                    handoverDefaultDurationDays?: number;
+                    handoverEventStartDate?: string;
+                    handoverEventEndDate?: string;
+                    enableHandoverReminder?: boolean;
+                    handoverReminderHoursBefore?: number;
+                };
+                setHandoverDefaultDurationDays(settings.handoverDefaultDurationDays ?? 1);
+                setHandoverEventStartDate(settings.handoverEventStartDate ? settings.handoverEventStartDate.slice(0, 16) : '');
+                setHandoverEventEndDate(settings.handoverEventEndDate ? settings.handoverEventEndDate.slice(0, 16) : '');
+                setEnableHandoverReminder(settings.enableHandoverReminder ?? true);
+                setHandoverReminderHoursBefore(settings.handoverReminderHoursBefore ?? 1);
                 setStadiums(stadiumsRes.data.data || []);
             } catch (e) {
                 console.error(e);
@@ -179,9 +204,14 @@ export function SettingsPage() {
         try {
             await usersApi.updatePreferences({
                 exportFormat,
-                emailNotifications
+                exportPreferences: {
+                    ...exportPrefs,
+                    emailNotifications
+                } as Record<string, unknown>,
             });
             updateExportFormat(exportFormat);
+            // Update local authStore with new preferences
+            useAuthStore.getState().updateExportPreferences(exportPrefs);
             setPreferencesSaved(true);
             setTimeout(() => setPreferencesSaved(false), 3000);
         } catch (err: any) {
@@ -190,6 +220,88 @@ export function SettingsPage() {
             setSavingPreferences(false);
         }
     };
+
+    const toggleSection = (section: string) => {
+        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+    };
+
+    const updateExportPref = (
+        reportType: keyof ExportPreferences,
+        field: string,
+        value: boolean
+    ) => {
+        setExportPrefs(prev => ({
+            ...prev,
+            [reportType]: {
+                ...prev[reportType],
+                [field]: value,
+            },
+        }));
+    };
+
+    const selectAllInReport = (reportType: keyof ExportPreferences, checked: boolean) => {
+        const report = exportPrefs[reportType];
+        if (!report) return;
+        const fields = Object.keys(report).filter(k => k !== 'enabled') as string[];
+        const updates: Record<string, boolean> = { enabled: checked };
+        fields.forEach(f => { updates[f] = checked; });
+        setExportPrefs(prev => ({
+            ...prev,
+            [reportType]: updates,
+        }));
+    };
+
+    const reportTypes: { key: keyof ExportPreferences; label: string; fields: { key: string; label: string }[] }[] = [
+        { key: 'fleet', label: 'Fleet Report', fields: [
+            { key: 'includeCarNumber', label: 'Car Number' },
+            { key: 'includeStatus', label: 'Status' },
+            { key: 'includeAssignment', label: 'Assignment' },
+            { key: 'includeStadium', label: 'Stadium' },
+            { key: 'includeDepartment', label: 'Department' },
+        ]},
+        { key: 'handover', label: 'Handover Report', fields: [
+            { key: 'includeCarNumber', label: 'Car Number' },
+            { key: 'includeUser', label: 'User' },
+            { key: 'includeAction', label: 'Action' },
+            { key: 'includeTimestamp', label: 'Timestamp' },
+            { key: 'includeNotes', label: 'Notes' },
+        ]},
+        { key: 'maintenance', label: 'Maintenance Report', fields: [
+            { key: 'includeCarNumber', label: 'Car Number' },
+            { key: 'includeIssue', label: 'Issue Description' },
+            { key: 'includeStatus', label: 'Status' },
+            { key: 'includeReporter', label: 'Reporter' },
+            { key: 'includeDates', label: 'Dates' },
+        ]},
+        { key: 'request', label: 'Request Report', fields: [
+            { key: 'includeRequester', label: 'Requester' },
+            { key: 'includeDepartment', label: 'Department' },
+            { key: 'includeStadium', label: 'Stadium' },
+            { key: 'includeQuantities', label: 'Quantities' },
+            { key: 'includeStatus', label: 'Status' },
+            { key: 'includeNotes', label: 'Notes' },
+        ]},
+        { key: 'users', label: 'Users Report', fields: [
+            { key: 'includeName', label: 'Name' },
+            { key: 'includeEmail', label: 'Email' },
+            { key: 'includeRole', label: 'Role' },
+            { key: 'includeStadium', label: 'Stadium' },
+            { key: 'includeDepartment', label: 'Department' },
+            { key: 'includeStatus', label: 'Status' },
+        ]},
+        { key: 'department', label: 'Department Report', fields: [
+            { key: 'includeName', label: 'Name' },
+            { key: 'includeCode', label: 'Code' },
+            { key: 'includeStadium', label: 'Stadium' },
+            { key: 'includeFocalPoint', label: 'Focal Point' },
+        ]},
+        { key: 'stadium', label: 'Stadium Report', fields: [
+            { key: 'includeName', label: 'Name' },
+            { key: 'includeCode', label: 'Code' },
+            { key: 'includeLocation', label: 'Location' },
+            { key: 'includeStatus', label: 'Status' },
+        ]},
+    ];
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -210,6 +322,12 @@ export function SettingsPage() {
             fd.append('enableHandoverPhotos', String(enableHandoverPhotos));
             fd.append('systemAnnouncement', systemAnnouncement);
             fd.append('announcementExpiry', announcementExpiry ? new Date(announcementExpiry).toISOString() : '');
+            // Handover duration settings
+            fd.append('handoverDefaultDurationDays', String(handoverDefaultDurationDays));
+            fd.append('handoverEventStartDate', handoverEventStartDate ? new Date(handoverEventStartDate).toISOString() : '');
+            fd.append('handoverEventEndDate', handoverEventEndDate ? new Date(handoverEventEndDate).toISOString() : '');
+            fd.append('enableHandoverReminder', String(enableHandoverReminder));
+            fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
             await settingsApi.update(fd);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
@@ -317,6 +435,73 @@ export function SettingsPage() {
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Granular Export Preferences */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <FileSpreadsheet className="w-5 h-5" />
+                            Report Export Options
+                        </CardTitle>
+                        <CardDescription>
+                            Customize what to include in each report type when exporting
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-3">
+                            {reportTypes.map((report) => (
+                                <div key={report.key} className="border rounded-lg">
+                                    <div
+                                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50"
+                                        onClick={() => toggleSection(report.key)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <Checkbox
+                                                id={`${report.key}-enabled`}
+                                                checked={exportPrefs[report.key]?.enabled ?? true}
+                                                onCheckedChange={(checked) =>
+                                                    selectAllInReport(report.key, checked as boolean)
+                                                }
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <Label htmlFor={`${report.key}-enabled`} className="font-medium cursor-pointer">
+                                                {report.label}
+                                            </Label>
+                                        </div>
+                                        {expandedSections[report.key] ? (
+                                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                        ) : (
+                                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                        )}
+                                    </div>
+                                    {expandedSections[report.key] && (
+                                        <div className="px-3 pb-3 pt-0 border-t">
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+                                                {report.fields.map((field) => (
+                                                    <div key={field.key} className="flex items-center gap-2">
+                                                        <Checkbox
+                                                            id={`${report.key}-${field.key}`}
+                                                            checked={exportPrefs[report.key]?.[field.key as keyof typeof exportPrefs.fleet] ?? true}
+                                                            onCheckedChange={(checked) =>
+                                                                updateExportPref(report.key, field.key, checked as boolean)
+                                                            }
+                                                        />
+                                                        <Label
+                                                            htmlFor={`${report.key}-${field.key}`}
+                                                            className="text-sm font-normal cursor-pointer"
+                                                        >
+                                                            {field.label}
+                                                        </Label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </CardContent>
                 </Card>
@@ -565,6 +750,101 @@ export function SettingsPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Handover Duration Settings Section */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Clock className="w-5 h-5" />
+                                Handover Duration & Notifications
+                            </CardTitle>
+                            <CardDescription>Configure cart handover duration limits and reminder notifications</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Default Duration */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-medium">Default Handover Duration</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverDefaultDurationDays">Maximum Duration (days)</Label>
+                                        <Input
+                                            id="handoverDefaultDurationDays"
+                                            type="number"
+                                            min={1}
+                                            value={handoverDefaultDurationDays}
+                                            onChange={e => setHandoverDefaultDurationDays(parseInt(e.target.value) || 1)}
+                                            placeholder="1"
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Default maximum number of days a cart can be checked out
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Event/Tournament Date Range */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-medium">Event/Tournament Date Range</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    Set specific dates for tournaments where handover duration limits may differ
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverEventStartDate">Event Start Date</Label>
+                                        <Input
+                                            id="handoverEventStartDate"
+                                            type="datetime-local"
+                                            value={handoverEventStartDate}
+                                            onChange={e => setHandoverEventStartDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverEventEndDate">Event End Date</Label>
+                                        <Input
+                                            id="handoverEventEndDate"
+                                            type="datetime-local"
+                                            value={handoverEventEndDate}
+                                            onChange={e => setHandoverEventEndDate(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Reminder Notifications */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-medium">Reminder Notifications</h4>
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label htmlFor="enableHandoverReminder">Enable Reminder Notifications</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Send notifications to users when handover timeout is approaching
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="enableHandoverReminder"
+                                        checked={enableHandoverReminder}
+                                        onCheckedChange={setEnableHandoverReminder}
+                                    />
+                                </div>
+                                {enableHandoverReminder && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverReminderHoursBefore">Hours Before Timeout</Label>
+                                        <Input
+                                            id="handoverReminderHoursBefore"
+                                            type="number"
+                                            min={1}
+                                            value={handoverReminderHoursBefore}
+                                            onChange={e => setHandoverReminderHoursBefore(parseInt(e.target.value) || 1)}
+                                            placeholder="1"
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Hours before handover timeout to send reminder notification
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>

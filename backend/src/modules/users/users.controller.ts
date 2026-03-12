@@ -355,7 +355,18 @@ export class UsersController {
                 return;
             }
             const validatedData = updatePreferencesSchema.parse(req.body);
-            const user = await usersService.update(userId, validatedData);
+            
+            // If emailNotifications is provided, merge it into exportPreferences
+            const updateData: any = { ...validatedData };
+            if (validatedData.emailNotifications) {
+                updateData.exportPreferences = {
+                    ...validatedData.exportPreferences,
+                    emailNotifications: validatedData.emailNotifications,
+                };
+                delete updateData.emailNotifications;
+            }
+            
+            const user = await usersService.update(userId, updateData);
             res.status(200).json(user);
         } catch (error) {
             if (error instanceof z.ZodError) {

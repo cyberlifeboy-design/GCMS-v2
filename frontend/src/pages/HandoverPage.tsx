@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { handoverApi, fleetApi } from '@/lib/api';
+import { handoverApi, fleetApi, settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -138,6 +138,17 @@ export function HandoverPage() {
     // Bulk selection state
     const [selectedAvailable, setSelectedAvailable] = useState<string[]>([]);
     const [selectedDispatched, setSelectedDispatched] = useState<string[]>([]);
+
+    // Handover duration settings state
+    const [settingsExpanded, setSettingsExpanded] = useState(false);
+    const [settingsLoading, setSettingsLoading] = useState(false);
+    const [settingsSaving, setSettingsSaving] = useState(false);
+    const [settingsSaved, setSettingsSaved] = useState(false);
+    const [handoverDefaultDurationDays, setHandoverDefaultDurationDays] = useState(1);
+    const [handoverEventStartDate, setHandoverEventStartDate] = useState('');
+    const [handoverEventEndDate, setHandoverEventEndDate] = useState('');
+    const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
+    const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
 
     const loadPoolDashboard = async () => {
         try {
@@ -368,6 +379,136 @@ export function HandoverPage() {
                         </Card>
                     </div>
 
+                    {/* Handover Duration Settings (SuperAdmin only) */}
+                    {currentUser?.role === 'SuperAdmin' && (
+                        <Card>
+                            <CardHeader 
+                                className="cursor-pointer select-none" 
+                                onClick={() => setSettingsExpanded(!settingsExpanded)}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="w-5 h-5" />
+                                        <div>
+                                            <CardTitle className="text-lg">Handover Duration Settings</CardTitle>
+                                            <CardDescription>
+                                                Configure timeout and notification settings
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                    {settingsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </div>
+                            </CardHeader>
+                            {settingsExpanded && (
+                                <CardContent>
+                                    {settingsLoading ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <Loader2 className="w-6 h-6 animate-spin" />
+                                        </div>
+                                    ) : (
+                                        <form onSubmit={handleSaveSettings} className="space-y-6">
+                                            {/* Default Duration */}
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-medium">Default Handover Duration</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="handoverDefaultDurationDays">Maximum Duration (days)</Label>
+                                                        <Input
+                                                            id="handoverDefaultDurationDays"
+                                                            type="number"
+                                                            min={1}
+                                                            value={handoverDefaultDurationDays}
+                                                            onChange={e => setHandoverDefaultDurationDays(parseInt(e.target.value) || 1)}
+                                                            placeholder="1"
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Default maximum number of days a cart can be checked out
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Event/Tournament Date Range */}
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-medium">Event/Tournament Date Range</h4>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Set specific dates for tournaments where handover duration limits may differ
+                                                </p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="handoverEventStartDate">Event Start Date</Label>
+                                                        <Input
+                                                            id="handoverEventStartDate"
+                                                            type="datetime-local"
+                                                            value={handoverEventStartDate}
+                                                            onChange={e => setHandoverEventStartDate(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="handoverEventEndDate">Event End Date</Label>
+                                                        <Input
+                                                            id="handoverEventEndDate"
+                                                            type="datetime-local"
+                                                            value={handoverEventEndDate}
+                                                            onChange={e => setHandoverEventEndDate(e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Reminder Notifications */}
+                                            <div className="space-y-4">
+                                                <h4 className="text-sm font-medium">Reminder Notifications</h4>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <Label htmlFor="enableHandoverReminder">Enable Reminder Notifications</Label>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Send notifications to users when handover timeout is approaching
+                                                        </p>
+                                                    </div>
+                                                    <Switch
+                                                        id="enableHandoverReminder"
+                                                        checked={enableHandoverReminder}
+                                                        onCheckedChange={setEnableHandoverReminder}
+                                                    />
+                                                </div>
+                                                {enableHandoverReminder && (
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="handoverReminderHoursBefore">Hours Before Timeout</Label>
+                                                        <Input
+                                                            id="handoverReminderHoursBefore"
+                                                            type="number"
+                                                            min={1}
+                                                            value={handoverReminderHoursBefore}
+                                                            onChange={e => setHandoverReminderHoursBefore(parseInt(e.target.value) || 1)}
+                                                            placeholder="1"
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Hours before handover timeout to send reminder notification
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center gap-4 pt-2">
+                                                <Button type="submit" disabled={settingsSaving}>
+                                                    {settingsSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                                    Save Settings
+                                                </Button>
+                                                {settingsSaved && <span className="text-sm text-green-600 font-medium">✓ Saved successfully</span>}
+                                            </div>
+                                        </form>
+                                    )}
+                                </CardContent>
+                            )}
+                        </Card>
+                    )}
+                </div>
+            )}
+
+            {/* Pool Dashboard */}
+            {!poolLoading && poolDashboard && (
+                <div className="space-y-4">
                     {/* FA User's Assigned Carts */}
                     {role === 'FA' && poolDashboard.userAssignedCarts && poolDashboard.userAssignedCarts.length > 0 && (
                         <Card>

@@ -19,6 +19,7 @@ const DepartmentsPage = lazy(() => import('@/pages/DepartmentsPage').then(m => (
 const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').then(m => ({ default: m.FleetManagementPage })));
 const RequestsManagementPage = lazy(() => import('@/pages/RequestsManagementPage').then(m => ({ default: m.RequestsManagementPage })));
 const PublicRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.PublicRequestPage })));
+const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage').then(m => ({ default: m.NotificationCenterPage })));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
@@ -56,6 +57,7 @@ function AppContent() {
                                     <Route path="/departments" element={<DepartmentsPage />} />
                                     <Route path="/fleet-management" element={<FleetManagementPage />} />
                                     <Route path="/reports" element={<ReportsPage />} />
+                                    <Route path="/notifications" element={<NotificationCenterPage />} />
                                     <Route path="/settings" element={<SettingsPage />} />
                                     <Route path="/requests" element={<RequestsManagementPage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />

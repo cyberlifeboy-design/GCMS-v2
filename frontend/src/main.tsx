@@ -5,6 +5,7 @@ import { Toaster } from 'sonner'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import './styles/globals.css'
+import './stores/themeStore' // Initialize theme on load
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

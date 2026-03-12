@@ -189,7 +189,7 @@ export const usersApi = {
         apiClient.patch(`/users/${id}/blocked`, { isBlocked }),
     importFromRequests: (requestIds: string[]) =>
         apiClient.post('/users/import-requests', { requestIds }),
-    updatePreferences: (data: { exportFormat?: string }) =>
+    updatePreferences: (data: { exportFormat?: string; exportPreferences?: Record<string, unknown>; emailNotifications?: { maintenance?: boolean; handover?: boolean; requests?: boolean; assignments?: boolean } }) =>
         apiClient.patch('/users/me/preferences', data),
 };
 

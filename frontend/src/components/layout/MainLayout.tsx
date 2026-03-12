@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { useThemeStore } from '@/stores/themeStore';
 import { settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Bell, Calendar, Clock, Sun, Moon, Monitor } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
 function DateTimeDisplay() {
@@ -56,6 +55,7 @@ const navItems = [
     { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'] },
     { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'] },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'] },
+    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'] },
 ];
 
@@ -116,14 +116,25 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                     flex flex-col
                 `}>
-                    {/* Header */}
-                    <div className="p-6 border-b flex items-center justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold">GCMS</h1>
-                            <p className="text-sm text-muted-foreground">Fleet Management</p>
+                    {/* Header with Tournament Name and Logo */}
+                    <div className="p-4 border-b">
+                        <div className="flex items-center gap-3">
+                            {branding.logoUrl && (
+                                <img 
+                                    src={branding.logoUrl} 
+                                    alt="Logo" 
+                                    className="w-10 h-10 object-contain flex-shrink-0" 
+                                />
+                            )}
+                            <div className="min-w-0">
+                                <h1 className="text-lg font-bold truncate">
+                                    {branding.tournamentName || 'GCMS'}
+                                </h1>
+                                <p className="text-xs text-muted-foreground">Fleet Management</p>
+                            </div>
                         </div>
                         <button
-                            className="lg:hidden p-2 hover:bg-accent rounded-md"
+                            className="lg:hidden absolute top-4 right-4 p-2 hover:bg-accent rounded-md"
                             onClick={() => setSidebarOpen(false)}
                         >
                             <X className="w-5 h-5" />
@@ -177,7 +188,16 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         >
                             <Menu className="w-6 h-6" />
                         </button>
-                        <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS'}</h1>
+                        <div className="flex items-center gap-2">
+                            {branding.logoUrl && (
+                                <img 
+                                    src={branding.logoUrl} 
+                                    alt="Logo" 
+                                    className="w-6 h-6 object-contain" 
+                                />
+                            )}
+                            <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS'}</h1>
+                        </div>
                         <div className="flex items-center gap-2">
                             <DateTimeDisplay />
                             <NotificationCenter />

@@ -26,6 +26,12 @@ export class SettingsService {
         enableHandoverPhotos: boolean;
         systemAnnouncement: string | null;
         announcementExpiry: Date | null;
+        // Handover duration settings
+        handoverDefaultDurationDays: number;
+        handoverEventStartDate: Date | null;
+        handoverEventEndDate: Date | null;
+        enableHandoverReminder: boolean;
+        handoverReminderHoursBefore: number;
     }>, updatedById?: string) {
         const existing = await this.get();
         return prisma.systemSettings.update({
