@@ -20,11 +20,17 @@ router.post('/', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController
 // Bulk create
 router.post('/bulk', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.bulkCreate);
 
+// Import users from car requests (FA Focal Point users)
+router.post('/import-requests', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.importFromRequests);
+
 // Update user
 router.put('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.update);
 
 // Activate/deactivate
 router.patch('/:id/status', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.setActive);
+
+// Block/unblock
+router.patch('/:id/blocked', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.setBlocked);
 
 // Delete user
 router.delete('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.delete);

@@ -264,6 +264,12 @@ export const requestsApi = {
         apiClient.post(`/requests/${id}/approve`, { reviewNotes }),
     reject: (id: string, reviewNotes?: string) =>
         apiClient.post(`/requests/${id}/reject`, { reviewNotes }),
+    updateQuantities: (id: string, data: {
+        cargoCount?: number;
+        fourSeaterCount?: number;
+        sixSeaterCount?: number;
+        accessibilityCount?: number;
+    }) => apiClient.patch(`/requests/${id}/quantities`, data),
     delete: (id: string) =>
         apiClient.delete(`/requests/${id}`),
 };

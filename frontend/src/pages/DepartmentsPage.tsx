@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { departmentsApi, stadiumsApi } from '@/lib/api';
+import { departmentsApi, stadiumsApi, usersApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search, Edit2, Loader2, Building2 } from 'lucide-react';
+import { Plus, Search, Edit2, Loader2, Building2, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 interface Department {
@@ -16,8 +16,16 @@ interface Department {
     name: string;
     code?: string;
     stadiumId: string;
-    stadium: { name: string };
+    stadium: { id: string; name: string; code: string };
+    focalPointId?: string | null;
+    focalPoint?: { id: string; name: string; email: string } | null;
     _count?: { users: number; fleet: number };
+}
+
+interface FAUser {
+    id: string;
+    name: string;
+    email: string;
 }
 
 type CreateMode = 'single' | 'all' | 'select';
@@ -29,20 +37,23 @@ export function DepartmentsPage() {
     const canManage = isSuperAdmin || isAdmin;
 
     const [departments, setDepartments] = useState<Department[]>([]);
-    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
+    const [faUsers, setFaUsers] = useState<FAUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [stadiumFilter, setStadiumFilter] = useState<string>('all');
 
     const [modal, setModal] = useState<{ open: boolean; mode: 'create' | 'edit'; department?: Department }>({ open: false, mode: 'create' });
     const [submitting, setSubmitting] = useState(false);
-    const [formData, setFormData] = useState({ name: '', code: '', stadiumId: '' });
+    const [formData, setFormData] = useState({ name: '', code: '', stadiumId: '', focalPointId: '' });
     const [createMode, setCreateMode] = useState<CreateMode>('single');
     const [selectedStadiumIds, setSelectedStadiumIds] = useState<string[]>([]);
 
-    const loadDepartments = async () => {
+    const loadDepartments = async (stadiumId?: string) => {
         try {
             setLoading(true);
-            const res = await departmentsApi.getAll();
+            const params = stadiumId && stadiumId !== 'all' ? { stadiumId } : {};
+            const res = await departmentsApi.getAll(params);
             setDepartments(res.data.data || []);
         } catch (e) {
             console.error(e);
@@ -60,10 +71,24 @@ export function DepartmentsPage() {
         }
     };
 
+    const loadFAUsers = async () => {
+        try {
+            const res = await usersApi.getAll({ role: 'FA', isActive: true });
+            setFaUsers(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     useEffect(() => {
-        loadDepartments();
+        loadDepartments(stadiumFilter === 'all' ? undefined : stadiumFilter);
         if (isSuperAdmin) loadStadiums();
+        loadFAUsers();
     }, []);
+
+    useEffect(() => {
+        loadDepartments(stadiumFilter === 'all' ? undefined : stadiumFilter);
+    }, [stadiumFilter]);
 
     const filtered = departments.filter(d =>
         d.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -104,7 +129,12 @@ export function DepartmentsPage() {
             } else {
                 // Admin or edit mode
                 const stadiumId = isSuperAdmin ? formData.stadiumId : (user?.stadiumId || '');
-                const data = { ...formData, stadiumId };
+                const data = {
+                    name: formData.name,
+                    code: formData.code || undefined,
+                    stadiumId,
+                    ...(modal.mode === 'edit' && { focalPointId: formData.focalPointId || null }),
+                };
 
                 if (modal.mode === 'create') {
                     await departmentsApi.create(data);
@@ -113,7 +143,7 @@ export function DepartmentsPage() {
                 }
             }
             setModal({ open: false, mode: 'create' });
-            loadDepartments();
+            loadDepartments(stadiumFilter === 'all' ? undefined : stadiumFilter);
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to save department');
         } finally {
@@ -122,7 +152,7 @@ export function DepartmentsPage() {
     };
 
     const openCreate = () => {
-        setFormData({ name: '', code: '', stadiumId: isSuperAdmin ? '' : (user?.stadiumId || '') });
+        setFormData({ name: '', code: '', stadiumId: isSuperAdmin ? '' : (user?.stadiumId || ''), focalPointId: '' });
         setCreateMode('single');
         setSelectedStadiumIds([]);
         setModal({ open: true, mode: 'create' });
@@ -157,14 +187,29 @@ export function DepartmentsPage() {
 
             <Card>
                 <CardHeader>
-                    <div className="relative max-w-sm">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search departments…"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            className="pl-10"
-                        />
+                    <div className="flex flex-wrap gap-4 items-center">
+                        <div className="relative flex-1 min-w-[200px] max-w-sm">
+                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search departments…"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        {isSuperAdmin && (
+                            <Select value={stadiumFilter} onValueChange={setStadiumFilter}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Filter by stadium" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Stadiums</SelectItem>
+                                    {stadiums.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -173,28 +218,41 @@ export function DepartmentsPage() {
                             <TableRow>
                                 <TableHead>Department Name</TableHead>
                                 <TableHead>Code</TableHead>
-                                <TableHead>Stadium / Venue</TableHead>
+                                {isSuperAdmin && <TableHead>Stadium Code</TableHead>}
+                                <TableHead>Venue</TableHead>
+                                <TableHead>Focal Point</TableHead>
                                 <TableHead>Users / Carts</TableHead>
                                 {canManage && <TableHead className="text-right">Actions</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={canManage ? 5 : 4} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={canManage ? 5 : 4} className="text-center py-8 text-muted-foreground">No departments found</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8 text-muted-foreground">No departments found</TableCell></TableRow>
                             ) : filtered.map(d => (
                                 <TableRow key={d.id}>
                                     <TableCell className="font-semibold">{d.name}</TableCell>
                                     <TableCell><code className="bg-muted px-1 rounded">{d.code || '—'}</code></TableCell>
+                                    {isSuperAdmin && <TableCell><code className="bg-muted px-1 rounded text-xs">{d.stadium.code || '—'}</code></TableCell>}
                                     <TableCell className="flex items-center gap-1 text-muted-foreground"><Building2 className="w-3 h-3" /> {d.stadium.name}</TableCell>
+                                    <TableCell className="flex items-center gap-1">
+                                        {d.focalPoint ? (
+                                            <>
+                                                <User className="w-3 h-3 text-muted-foreground" />
+                                                <span className="text-sm">{d.focalPoint.name}</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-sm">
                                         <span className="text-muted-foreground">Users:</span> {d._count?.users} / <span className="text-muted-foreground">Carts:</span> {d._count?.fleet}
                                     </TableCell>
                                     {canManage && (
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="sm" onClick={() => {
-                                                setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId });
+                                                setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
                                                 setModal({ open: true, mode: 'edit', department: d });
                                             }}><Edit2 className="w-4 h-4" /></Button>
                                         </TableCell>
@@ -283,6 +341,33 @@ export function DepartmentsPage() {
                         {!isSuperAdmin && modal.mode === 'create' && (
                             <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
                                 Department will be created in your assigned venue.
+                            </div>
+                        )}
+
+                        {modal.mode === 'edit' && (
+                            <div className="space-y-2">
+                                <Label>Focal Point (FA User)</Label>
+                                <Select value={formData.focalPointId || 'none'} onValueChange={v => setFormData(f => ({ ...f, focalPointId: v === 'none' ? '' : v }))}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select focal point" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        {faUsers
+                                            .filter(u => {
+                                                // Filter FA users by department's stadium if admin
+                                                if (!isSuperAdmin) return true;
+                                                // SuperAdmin sees all FA users
+                                                return true;
+                                            })
+                                            .map(u => (
+                                                <SelectItem key={u.id} value={u.id}>
+                                                    {u.name} ({u.email})
+                                                </SelectItem>
+                                            ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">Only FA role users can be assigned as focal point.</p>
                             </div>
                         )}
 

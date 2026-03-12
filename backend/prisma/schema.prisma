@@ -22,19 +22,22 @@ model Stadium {
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  name        String
-  code        String?
-  stadiumId   String
-  stadium     Stadium  @relation(fields: [stadiumId], references: [id])
-  users       User[]
-  fleet       Fleet[]
-  carRequests CarRequest[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  code         String?
+  stadiumId    String
+  stadium      Stadium  @relation(fields: [stadiumId], references: [id])
+  focalPointId String?
+  focalPoint   User?    @relation("DepartmentFocalPoint", fields: [focalPointId], references: [id])
+  users        User[]
+  fleet        Fleet[]
+  carRequests  CarRequest[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([name, stadiumId])
   @@index([stadiumId])
+  @@index([focalPointId])
 }
 
 // Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
@@ -64,31 +67,36 @@ model Fleet {
 
 // Roles: SuperAdmin, Admin, FA, Observer
 model User {
-  id              String          @id @default(cuid())
-  name            String
-  email           String          @unique
-  passwordHash    String
-  role            String          // SuperAdmin, Admin, FA, Observer
-  phone           String?
-  isActive        Boolean         @default(true)
-  resetPasswordToken   String?    @unique
+  id                  String          @id @default(cuid())
+  name                String
+  email               String          @unique
+  passwordHash        String
+  role                String          // SuperAdmin, Admin, FA, Observer
+  phone               String?
+  accreditationNumber  String?        // Optional accreditation number for FA users
+  isActive            Boolean         @default(true)
+  isBlocked           Boolean         @default(false) // Block user from accessing system
+  resetPasswordToken   String?        @unique
   resetPasswordExpires DateTime?
-  exportFormat    String          @default("xlsx") // xlsx, pdf, docx
-  stadiumId       String?
-  stadium         Stadium?        @relation(fields: [stadiumId], references: [id])
-  departmentId    String?
-  department      Department?     @relation(fields: [departmentId], references: [id])
-  handoverLogs    HandoverLog[]
-  refreshTokens   RefreshToken[]
-  assignedCarts   Fleet[]         @relation("FleetAssignedUser")
-  maintenanceLogs MaintenanceLog[] @relation("MaintenanceReporter")
-  reviewedRequests CarRequest[]   @relation("CarRequestReviewer")
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  exportFormat        String          @default("xlsx") // xlsx, pdf, docx
+  assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
+  stadiumId           String?
+  stadium             Stadium?        @relation(fields: [stadiumId], references: [id])
+  departmentId        String?
+  department          Department?     @relation(fields: [departmentId], references: [id])
+  focalPointOf        Department[]    @relation("DepartmentFocalPoint")
+  handoverLogs        HandoverLog[]
+  refreshTokens       RefreshToken[]
+  assignedCarts       Fleet[]         @relation("FleetAssignedUser")
+  maintenanceLogs     MaintenanceLog[] @relation("MaintenanceReporter")
+  reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   @@index([stadiumId])
   @@index([role])
   @@index([departmentId])
+  @@index([isBlocked])
 }
 
 model RefreshToken {

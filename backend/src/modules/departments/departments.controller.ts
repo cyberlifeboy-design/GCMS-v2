@@ -15,6 +15,12 @@ const createBulkDeptSchema = z.object({
     stadiumIds: z.array(z.string().min(1)).min(1),
 });
 
+const updateDeptSchema = z.object({
+    name: z.string().min(1).optional(),
+    code: z.string().optional(),
+    focalPointId: z.string().nullable().optional(),
+});
+
 export class DepartmentsController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
@@ -78,10 +84,35 @@ export class DepartmentsController {
     static async update(req: AuthRequest, res: Response) {
         try {
             const id = req.params['id'] as string;
-            const dept = await departmentsService.update(id, req.body);
+            const validatedData = updateDeptSchema.parse(req.body);
+
+            // If setting focalPointId, verify it's an FA user
+            if (validatedData.focalPointId !== undefined && validatedData.focalPointId !== null) {
+                const { prisma } = await import('../../config/database');
+                const user = await prisma.user.findUnique({
+                    where: { id: validatedData.focalPointId },
+                    select: { id: true, role: true },
+                });
+
+                if (!user) {
+                    res.status(400).json({ error: 'User not found' });
+                    return;
+                }
+
+                if (user.role !== 'FA') {
+                    res.status(400).json({ error: 'Focal point must be an FA user' });
+                    return;
+                }
+            }
+
+            const dept = await departmentsService.update(id, validatedData);
             res.status(200).json(dept);
         } catch (error) {
-            res.status(500).json({ error: 'Failed to update department' });
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to update department' });
+            }
         }
     }
 

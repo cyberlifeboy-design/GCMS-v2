@@ -306,4 +306,63 @@ export class RequestsController {
             res.status(500).json({ error: 'Failed to delete request' });
         }
     }
+
+    /**
+     * Admin/SuperAdmin endpoint: Update request quantities before approving
+     * PATCH /api/v1/requests/:id/quantities
+     */
+    static async updateQuantities(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const validatedData = updateQuantitiesSchema.parse(req.body);
+
+            // Check if request exists
+            const existing = await requestsService.getById(id);
+            if (!existing) {
+                res.status(404).json({ error: 'Request not found' });
+                return;
+            }
+
+            // RBAC: Admin can only edit requests for their stadium
+            if (req.user?.role === 'Admin' && existing.stadiumId !== req.user.stadiumId) {
+                res.status(403).json({ error: 'Access denied' });
+                return;
+            }
+
+            if (existing.status !== 'Pending') {
+                res.status(400).json({ error: 'Cannot edit quantities for a request that has already been reviewed' });
+                return;
+            }
+
+            // Ensure at least one quantity remains after update
+            const newCargo = validatedData.cargoCount ?? existing.cargoCount;
+            const newFourSeater = validatedData.fourSeaterCount ?? existing.fourSeaterCount;
+            const newSixSeater = validatedData.sixSeaterCount ?? existing.sixSeaterCount;
+            const newAccessibility = validatedData.accessibilityCount ?? existing.accessibilityCount;
+
+            if (newCargo + newFourSeater + newSixSeater + newAccessibility === 0) {
+                res.status(400).json({ error: 'At least one cart type must have a quantity greater than 0' });
+                return;
+            }
+
+            const request = await requestsService.updateQuantities(id, {
+                cargoCount: newCargo,
+                fourSeaterCount: newFourSeater,
+                sixSeaterCount: newSixSeater,
+                accessibilityCount: newAccessibility,
+            });
+
+            res.status(200).json({
+                message: 'Request quantities updated successfully',
+                data: request,
+            });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                console.error('Update quantities error:', error);
+                res.status(500).json({ error: 'Failed to update quantities' });
+            }
+        }
+    }
 }

@@ -11,8 +11,10 @@ const createUserSchema = z.object({
     password: z.string().min(6).optional(),
     role: z.enum(ROLES),
     phone: z.string().optional(),
+    accreditationNumber: z.string().optional(),
     stadiumId: z.string().optional(),
     departmentId: z.string().optional(),
+    assignAllStadiums: z.boolean().optional(),
 });
 
 const updateUserSchema = z.object({
@@ -20,9 +22,12 @@ const updateUserSchema = z.object({
     email: z.string().email().optional(),
     role: z.enum(ROLES).optional(),
     phone: z.string().optional(),
+    accreditationNumber: z.string().optional(),
     stadiumId: z.string().optional(),
     departmentId: z.string().optional(),
     isActive: z.boolean().optional(),
+    isBlocked: z.boolean().optional(),
+    assignAllStadiums: z.boolean().optional(),
 });
 
 const updatePreferencesSchema = z.object({
@@ -210,8 +215,10 @@ export class UsersController {
                 password: z.string().optional(),
                 role: z.enum(ROLES),
                 phone: z.string().optional(),
+                accreditationNumber: z.string().optional(),
                 stadiumId: z.string().optional(),
                 departmentId: z.string().optional(),
+                assignAllStadiums: z.boolean().optional(),
             }));
             const users = schema.parse(req.body);
 
@@ -225,6 +232,53 @@ export class UsersController {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
                 res.status(500).json({ error: 'Failed to bulk create users' });
+            }
+        }
+    }
+
+    static async setBlocked(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            const { isBlocked } = z.object({ isBlocked: z.boolean() }).parse(req.body);
+
+            // Admin can only block FA at own venue
+            if (req.user?.role === 'Admin') {
+                const target = await usersService.getById(id);
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only block FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'You can only block FA users at your venue' });
+                    return;
+                }
+            }
+
+            const user = await usersService.setBlocked(id, isBlocked);
+            res.status(200).json(user);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to update block status' });
+        }
+    }
+
+    static async importFromRequests(req: AuthRequest, res: Response) {
+        try {
+            const { requestIds } = z.object({ requestIds: z.array(z.string()) }).parse(req.body);
+
+            const result = await usersService.importFromRequests(requestIds);
+            res.status(201).json({
+                message: `Imported: ${result.created}, Skipped: ${result.skipped}`,
+                ...result,
+            });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to import users from requests' });
             }
         }
     }

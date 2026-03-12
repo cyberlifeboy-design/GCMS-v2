@@ -7,7 +7,8 @@ export class DepartmentsService {
                 stadiumId: filters.stadiumId,
             },
             include: {
-                stadium: { select: { name: true } },
+                stadium: { select: { id: true, name: true, code: true } },
+                focalPoint: { select: { id: true, name: true, email: true } },
                 _count: { select: { users: true, fleet: true } }
             }
         });
@@ -46,10 +47,14 @@ export class DepartmentsService {
         return departments;
     }
 
-    async update(id: string, data: { name?: string; code?: string }) {
+    async update(id: string, data: { name?: string; code?: string; focalPointId?: string | null }) {
         return prisma.department.update({
             where: { id },
             data,
+            include: {
+                stadium: { select: { id: true, name: true, code: true } },
+                focalPoint: { select: { id: true, name: true, email: true } },
+            },
         });
     }
 

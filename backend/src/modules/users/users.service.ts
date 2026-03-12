@@ -57,8 +57,11 @@ export class UsersService {
                     email: true,
                     role: true,
                     phone: true,
+                    accreditationNumber: true,
                     isActive: true,
+                    isBlocked: true,
                     exportFormat: true,
+                    assignAllStadiums: true,
                     stadiumId: true,
                     stadium: { select: { id: true, name: true } },
                     departmentId: true,
@@ -102,8 +105,10 @@ export class UsersService {
         password?: string;
         role: string;
         phone?: string;
+        accreditationNumber?: string;
         stadiumId?: string;
         departmentId?: string;
+        assignAllStadiums?: boolean;
     }) {
         const exists = await prisma.user.findUnique({ where: { email: data.email } });
         if (exists) throw new Error('User with this email already exists');
@@ -118,8 +123,10 @@ export class UsersService {
                 passwordHash,
                 role: data.role,
                 phone: data.phone,
+                accreditationNumber: data.accreditationNumber,
                 stadiumId: data.stadiumId,
                 departmentId: data.departmentId,
+                assignAllStadiums: data.assignAllStadiums || false,
             },
             select: {
                 id: true,
@@ -127,7 +134,10 @@ export class UsersService {
                 email: true,
                 role: true,
                 phone: true,
+                accreditationNumber: true,
                 isActive: true,
+                isBlocked: true,
+                assignAllStadiums: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 departmentId: true,
@@ -142,10 +152,13 @@ export class UsersService {
         email: string;
         role: string;
         phone: string;
+        accreditationNumber: string;
         stadiumId: string;
         departmentId: string;
         isActive: boolean;
+        isBlocked: boolean;
         exportFormat: string;
+        assignAllStadiums: boolean;
     }>) {
         return prisma.user.update({
             where: { id },
@@ -156,8 +169,11 @@ export class UsersService {
                 email: true,
                 role: true,
                 phone: true,
+                accreditationNumber: true,
                 isActive: true,
+                isBlocked: true,
                 exportFormat: true,
+                assignAllStadiums: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 departmentId: true,
@@ -175,6 +191,14 @@ export class UsersService {
         });
     }
 
+    async setBlocked(id: string, isBlocked: boolean) {
+        return prisma.user.update({
+            where: { id },
+            data: { isBlocked },
+            select: { id: true, name: true, isBlocked: true },
+        });
+    }
+
     async delete(id: string) {
         return prisma.user.delete({ where: { id } });
     }
@@ -185,8 +209,10 @@ export class UsersService {
         password?: string;
         role: string;
         phone?: string;
+        accreditationNumber?: string;
         stadiumId?: string;
         departmentId?: string;
+        assignAllStadiums?: boolean;
     }>) {
         const results = { created: 0, skipped: 0, errors: [] as string[] };
         for (const u of users) {
@@ -200,6 +226,49 @@ export class UsersService {
                 } else {
                     results.errors.push(`${u.email}: ${err.message}`);
                 }
+            }
+        }
+        return results;
+    }
+
+    async importFromRequests(requestIds: string[]) {
+        const results = { created: 0, skipped: 0, errors: [] as string[] };
+        for (const requestId of requestIds) {
+            try {
+                const carRequest = await prisma.carRequest.findUnique({
+                    where: { id: requestId },
+                    include: {
+                        department: { select: { id: true, name: true } },
+                    },
+                });
+
+                if (!carRequest) {
+                    results.errors.push(`${requestId}: Request not found`);
+                    continue;
+                }
+
+                // Check if user with this email already exists
+                const exists = await prisma.user.findUnique({
+                    where: { email: carRequest.requesterEmail },
+                });
+
+                if (exists) {
+                    results.skipped++;
+                    continue;
+                }
+
+                // Create FA user from request data
+                await this.create({
+                    name: carRequest.requesterName,
+                    email: carRequest.requesterEmail,
+                    phone: carRequest.requesterPhone || undefined,
+                    role: 'FA',
+                    stadiumId: carRequest.stadiumId,
+                    departmentId: carRequest.departmentId,
+                });
+                results.created++;
+            } catch (err: any) {
+                results.errors.push(`${requestId}: ${err.message}`);
             }
         }
         return results;

@@ -3,6 +3,9 @@ import { reportsService } from './reports.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import * as ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { Document, Packer, Paragraph, TextRun, Header, Footer, PageOrientation, AlignmentType } from 'docx';
+import PptxGenJS from 'pptxgenjs';
+import { prisma } from '../../config/database';
 
 export class ReportsController {
     static async exportAuditLogs(req: AuthRequest, res: Response) {

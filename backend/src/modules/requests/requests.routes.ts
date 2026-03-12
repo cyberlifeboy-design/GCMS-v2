@@ -34,6 +34,9 @@ router.post('/requests/:id/approve', requireRole('SuperAdmin', 'Admin'), (req: R
 // POST /api/v1/requests/:id/reject - Reject a request
 router.post('/requests/:id/reject', requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) => RequestsController.reject(req as any, res));
 
+// PATCH /api/v1/requests/:id/quantities - Update request quantities (edit before approve)
+router.patch('/requests/:id/quantities', requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) => RequestsController.updateQuantities(req as any, res));
+
 // DELETE /api/v1/requests/:id - Delete a request (SuperAdmin only)
 router.delete('/requests/:id', requireRole('SuperAdmin'), (req: Request, res: Response) => RequestsController.delete(req as any, res));
 

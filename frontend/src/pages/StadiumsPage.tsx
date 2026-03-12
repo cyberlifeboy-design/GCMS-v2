@@ -6,8 +6,17 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit2, Loader2, MapPin } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+
+interface FleetStats {
+    total: number;
+    cargo: number;
+    fourSeater: number;
+    sixSeater: number;
+    accessibility: number;
+}
 
 interface Stadium {
     id: string;
@@ -15,6 +24,7 @@ interface Stadium {
     code: string;
     location: string;
     isActive: boolean;
+    fleetStats?: FleetStats;
 }
 
 export function StadiumsPage() {
@@ -99,19 +109,49 @@ export function StadiumsPage() {
                                 <TableHead>Venue Name</TableHead>
                                 <TableHead>Code</TableHead>
                                 <TableHead>Location</TableHead>
+                                <TableHead>Fleet</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No venues found</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No venues found</TableCell></TableRow>
                             ) : filtered.map(s => (
                                 <TableRow key={s.id}>
                                     <TableCell className="font-semibold">{s.name}</TableCell>
                                     <TableCell><code className="bg-muted px-1 rounded">{s.code}</code></TableCell>
                                     <TableCell className="flex items-center gap-1 text-muted-foreground"><MapPin className="w-3 h-3" /> {s.location}</TableCell>
+                                    <TableCell>
+                                        {s.fleetStats ? (
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge variant="secondary" className="font-semibold">
+                                                    {s.fleetStats.total} total
+                                                </Badge>
+                                                <div className="flex items-center gap-1 text-xs">
+                                                    <span className="flex items-center gap-0.5" title="Cargo">
+                                                        <Truck className="w-3 h-3 text-orange-500" />
+                                                        {s.fleetStats.cargo}
+                                                    </span>
+                                                    <span className="flex items-center gap-0.5" title="4-Seater">
+                                                        <Users className="w-3 h-3 text-blue-500" />
+                                                        {s.fleetStats.fourSeater}
+                                                    </span>
+                                                    <span className="flex items-center gap-0.5" title="6-Seater">
+                                                        <UserPlus className="w-3 h-3 text-green-500" />
+                                                        {s.fleetStats.sixSeater}
+                                                    </span>
+                                                    <span className="flex items-center gap-0.5" title="Accessibility">
+                                                        <Accessibility className="w-3 h-3 text-purple-500" />
+                                                        {s.fleetStats.accessibility}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="sm" onClick={() => {
                                             setFormData({ name: s.name, code: s.code, location: s.location });

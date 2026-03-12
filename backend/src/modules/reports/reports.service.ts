@@ -679,4 +679,30 @@ export class ReportsService {
     }
 }
 
+    /**
+     * Get all fleet data for label generation
+     */
+    async getLabelsData(filters: { stadiumId?: string } = {}) {
+        const where = filters.stadiumId ? { stadiumId: filters.stadiumId } : {};
+
+        const fleet = await this.prisma.fleet.findMany({
+            where,
+            include: {
+                stadium: { select: { id: true, name: true } },
+                assignedUser: { select: { id: true, name: true, accreditationNumber: true } },
+            },
+            orderBy: [{ stadium: { name: 'asc' } }, { carNumber: 'asc' }],
+        });
+
+        return fleet.map(cart => ({
+            carNumber: cart.carNumber,
+            carType: cart.carType,
+            status: cart.status,
+            stadium: cart.stadium.name,
+            faName: cart.assignedUser?.name || null,
+            faAccreditationNumber: cart.assignedUser?.accreditationNumber || null,
+        }));
+    }
+}
+
 export const reportsService = new ReportsService();
