@@ -32,6 +32,64 @@ const updateUserSchema = z.object({
 
 const updatePreferencesSchema = z.object({
     exportFormat: z.enum(['xlsx', 'pdf', 'docx']).optional(),
+    exportPreferences: z.object({
+        fleet: z.object({
+            enabled: z.boolean().optional(),
+            includeCarNumber: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+            includeAssignment: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeDepartment: z.boolean().optional(),
+        }).optional(),
+        handover: z.object({
+            enabled: z.boolean().optional(),
+            includeCarNumber: z.boolean().optional(),
+            includeUser: z.boolean().optional(),
+            includeAction: z.boolean().optional(),
+            includeTimestamp: z.boolean().optional(),
+            includeNotes: z.boolean().optional(),
+        }).optional(),
+        maintenance: z.object({
+            enabled: z.boolean().optional(),
+            includeCarNumber: z.boolean().optional(),
+            includeIssue: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+            includeReporter: z.boolean().optional(),
+            includeDates: z.boolean().optional(),
+        }).optional(),
+        request: z.object({
+            enabled: z.boolean().optional(),
+            includeRequester: z.boolean().optional(),
+            includeDepartment: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeQuantities: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+            includeNotes: z.boolean().optional(),
+        }).optional(),
+        users: z.object({
+            enabled: z.boolean().optional(),
+            includeName: z.boolean().optional(),
+            includeEmail: z.boolean().optional(),
+            includeRole: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeDepartment: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+        }).optional(),
+        department: z.object({
+            enabled: z.boolean().optional(),
+            includeName: z.boolean().optional(),
+            includeCode: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeFocalPoint: z.boolean().optional(),
+        }).optional(),
+        stadium: z.object({
+            enabled: z.boolean().optional(),
+            includeName: z.boolean().optional(),
+            includeCode: z.boolean().optional(),
+            includeLocation: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+        }).optional(),
+    }).optional(),
 });
 
 export class UsersController {

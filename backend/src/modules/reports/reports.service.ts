@@ -45,7 +45,7 @@ interface UserReport {
     email: string;
     role: string;
     stadium: { id: string; name: string } | null;
-    department: { id: string; name: string } | null;
+    department: { id: string; name: string; code: string | null } | null;
     isActive: boolean;
     assignedCarts: number;
     cartDetails: Array<{

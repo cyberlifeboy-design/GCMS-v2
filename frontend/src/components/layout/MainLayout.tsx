@@ -1,10 +1,49 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 import { settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Bell, Calendar, Clock, Sun, Moon, Monitor } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+
+function DateTimeDisplay() {
+    const [currentDate, setCurrentDate] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentDate(new Date());
+        }, 60000); // Update every minute
+
+        return () => clearInterval(timer);
+    }, []);
+
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    };
+
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    return (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Calendar className="w-4 h-4" />
+            <span>{formatDate(currentDate)}</span>
+            <span className="text-muted-foreground/50">|</span>
+            <Clock className="w-4 h-4" />
+            <span>{formatTime(currentDate)}</span>
+        </div>
+    );
+}
 
 const navItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'Observer'] },
@@ -55,8 +94,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
-            {/* Top Bar with Notifications */}
-            <div className="hidden lg:flex items-center justify-end px-6 py-2 border-b bg-card">
+            {/* Top Bar with Notifications and Date/Time */}
+            <div className="hidden lg:flex items-center justify-between px-6 py-2 border-b bg-card">
+                <DateTimeDisplay />
                 <NotificationCenter />
             </div>
 
@@ -138,7 +178,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                             <Menu className="w-6 h-6" />
                         </button>
                         <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS'}</h1>
-                        <NotificationCenter />
+                        <div className="flex items-center gap-2">
+                            <DateTimeDisplay />
+                            <NotificationCenter />
+                        </div>
                     </header>
 
                     {/* Page content */}

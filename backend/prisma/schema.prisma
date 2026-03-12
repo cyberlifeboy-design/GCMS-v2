@@ -79,6 +79,7 @@ model User {
   resetPasswordToken   String?        @unique
   resetPasswordExpires DateTime?
   exportFormat        String          @default("xlsx") // xlsx, pdf, docx
+  exportPreferences   Json?           // Granular export preferences per report type
   assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
   stadiumId           String?
   stadium             Stadium?        @relation(fields: [stadiumId], references: [id])

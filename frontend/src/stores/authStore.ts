@@ -2,6 +2,65 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authApi } from '@/lib/api';
 
+export interface ExportPreferences {
+    fleet?: {
+        enabled?: boolean;
+        includeCarNumber?: boolean;
+        includeStatus?: boolean;
+        includeAssignment?: boolean;
+        includeStadium?: boolean;
+        includeDepartment?: boolean;
+    };
+    handover?: {
+        enabled?: boolean;
+        includeCarNumber?: boolean;
+        includeUser?: boolean;
+        includeAction?: boolean;
+        includeTimestamp?: boolean;
+        includeNotes?: boolean;
+    };
+    maintenance?: {
+        enabled?: boolean;
+        includeCarNumber?: boolean;
+        includeIssue?: boolean;
+        includeStatus?: boolean;
+        includeReporter?: boolean;
+        includeDates?: boolean;
+    };
+    request?: {
+        enabled?: boolean;
+        includeRequester?: boolean;
+        includeDepartment?: boolean;
+        includeStadium?: boolean;
+        includeQuantities?: boolean;
+        includeStatus?: boolean;
+        includeNotes?: boolean;
+    };
+    users?: {
+        enabled?: boolean;
+        includeName?: boolean;
+        includeEmail?: boolean;
+        includeRole?: boolean;
+        includeStadium?: boolean;
+        includeDepartment?: boolean;
+        includeStatus?: boolean;
+    };
+    department?: {
+        enabled?: boolean;
+        includeName?: boolean;
+        includeCode?: boolean;
+        includeStadium?: boolean;
+        includeFocalPoint?: boolean;
+    };
+    stadium?: {
+        enabled?: boolean;
+        includeName?: boolean;
+        includeCode?: boolean;
+        includeLocation?: boolean;
+        includeStatus?: boolean;
+    };
+}
+
 export interface AuthUser {
     id: string;
     name: string;
@@ -12,6 +71,7 @@ export interface AuthUser {
     stadium?: { id: string; name: string };
     isActive: boolean;
     exportFormat?: 'xlsx' | 'pdf' | 'docx';
+    exportPreferences?: ExportPreferences;
 }
 
 interface AuthState {
@@ -21,6 +81,7 @@ interface AuthState {
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
     updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => void;
+    updateExportPreferences: (preferences: ExportPreferences) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -50,6 +111,11 @@ export const useAuthStore = create<AuthState>()(
             updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => {
                 set((state) => ({
                     user: state.user ? { ...state.user, exportFormat: format } : null,
+                }));
+            },
+            updateExportPreferences: (preferences: ExportPreferences) => {
+                set((state) => ({
+                    user: state.user ? { ...state.user, exportPreferences: preferences } : null,
                 }));
             },
         }),

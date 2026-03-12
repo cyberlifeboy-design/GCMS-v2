@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Upload, Image, FileSpreadsheet, FileText, File, Link, Copy, Check, Bell, Clock, ToggleLeft, ToggleRight, Megaphone } from 'lucide-react';
+import { Loader2, Save, Upload, Image, FileSpreadsheet, FileText, File, Link, Copy, Check, Bell, Clock, ToggleLeft, ToggleRight, Megaphone, Mail } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +22,7 @@ interface Settings {
     enableHandoverPhotos?: boolean;
     systemAnnouncement?: string;
     announcementExpiry?: string;
+    theme?: 'light' | 'dark' | 'system';
 }
 
 interface Stadium {
@@ -45,6 +46,17 @@ export function SettingsPage() {
     const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf' | 'docx'>(user?.exportFormat || 'xlsx');
     const [savingPreferences, setSavingPreferences] = useState(false);
     const [preferencesSaved, setPreferencesSaved] = useState(false);
+
+    // Theme
+    const { theme, setTheme } = useThemeStore();
+
+    // Notification preferences (for email notifications)
+    const [emailNotifications, setEmailNotifications] = useState({
+        maintenance: true,
+        handover: true,
+        requests: true,
+        assignments: true,
+    });
 
     // System settings
     const [loading, setLoading] = useState(true);
@@ -77,7 +89,20 @@ export function SettingsPage() {
         if (user?.exportFormat) {
             setExportFormat(user.exportFormat as 'xlsx' | 'pdf' | 'docx');
         }
-    }, [user?.exportFormat]);
+        // Load notification preferences from user data if available
+        if (user?.exportPreferences) {
+            try {
+                const prefs = typeof user.exportPreferences === 'string'
+                    ? JSON.parse(user.exportPreferences)
+                    : user.exportPreferences;
+                if (prefs.emailNotifications) {
+                    setEmailNotifications(prefs.emailNotifications);
+                }
+            } catch (e) {
+                console.error('Failed to parse notification preferences', e);
+            }
+        }
+    }, [user?.exportFormat, user?.exportPreferences]);
 
     useEffect(() => {
         const load = async () => {

@@ -61,6 +61,7 @@ export class UsersService {
                     isActive: true,
                     isBlocked: true,
                     exportFormat: true,
+                    exportPreferences: true,
                     assignAllStadiums: true,
                     stadiumId: true,
                     stadium: { select: { id: true, name: true } },
@@ -92,6 +93,7 @@ export class UsersService {
                 phone: true,
                 isActive: true,
                 exportFormat: true,
+                exportPreferences: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 createdAt: true,
@@ -158,6 +160,7 @@ export class UsersService {
         isActive: boolean;
         isBlocked: boolean;
         exportFormat: string;
+        exportPreferences: object;
         assignAllStadiums: boolean;
     }>) {
         return prisma.user.update({
@@ -173,6 +176,7 @@ export class UsersService {
                 isActive: true,
                 isBlocked: true,
                 exportFormat: true,
+                exportPreferences: true,
                 assignAllStadiums: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
