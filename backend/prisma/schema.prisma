@@ -165,7 +165,13 @@ model SystemSettings {
   // Feature toggles
   enableMaintenanceReports      Boolean   @default(true)
   enableHandoverPhotos          Boolean   @default(true)
-  // System announcements
+  enableFleetManagement         Boolean   @default(true)
+  enableCarRequests             Boolean   @default(true)
+  enableUserImport              Boolean   @default(true)
+  enableBulkOperations          Boolean   @default(true)
+  enableAdvancedReports         Boolean   @default(true)
+  enableAssignmentMatrix        Boolean   @default(true)
+  // System announcements (deprecated - use Announcement model)
   systemAnnouncement            String?   // Optional system-wide announcement text
   announcementExpiry            DateTime? // When announcement expires
   
@@ -176,8 +182,36 @@ model SystemSettings {
   enableHandoverReminder        Boolean   @default(true) // Send reminder before timeout
   handoverReminderHoursBefore   Int       @default(1) // Hours before timeout to send reminder
   
+  // Timezone Settings
+  timezone                      String?   @default("UTC") // System timezone (IANA format, e.g., "America/New_York")
+  
   updatedAt                     DateTime  @updatedAt
   updatedById                   String?
+}
+
+// Scheduled/push announcements to users
+model Announcement {
+  id              String    @id @default(cuid())
+  title           String
+  message         String
+  type            String    @default("info") // info, warning, success, error
+  targetType      String    @default("all") // all, fas, users, selected
+  targetUserIds   String[]  @default([]) // For targeted announcements
+  targetRole      String?   // For role-based targeting (FA, Admin, etc.)
+  stadiumId       String?   // Optional stadium filter
+  createdBy       String?   // User ID who created the announcement
+  scheduledAt     DateTime? // For scheduled announcements
+  sentAt          DateTime? // When actually sent
+  expiresAt       DateTime? // When announcement expires
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([type])
+  @@index([targetType])
+  @@index([isActive])
+  @@index([scheduledAt])
+  @@index([expiresAt])
 }
 
 model AuditLog {

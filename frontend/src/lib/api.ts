@@ -294,4 +294,34 @@ export const notificationsApi = {
         apiClient.patch('/notifications/read-all'),
 };
 
+// Announcements
+export const announcementsApi = {
+    getActive: () =>
+        apiClient.get('/announcements/active'),
+    getAll: (params?: { page?: number; limit?: number; type?: string; targetType?: string; isActive?: boolean }) =>
+        apiClient.get('/announcements', { params }),
+    getById: (id: string) =>
+        apiClient.get(`/announcements/${id}`),
+    create: (data: {
+        title: string;
+        message: string;
+        type?: 'info' | 'warning' | 'success' | 'error';
+        targetType?: 'all' | 'fas' | 'users' | 'selected';
+        targetUserIds?: string[];
+        targetRole?: string;
+        stadiumId?: string;
+        scheduledAt?: string;
+        expiresAt?: string;
+        sendNow?: boolean;
+    }) => apiClient.post('/announcements', data),
+    update: (id: string, data: Record<string, unknown>) =>
+        apiClient.put(`/announcements/${id}`, data),
+    sendNow: (id: string) =>
+        apiClient.post(`/announcements/${id}/send`),
+    deactivate: (id: string) =>
+        apiClient.post(`/announcements/${id}/deactivate`),
+    delete: (id: string) =>
+        apiClient.delete(`/announcements/${id}`),
+};
+
 export default apiClient;

@@ -17,11 +17,20 @@ interface Settings {
     logoUrl?: string;
     headerUrl?: string;
     footerUrl?: string;
+    footerText?: string;
     maintenanceNotificationEmails?: string;
     handoverTimeoutMinutes?: number;
     defaultStadiumId?: string;
+    // Feature toggles
     enableMaintenanceReports?: boolean;
     enableHandoverPhotos?: boolean;
+    enableFleetManagement?: boolean;
+    enableCarRequests?: boolean;
+    enableUserImport?: boolean;
+    enableBulkOperations?: boolean;
+    enableAdvancedReports?: boolean;
+    enableAssignmentMatrix?: boolean;
+    // Legacy system announcement
     systemAnnouncement?: string;
     announcementExpiry?: string;
     theme?: 'light' | 'dark' | 'system';
@@ -31,6 +40,8 @@ interface Settings {
     handoverEventEndDate?: string;
     enableHandoverReminder?: boolean;
     handoverReminderHoursBefore?: number;
+    // Timezone settings
+    timezone?: string;
 }
 
 interface Stadium {
@@ -115,6 +126,7 @@ export function SettingsPage() {
     const [logoPrev, setLogoPrev] = useState('');
     const [headerPrev, setHeaderPrev] = useState('');
     const [footerPrev, setFooterPrev] = useState('');
+    const [footerText, setFooterText] = useState('');
 
     // Stadiums for request link generator
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
@@ -123,8 +135,16 @@ export function SettingsPage() {
     const [maintenanceNotificationEmails, setMaintenanceNotificationEmails] = useState('');
     const [handoverTimeoutMinutes, setHandoverTimeoutMinutes] = useState(120);
     const [defaultStadiumId, setDefaultStadiumId] = useState('');
+    // Feature toggles
     const [enableMaintenanceReports, setEnableMaintenanceReports] = useState(true);
     const [enableHandoverPhotos, setEnableHandoverPhotos] = useState(true);
+    const [enableFleetManagement, setEnableFleetManagement] = useState(true);
+    const [enableCarRequests, setEnableCarRequests] = useState(true);
+    const [enableUserImport, setEnableUserImport] = useState(true);
+    const [enableBulkOperations, setEnableBulkOperations] = useState(true);
+    const [enableAdvancedReports, setEnableAdvancedReports] = useState(true);
+    const [enableAssignmentMatrix, setEnableAssignmentMatrix] = useState(true);
+    // Legacy system announcement
     const [systemAnnouncement, setSystemAnnouncement] = useState('');
     const [announcementExpiry, setAnnouncementExpiry] = useState('');
     // Handover duration settings
@@ -133,6 +153,9 @@ export function SettingsPage() {
     const [handoverEventEndDate, setHandoverEventEndDate] = useState('');
     const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
     const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
+
+    // Timezone settings
+    const [timezone, setTimezone] = useState('UTC');
 
     useEffect(() => {
         // Set export format from user data
@@ -166,12 +189,21 @@ export function SettingsPage() {
                 setLogoPrev(d.logoUrl || '');
                 setHeaderPrev(d.headerUrl || '');
                 setFooterPrev(d.footerUrl || '');
+                setFooterText(d.footerText || '');
                 // New settings
                 setMaintenanceNotificationEmails(d.maintenanceNotificationEmails || '');
                 setHandoverTimeoutMinutes(d.handoverTimeoutMinutes ?? 120);
                 setDefaultStadiumId(d.defaultStadiumId || '');
+                // Feature toggles
                 setEnableMaintenanceReports(d.enableMaintenanceReports ?? true);
                 setEnableHandoverPhotos(d.enableHandoverPhotos ?? true);
+                setEnableFleetManagement(d.enableFleetManagement ?? true);
+                setEnableCarRequests(d.enableCarRequests ?? true);
+                setEnableUserImport(d.enableUserImport ?? true);
+                setEnableBulkOperations(d.enableBulkOperations ?? true);
+                setEnableAdvancedReports(d.enableAdvancedReports ?? true);
+                setEnableAssignmentMatrix(d.enableAssignmentMatrix ?? true);
+                // Legacy system announcement
                 setSystemAnnouncement(d.systemAnnouncement || '');
                 setAnnouncementExpiry(d.announcementExpiry ? d.announcementExpiry.slice(0, 16) : '');
                 // Handover duration settings
@@ -181,12 +213,14 @@ export function SettingsPage() {
                     handoverEventEndDate?: string;
                     enableHandoverReminder?: boolean;
                     handoverReminderHoursBefore?: number;
+                    timezone?: string;
                 };
                 setHandoverDefaultDurationDays(settings.handoverDefaultDurationDays ?? 1);
                 setHandoverEventStartDate(settings.handoverEventStartDate ? settings.handoverEventStartDate.slice(0, 16) : '');
                 setHandoverEventEndDate(settings.handoverEventEndDate ? settings.handoverEventEndDate.slice(0, 16) : '');
                 setEnableHandoverReminder(settings.enableHandoverReminder ?? true);
                 setHandoverReminderHoursBefore(settings.handoverReminderHoursBefore ?? 1);
+                setTimezone(settings.timezone || 'UTC');
                 setStadiums(stadiumsRes.data.data || []);
             } catch (e) {
                 console.error(e);
@@ -314,12 +348,21 @@ export function SettingsPage() {
             if (logoFile) fd.append('logo', logoFile);
             if (headerFile) fd.append('header', headerFile);
             if (footerFile) fd.append('footer', footerFile);
-            // New settings
+            fd.append('footerText', footerText);
+            // Notification settings
             fd.append('maintenanceNotificationEmails', maintenanceNotificationEmails);
             fd.append('handoverTimeoutMinutes', String(handoverTimeoutMinutes));
             fd.append('defaultStadiumId', defaultStadiumId || '');
+            // Feature toggles
             fd.append('enableMaintenanceReports', String(enableMaintenanceReports));
             fd.append('enableHandoverPhotos', String(enableHandoverPhotos));
+            fd.append('enableFleetManagement', String(enableFleetManagement));
+            fd.append('enableCarRequests', String(enableCarRequests));
+            fd.append('enableUserImport', String(enableUserImport));
+            fd.append('enableBulkOperations', String(enableBulkOperations));
+            fd.append('enableAdvancedReports', String(enableAdvancedReports));
+            fd.append('enableAssignmentMatrix', String(enableAssignmentMatrix));
+            // Legacy system announcement
             fd.append('systemAnnouncement', systemAnnouncement);
             fd.append('announcementExpiry', announcementExpiry ? new Date(announcementExpiry).toISOString() : '');
             // Handover duration settings
@@ -328,6 +371,7 @@ export function SettingsPage() {
             fd.append('handoverEventEndDate', handoverEventEndDate ? new Date(handoverEventEndDate).toISOString() : '');
             fd.append('enableHandoverReminder', String(enableHandoverReminder));
             fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
+            fd.append('timezone', timezone || 'UTC');
             await settingsApi.update(fd);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
@@ -682,6 +726,18 @@ export function SettingsPage() {
                                 onPreview={setFooterPrev}
                                 onFileChange={setFooterFile}
                             />
+                            <div className="space-y-2">
+                                <Label htmlFor="footerText">Footer Text</Label>
+                                <Input
+                                    id="footerText"
+                                    value={footerText}
+                                    onChange={e => setFooterText(e.target.value)}
+                                    placeholder="e.g. © 2026 GCMS Fleet Management. All rights reserved."
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Text displayed below the footer image (optional)
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -849,11 +905,125 @@ export function SettingsPage() {
                         </CardContent>
                     </Card>
 
+                    {/* System Time & Timezone Section */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Clock className="w-5 h-5" />
+                                System Time & Timezone
+                            </CardTitle>
+                            <CardDescription>Configure system timezone and time display settings</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Current System Time Display */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-medium">Current System Time</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Server Time (UTC)</Label>
+                                        <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                                            <Clock className="w-4 h-4 text-muted-foreground" />
+                                            <span className="font-mono text-sm" suppressHydrationWarning>
+                                                {new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Local Time ({timezone || 'UTC'})</Label>
+                                        <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                                            <Clock className="w-4 h-4 text-muted-foreground" />
+                                            <span className="font-mono text-sm" suppressHydrationWarning>
+                                                {new Date().toLocaleString('en-US', { 
+                                                    timeZone: timezone || 'UTC',
+                                                    year: 'numeric',
+                                                    month: '2-digit',
+                                                    day: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    second: '2-digit',
+                                                    hour12: false
+                                                })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Timezone Selector */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-medium">Timezone Configuration</h4>
+                                <div className="space-y-2">
+                                    <Label htmlFor="timezone">System Timezone</Label>
+                                    <Select value={timezone} onValueChange={setTimezone}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select timezone" />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-[300px]">
+                                            <SelectItem value="UTC">UTC (Coordinated Universal Time)</SelectItem>
+                                            <SelectItem value="America/New_York">America/New_York (Eastern Time)</SelectItem>
+                                            <SelectItem value="America/Chicago">America/Chicago (Central Time)</SelectItem>
+                                            <SelectItem value="America/Denver">America/Denver (Mountain Time)</SelectItem>
+                                            <SelectItem value="America/Los_Angeles">America/Los_Angeles (Pacific Time)</SelectItem>
+                                            <SelectItem value="America/Anchorage">America/Anchorage (Alaska Time)</SelectItem>
+                                            <SelectItem value="Pacific/Honolulu">Pacific/Honolulu (Hawaii Time)</SelectItem>
+                                            <SelectItem value="Europe/London">Europe/London (GMT/BST)</SelectItem>
+                                            <SelectItem value="Europe/Paris">Europe/Paris (CET/CEST)</SelectItem>
+                                            <SelectItem value="Europe/Berlin">Europe/Berlin (CET/CEST)</SelectItem>
+                                            <SelectItem value="Europe/Moscow">Europe/Moscow (MSK)</SelectItem>
+                                            <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
+                                            <SelectItem value="Asia/Karachi">Asia/Karachi (PKT)</SelectItem>
+                                            <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
+                                            <SelectItem value="Asia/Bangkok">Asia/Bangkok (ICT)</SelectItem>
+                                            <SelectItem value="Asia/Singapore">Asia/Singapore (SGT)</SelectItem>
+                                            <SelectItem value="Asia/Hong_Kong">Asia/Hong_Kong (HKT)</SelectItem>
+                                            <SelectItem value="Asia/Shanghai">Asia/Shanghai (CST)</SelectItem>
+                                            <SelectItem value="Asia/Tokyo">Asia/Tokyo (JST)</SelectItem>
+                                            <SelectItem value="Asia/Seoul">Asia/Seoul (KST)</SelectItem>
+                                            <SelectItem value="Asia/Jakarta">Asia/Jakarta (WIB)</SelectItem>
+                                            <SelectItem value="Asia/Manila">Asia/Manila (PHT)</SelectItem>
+                                            <SelectItem value="Australia/Perth">Australia/Perth (AWST)</SelectItem>
+                                            <SelectItem value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</SelectItem>
+                                            <SelectItem value="Australia/Brisbane">Australia/Brisbane (AEST)</SelectItem>
+                                            <SelectItem value="Australia/Adelaide">Australia/Adelaide (ACST/ACDT)</SelectItem>
+                                            <SelectItem value="Australia/Melbourne">Australia/Melbourne (AEST/AEDT)</SelectItem>
+                                            <SelectItem value="Pacific/Auckland">Pacific/Auckland (NZST/NZDT)</SelectItem>
+                                            <SelectItem value="Pacific/Fiji">Pacific/Fiji (FJT)</SelectItem>
+                                            <SelectItem value="Atlantic/Reykjavik">Atlantic/Reykjavik (GMT)</SelectItem>
+                                            <SelectItem value="Africa/Cairo">Africa/Cairo (EET)</SelectItem>
+                                            <SelectItem value="Africa/Johannesburg">Africa/Johannesburg (SAST)</SelectItem>
+                                            <SelectItem value="Africa/Lagos">Africa/Lagos (WAT)</SelectItem>
+                                            <SelectItem value="America/Sao_Paulo">America/Sao_Paulo (BRT)</SelectItem>
+                                            <SelectItem value="America/Buenos_Aires">America/Buenos_Aires (ART)</SelectItem>
+                                            <SelectItem value="America/Toronto">America/Toronto (Eastern Time)</SelectItem>
+                                            <SelectItem value="America/Vancouver">America/Vancouver (Pacific Time)</SelectItem>
+                                            <SelectItem value="America/Mexico_City">America/Mexico_City (CST)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        Set the system timezone for displaying dates and times throughout the application.
+                                        Times stored in UTC will be converted to this timezone for display.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Time Format Info */}
+                            <div className="p-4 bg-muted/50 rounded-lg">
+                                <h4 className="text-sm font-medium mb-2">Time Format Information</h4>
+                                <ul className="text-xs text-muted-foreground space-y-1">
+                                    <li>• All times are stored in UTC in the database</li>
+                                    <li>• Times are displayed in the selected timezone throughout the application</li>
+                                    <li>• Daylight Saving Time (DST) is automatically handled by the timezone selection</li>
+                                    <li>• If your region observes DST, times will adjust automatically</li>
+                                </ul>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Feature Toggles Section */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                {enableMaintenanceReports && enableHandoverPhotos ? (
+                                {enableMaintenanceReports && enableHandoverPhotos && enableFleetManagement ? (
                                     <ToggleRight className="w-5 h-5" />
                                 ) : (
                                     <ToggleLeft className="w-5 h-5" />
@@ -887,6 +1057,84 @@ export function SettingsPage() {
                                     id="enableHandoverPhotos"
                                     checked={enableHandoverPhotos}
                                     onCheckedChange={setEnableHandoverPhotos}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="enableFleetManagement">Enable Fleet Management</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Allow cart assignment and management features
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="enableFleetManagement"
+                                    checked={enableFleetManagement}
+                                    onCheckedChange={setEnableFleetManagement}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="enableCarRequests">Enable Car Requests</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Allow public car request submissions
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="enableCarRequests"
+                                    checked={enableCarRequests}
+                                    onCheckedChange={setEnableCarRequests}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="enableUserImport">Enable User Import</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Allow bulk user import from requests
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="enableUserImport"
+                                    checked={enableUserImport}
+                                    onCheckedChange={setEnableUserImport}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="enableBulkOperations">Enable Bulk Operations</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Allow bulk checkout/checkin operations
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="enableBulkOperations"
+                                    checked={enableBulkOperations}
+                                    onCheckedChange={setEnableBulkOperations}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="enableAdvancedReports">Enable Advanced Reports</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Allow export to PDF and advanced report generation
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="enableAdvancedReports"
+                                    checked={enableAdvancedReports}
+                                    onCheckedChange={setEnableAdvancedReports}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="enableAssignmentMatrix">Enable Assignment Matrix</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Show fleet assignment matrix view
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="enableAssignmentMatrix"
+                                    checked={enableAssignmentMatrix}
+                                    onCheckedChange={setEnableAssignmentMatrix}
                                 />
                             </div>
                         </CardContent>

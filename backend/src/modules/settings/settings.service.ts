@@ -22,8 +22,16 @@ export class SettingsService {
         maintenanceNotificationEmails: string | null;
         handoverTimeoutMinutes: number;
         defaultStadiumId: string | null;
+        // Feature toggles
         enableMaintenanceReports: boolean;
         enableHandoverPhotos: boolean;
+        enableFleetManagement: boolean;
+        enableCarRequests: boolean;
+        enableUserImport: boolean;
+        enableBulkOperations: boolean;
+        enableAdvancedReports: boolean;
+        enableAssignmentMatrix: boolean;
+        // System announcement (legacy)
         systemAnnouncement: string | null;
         announcementExpiry: Date | null;
         // Handover duration settings
@@ -32,6 +40,8 @@ export class SettingsService {
         handoverEventEndDate: Date | null;
         enableHandoverReminder: boolean;
         handoverReminderHoursBefore: number;
+        // Timezone settings
+        timezone: string | null;
     }>, updatedById?: string) {
         const existing = await this.get();
         return prisma.systemSettings.update({

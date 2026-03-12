@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { handoverApi, fleetApi, settingsApi } from '@/lib/api';
+import { handoverApi, fleetApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
-import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, Users, Building2, TrendingUp } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, Users, Building2, TrendingUp, Clock, ChevronUp, ChevronDown, Save } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
@@ -141,14 +142,13 @@ export function HandoverPage() {
 
     // Handover duration settings state
     const [settingsExpanded, setSettingsExpanded] = useState(false);
-    const [settingsLoading, setSettingsLoading] = useState(false);
-    const [settingsSaving, setSettingsSaving] = useState(false);
-    const [settingsSaved, setSettingsSaved] = useState(false);
     const [handoverDefaultDurationDays, setHandoverDefaultDurationDays] = useState(1);
     const [handoverEventStartDate, setHandoverEventStartDate] = useState('');
     const [handoverEventEndDate, setHandoverEventEndDate] = useState('');
     const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
     const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
+    const [settingsSaving, setSettingsSaving] = useState(false);
+    const [settingsSaved, setSettingsSaved] = useState(false);
 
     const loadPoolDashboard = async () => {
         try {
@@ -287,6 +287,28 @@ export function HandoverPage() {
         }
     };
 
+    const handleSaveSettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSettingsSaving(true);
+        try {
+            // Import settingsApi and save
+            const { settingsApi } = await import('@/lib/api');
+            const fd = new FormData();
+            fd.append('handoverDefaultDurationDays', String(handoverDefaultDurationDays));
+            fd.append('handoverEventStartDate', handoverEventStartDate ? new Date(handoverEventStartDate).toISOString() : '');
+            fd.append('handoverEventEndDate', handoverEventEndDate ? new Date(handoverEventEndDate).toISOString() : '');
+            fd.append('enableHandoverReminder', String(enableHandoverReminder));
+            fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
+            await settingsApi.update(fd);
+            setSettingsSaved(true);
+            setTimeout(() => setSettingsSaved(false), 2000);
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to save settings');
+        } finally {
+            setSettingsSaving(false);
+        }
+    };
+
     const filtered = history.filter(h => {
         const matchSearch =
             h.fleet?.carNumber?.toLowerCase().includes(search.toLowerCase()) ||
@@ -401,7 +423,7 @@ export function HandoverPage() {
                             </CardHeader>
                             {settingsExpanded && (
                                 <CardContent>
-                                    {settingsLoading ? (
+                                    {settingsSaving ? (
                                         <div className="flex items-center justify-center py-8">
                                             <Loader2 className="w-6 h-6 animate-spin" />
                                         </div>

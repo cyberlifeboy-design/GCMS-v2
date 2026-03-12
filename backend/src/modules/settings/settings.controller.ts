@@ -6,22 +6,68 @@ import multer from 'multer';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+// Helper to coerce FormData string values to proper types
+const coerceBoolean = z.preprocess((val) => {
+    if (typeof val === 'string') return val === 'true';
+    return val;
+}, z.boolean());
+
+const coerceNumber = z.preprocess((val) => {
+    if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        return isNaN(parsed) ? undefined : parsed;
+    }
+    return val;
+}, z.number().int());
+
+const coerceOptionalNumber = z.preprocess((val) => {
+    if (val === '' || val === null || val === undefined) return undefined;
+    if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        return isNaN(parsed) ? undefined : parsed;
+    }
+    return val;
+}, z.number().int().optional());
+
+const coerceDate = z.preprocess((val) => {
+    if (val === '' || val === null || val === undefined) return null;
+    if (typeof val === 'string') {
+        try {
+            const date = new Date(val);
+            return isNaN(date.getTime()) ? null : date;
+        } catch {
+            return null;
+        }
+    }
+    return val;
+}, z.date().nullable().optional());
+
 const updateSettingsSchema = z.object({
     tournamentName: z.string().min(1).optional(),
     footerText: z.string().optional(),
     maintenanceNotificationEmails: z.string().optional().nullable(),
-    handoverTimeoutMinutes: z.number().int().min(1).optional(),
+    handoverTimeoutMinutes: coerceNumber.optional(),
     defaultStadiumId: z.string().optional().nullable(),
-    enableMaintenanceReports: z.boolean().optional(),
-    enableHandoverPhotos: z.boolean().optional(),
+    // Feature toggles
+    enableMaintenanceReports: coerceBoolean.optional(),
+    enableHandoverPhotos: coerceBoolean.optional(),
+    enableFleetManagement: coerceBoolean.optional(),
+    enableCarRequests: coerceBoolean.optional(),
+    enableUserImport: coerceBoolean.optional(),
+    enableBulkOperations: coerceBoolean.optional(),
+    enableAdvancedReports: coerceBoolean.optional(),
+    enableAssignmentMatrix: coerceBoolean.optional(),
+    // System announcement (legacy)
     systemAnnouncement: z.string().optional().nullable(),
-    announcementExpiry: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
+    announcementExpiry: coerceDate,
     // Handover duration settings
-    handoverDefaultDurationDays: z.number().int().min(1).optional(),
-    handoverEventStartDate: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
-    handoverEventEndDate: z.string().optional().nullable().transform(v => v ? new Date(v) : null),
-    enableHandoverReminder: z.boolean().optional(),
-    handoverReminderHoursBefore: z.number().int().min(1).optional(),
+    handoverDefaultDurationDays: coerceOptionalNumber,
+    handoverEventStartDate: coerceDate,
+    handoverEventEndDate: coerceDate,
+    enableHandoverReminder: coerceBoolean.optional(),
+    handoverReminderHoursBefore: coerceOptionalNumber,
+    // Timezone settings
+    timezone: z.string().optional().nullable(),
 });
 
 export class SettingsController {

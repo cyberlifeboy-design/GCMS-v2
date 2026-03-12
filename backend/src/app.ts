@@ -13,6 +13,7 @@ import settingsRoutes from './modules/settings/settings.routes';
 import departmentRoutes from './modules/departments/departments.routes';
 import requestRoutes from './modules/requests/requests.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
+import announcementRoutes from './modules/announcements/announcements.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import logger from './config/logger';
@@ -71,6 +72,7 @@ app.get('/api/v1', (req: Request, res: Response) => {
             departments: '/api/v1/departments',
             requests: '/api/v1/requests',
             notifications: '/api/v1/notifications',
+            announcements: '/api/v1/announcements',
             publicRequests: '/api/v1/public/requests',
         },
     });
@@ -88,6 +90,7 @@ app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/departments', departmentRoutes);
 app.use('/api/v1', requestRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/announcements', announcementRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

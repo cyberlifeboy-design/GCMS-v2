@@ -63,7 +63,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const { user, logout } = useAuthStore();
     const location = useLocation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string }>({});
+    const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
 
     useEffect(() => {
         const loadBranding = async () => {
@@ -119,6 +119,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     {/* Header with Tournament Name and Logo */}
                     <div className="p-4 border-b">
                         <div className="flex items-center gap-3">
+                            <div className="min-w-0">
+                                <h1 className="text-lg font-bold truncate">
+                                    {branding.tournamentName || 'GCMS Fleet Management'}
+                                </h1>
+                            </div>
                             {branding.logoUrl && (
                                 <img 
                                     src={branding.logoUrl} 
@@ -126,12 +131,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                     className="w-10 h-10 object-contain flex-shrink-0" 
                                 />
                             )}
-                            <div className="min-w-0">
-                                <h1 className="text-lg font-bold truncate">
-                                    {branding.tournamentName || 'GCMS'}
-                                </h1>
-                                <p className="text-xs text-muted-foreground">Fleet Management</p>
-                            </div>
                         </div>
                         <button
                             className="lg:hidden absolute top-4 right-4 p-2 hover:bg-accent rounded-md"
@@ -189,6 +188,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                             <Menu className="w-6 h-6" />
                         </button>
                         <div className="flex items-center gap-2">
+                            <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS Fleet Management'}</h1>
                             {branding.logoUrl && (
                                 <img 
                                     src={branding.logoUrl} 
@@ -196,7 +196,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                     className="w-6 h-6 object-contain" 
                                 />
                             )}
-                            <h1 className="text-lg font-semibold">{branding.tournamentName || 'GCMS'}</h1>
                         </div>
                         <div className="flex items-center gap-2">
                             <DateTimeDisplay />
@@ -211,9 +210,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         </div>
 
                         {/* Footer Branding */}
-                        {branding.footerUrl && (
-                            <div className="mt-8 pt-4 border-t w-full">
-                                <img src={branding.footerUrl} alt="Footer Branding" className="max-h-16 w-auto mx-auto object-contain" />
+                        {(branding.footerUrl || branding.footerText) && (
+                            <div className="mt-8 pt-4 border-t w-full text-center">
+                                {branding.footerUrl && (
+                                    <img src={branding.footerUrl} alt="Footer Branding" className="max-h-16 w-auto mx-auto object-contain" />
+                                )}
+                                {branding.footerText && (
+                                    <p className="text-sm text-muted-foreground mt-2">{branding.footerText}</p>
+                                )}
                             </div>
                         )}
                     </main>

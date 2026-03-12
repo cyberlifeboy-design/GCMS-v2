@@ -236,11 +236,28 @@ export function RequestsManagementPage() {
         }
 
         const baseUrl = window.location.origin;
-        let link = `${baseUrl}/request?stadium=${linkStadiumId}`;
-        if (linkDepartmentId) {
-            link += `&department=${linkDepartmentId}`;
+        let link = `${baseUrl}/request`;
+        
+        if (linkStadiumId === '__all__') {
+            // All stadiums - no stadium filter in link
+            if (linkDepartmentId) {
+                link += `?department=${linkDepartmentId}`;
+            }
+        } else {
+            link += `?stadium=${linkStadiumId}`;
+            if (linkDepartmentId) {
+                link += `&department=${linkDepartmentId}`;
+            }
         }
         setGeneratedLink(link);
+    };
+
+    const handleEmailLink = () => {
+        if (!emailRecipient || !generatedLink) return;
+        
+        const subject = encodeURIComponent('Car Request Link');
+        const body = encodeURIComponent(`Please use the following link to submit your car request:\n\n${generatedLink}`);
+        window.location.href = `mailto:${emailRecipient}?subject=${subject}&body=${body}`;
     };
 
     const handleCopyLink = () => {
@@ -789,6 +806,7 @@ export function RequestsManagementPage() {
                                     <SelectValue placeholder="Select stadium" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="__all__">All Stadiums</SelectItem>
                                     {stadiums.map((s) => (
                                         <SelectItem key={s.id} value={s.id}>
                                             {s.name}
@@ -797,7 +815,7 @@ export function RequestsManagementPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        {linkStadiumId && (
+                        {linkStadiumId && linkStadiumId !== '__all__' && (
                             <div className="space-y-2">
                                 <Label htmlFor="link-department">Department (Optional)</Label>
                                 <Select value={linkDepartmentId || '__none__'} onValueChange={(v) => { setLinkDepartmentId(v === '__none__' ? '' : v); setGeneratedLink(''); }}>
@@ -837,12 +855,11 @@ export function RequestsManagementPage() {
                                             onChange={(e) => setEmailRecipient(e.target.value)}
                                             placeholder="recipient@example.com"
                                         />
-                                        <Button variant="outline" disabled={!emailRecipient}>
-                                            <Copy className="w-4 h-4 mr-2" />
-                                            Copy to Email
+                                        <Button variant="outline" onClick={handleEmailLink} disabled={!emailRecipient}>
+                                            Send Email
                                         </Button>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">Copy the link and send it via your preferred email client</p>
+                                    <p className="text-xs text-muted-foreground">Opens your default email client with the link</p>
                                 </div>
                             </div>
                         )}
