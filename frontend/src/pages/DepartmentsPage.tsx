@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search, Edit2, Loader2, User } from 'lucide-react';
+import { Plus, Search, Edit2, Loader2, User, UserCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -144,8 +144,7 @@ export function DepartmentsPage() {
                 } else {
                     await departmentsApi.create({ ...formData, stadiumId: formData.stadiumId });
                 }
-            } else if (modal.mode === 'edit' && isSuperAdmin && modal.department) {
-                // SuperAdmin edit: handle multi-stadium association changes
+            } else if (modal.mode === 'edit' && isSuperAdmin && modal.department) {                // SuperAdmin edit: handle multi-stadium association changes
                 if (editStadiumIds.length === 0) {
                     alert('Please select at least one stadium');
                     setSubmitting(false);
@@ -307,11 +306,18 @@ export function DepartmentsPage() {
                                     </TableCell>
                                     {canManage && (
                                         <TableCell className="text-right">
-                                            <Button variant="ghost" size="sm" onClick={() => {
-                                                setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
-                                                setEditStadiumIds(d.stadiums.map(s => s.id));
-                                                setModal({ open: true, mode: 'edit', department: d });
-                                            }}><Edit2 className="w-4 h-4" /></Button>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Button variant="ghost" size="sm" title="Assign Focal Point" onClick={() => {
+                                                    setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
+                                                    setEditStadiumIds(d.stadiums.map(s => s.id));
+                                                    setModal({ open: true, mode: 'edit', department: d });
+                                                }}><UserCheck className="w-4 h-4 text-green-600" /></Button>
+                                                <Button variant="ghost" size="sm" onClick={() => {
+                                                    setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
+                                                    setEditStadiumIds(d.stadiums.map(s => s.id));
+                                                    setModal({ open: true, mode: 'edit', department: d });
+                                                }}><Edit2 className="w-4 h-4" /></Button>
+                                            </div>
                                         </TableCell>
                                     )}
                                 </TableRow>
@@ -443,6 +449,26 @@ export function DepartmentsPage() {
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-muted-foreground">Only FA role users can be assigned as focal point.</p>
+                            </div>
+                        )}
+
+                        {modal.mode === 'create' && (
+                            <div className="space-y-2">
+                                <Label>Assign FA User (Optional)</Label>
+                                <Select value={formData.focalPointId || 'none'} onValueChange={v => setFormData(f => ({ ...f, focalPointId: v === 'none' ? '' : v }))}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select FA user (optional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        {faUsers.map(u => (
+                                            <SelectItem key={u.id} value={u.id}>
+                                                {u.name} ({u.email})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">Optionally assign an FA user as focal point at creation time.</p>
                             </div>
                         )}
 

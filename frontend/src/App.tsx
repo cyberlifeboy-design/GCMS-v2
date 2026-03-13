@@ -20,6 +20,7 @@ const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').the
 const RequestsManagementPage = lazy(() => import('@/pages/RequestsManagementPage').then(m => ({ default: m.RequestsManagementPage })));
 const PublicRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.PublicRequestPage })));
 const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage').then(m => ({ default: m.NotificationCenterPage })));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
@@ -72,6 +73,7 @@ function AppContent() {
                                     <Route path="/notifications" element={<NotificationCenterPage />} />
                                     <Route path="/settings" element={<SettingsPage />} />
                                     <Route path="/requests" element={<RequestsManagementPage />} />
+                                    <Route path="/profile" element={<ProfilePage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>
                             </MainLayout>

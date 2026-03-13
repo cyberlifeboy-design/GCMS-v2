@@ -682,13 +682,15 @@ export class ReportsService {
      * Get all fleet data for label generation
      */
     async getLabelsData(filters: { stadiumId?: string } = {}) {
-        const where = filters.stadiumId ? { stadiumId: filters.stadiumId } : {};
+        const where: any = { status: 'Assigned' };
+        if (filters.stadiumId) where.stadiumId = filters.stadiumId;
 
         const fleet = await this.prisma.fleet.findMany({
             where,
             include: {
                 stadium: { select: { id: true, name: true } },
                 assignedUser: { select: { id: true, name: true, accreditationNumber: true } },
+                department: { select: { code: true, name: true } },
             },
             orderBy: [{ stadium: { name: 'asc' } }, { carNumber: 'asc' }],
         });
@@ -700,6 +702,8 @@ export class ReportsService {
             stadium: cart.stadium.name,
             faName: cart.assignedUser?.name || null,
             faAccreditationNumber: cart.assignedUser?.accreditationNumber || null,
+            departmentCode: cart.department?.code || null,
+            departmentName: cart.department?.name || null,
         }));
     }
 }

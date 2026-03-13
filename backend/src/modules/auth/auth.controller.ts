@@ -29,6 +29,11 @@ const resetPasswordSchema = z.object({
     password: z.string().min(8).max(100),
 });
 
+const changePasswordSchema = z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8).max(100),
+});
+
 export class AuthController {
     static async register(req: Request, res: Response): Promise<void> {
         try {
@@ -143,6 +148,27 @@ export class AuthController {
                 res.status(400).json({ error: error.message });
             } else {
                 res.status(500).json({ error: 'Password reset failed' });
+            }
+        }
+    }
+
+    static async changePassword(req: Request, res: Response): Promise<void> {
+        try {
+            const authUser = (req as any).user;
+            if (!authUser) {
+                res.status(401).json({ error: 'Not authenticated' });
+                return;
+            }
+            const validatedData = changePasswordSchema.parse(req.body);
+            await AuthService.changePassword(authUser.userId, validatedData.currentPassword, validatedData.newPassword);
+            res.status(200).json({ message: 'Password changed successfully' });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: 'Password change failed' });
             }
         }
     }

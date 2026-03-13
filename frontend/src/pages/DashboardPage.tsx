@@ -1,14 +1,106 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { reportsApi, notificationsApi } from '@/lib/api';
+import { reportsApi, notificationsApi, stadiumsApi, handoverApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck, Bell, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
 import { formatDate } from '@/lib/dateUtils';
+
+// FA User focused dashboard
+function FADashboard({ user }: { user: { name?: string; email?: string; stadium?: { id: string; name: string }; stadiumId?: string } }) {
+    const navigate = useNavigate();
+    const [poolDashboard, setPoolDashboard] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        handoverApi.getPoolDashboard().then(res => {
+            setPoolDashboard(res.data);
+        }).catch(console.error).finally(() => setLoading(false));
+    }, []);
+
+    const userCarts = poolDashboard?.userAssignedCarts || [];
+    const typeBreakdown = userCarts.reduce((acc: Record<string, number>, cart: any) => {
+        acc[cart.carType] = (acc[cart.carType] || 0) + 1;
+        return acc;
+    }, {});
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-3xl font-bold">Dashboard</h1>
+                <p className="text-muted-foreground mt-1">
+                    Venue: <span className="font-semibold">{user.stadium?.name || 'Unassigned'}</span>
+                </p>
+            </div>
+
+            {/* Assigned Venue Summary */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-cyan-500" />
+                        {user.stadium?.name || 'My Venue'}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 animate-spin" /></div>
+                    ) : (
+                        <div className="space-y-4">
+                            {Object.keys(typeBreakdown).length > 0 ? (
+                                <>
+                                    <p className="text-sm text-muted-foreground font-medium">My Assigned Cars by Type</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {Object.entries(typeBreakdown).map(([type, count]) => (
+                                            <div key={type} className="bg-muted/50 rounded-lg p-3 text-center">
+                                                <Car className="w-5 h-5 mx-auto mb-1 text-primary" />
+                                                <p className="text-2xl font-bold">{count as number}</p>
+                                                <p className="text-xs text-muted-foreground">{type}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="space-y-2 mt-4">
+                                        <p className="text-sm font-medium">My Cars</p>
+                                        {userCarts.map((cart: any) => (
+                                            <div key={cart.id} className="flex items-center justify-between p-3 rounded-lg border">
+                                                <div className="flex items-center gap-3">
+                                                    <Car className="w-4 h-4 text-muted-foreground" />
+                                                    <div>
+                                                        <p className="font-medium">{cart.carNumber}</p>
+                                                        <p className="text-xs text-muted-foreground">{cart.carType}</p>
+                                                    </div>
+                                                </div>
+                                                <Badge variant={cart.status === 'Dispatched' ? 'default' : cart.status === 'Available' ? 'outline' : 'secondary'}>
+                                                    {cart.status}
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-center py-8 text-muted-foreground">No cars assigned to you yet</p>
+                            )}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-2 gap-4">
+                <Button className="h-16 text-base" onClick={() => navigate('/handover')}>
+                    <ArrowRightLeft className="w-5 h-5 mr-2" /> Check-In / Check-Out
+                </Button>
+                <Button variant="outline" className="h-16 text-base" onClick={() => navigate('/handover')}>
+                    <TrendingUp className="w-5 h-5 mr-2" /> View Activity
+                </Button>
+            </div>
+        </div>
+    );
+}
 
 const downloadBlob = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -69,12 +161,19 @@ export function DashboardPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [notifStats, setNotifStats] = useState<NotificationStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
+    const [stadiumFilter, setStadiumFilter] = useState<string>(() => {
+        if (user?.role === 'Admin' && user?.stadiumId) return user.stadiumId;
+        return '';
+    });
 
-    const loadStats = async () => {
+    const loadStats = async (stadiumId?: string) => {
         try {
             setLoading(true);
+            const params: Record<string, string> = {};
+            if (stadiumId) params.stadiumId = stadiumId;
             const [statsRes, notifRes] = await Promise.all([
-                reportsApi.getUtilization(),
+                reportsApi.getUtilization(params),
                 notificationsApi.getStats()
             ]);
             setStats(statsRes.data);
@@ -87,8 +186,19 @@ export function DashboardPage() {
     };
 
     useEffect(() => {
-        loadStats();
+        const loadStadiums = async () => {
+            try {
+                const res = await stadiumsApi.getAll();
+                setStadiums(res.data?.data || res.data || []);
+            } catch (e) { /* ignore */ }
+        };
+        if (user?.role !== 'Admin') loadStadiums();
+        loadStats(stadiumFilter || undefined);
     }, []);
+
+    useEffect(() => {
+        loadStats(stadiumFilter || undefined);
+    }, [stadiumFilter]);
 
     const totalCarts = stats?.fleetByStatus.reduce((acc, curr) => acc + curr.count, 0) || 0;
 
@@ -156,6 +266,11 @@ export function DashboardPage() {
         );
     }
 
+    // FA users get a focused dashboard showing only their assigned venue & cars
+    if (user?.role === 'FA') {
+        return <FADashboard user={user} />;
+    }
+
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-start">
@@ -166,9 +281,22 @@ export function DashboardPage() {
                         Role: <span className="text-xs uppercase px-1.5 py-0.5 bg-muted rounded">{user?.role}</span>
                     </p>
                 </div>
-                <Button variant="outline" onClick={() => handleExport('Full System')}>
-                    <Download className="w-4 h-4 mr-2" /> Export Full Report
-                </Button>
+                <div className="flex items-center gap-2">
+                    {user?.role !== 'Admin' && stadiums.length > 0 && (
+                        <Select value={stadiumFilter} onValueChange={setStadiumFilter}>
+                            <SelectTrigger className="w-44"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="">All Stadiums</SelectItem>
+                                {stadiums.map(s => (
+                                    <SelectItem key={s.id} value={s.id}>{s.code} – {s.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    <Button variant="outline" onClick={() => handleExport('Full System')}>
+                        <Download className="w-4 h-4 mr-2" /> Export Full Report
+                    </Button>
+                </div>
             </div>
 
             {/* Summary Grid */}

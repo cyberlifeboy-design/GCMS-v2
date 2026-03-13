@@ -164,10 +164,16 @@ export class UsersService {
         assignAllStadiums: boolean;
         grantedPages: string[];
         venueReportAccess: string;
+        password: string;
     }>) {
+        const { password, ...rest } = data;
+        const updatePayload: any = { ...rest };
+        if (password) {
+            updatePayload.passwordHash = await bcrypt.hash(password, 10);
+        }
         return prisma.user.update({
             where: { id },
-            data,
+            data: updatePayload,
             select: {
                 id: true,
                 name: true,

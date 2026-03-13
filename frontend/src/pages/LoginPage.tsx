@@ -13,7 +13,7 @@ export function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string }>({});
+    const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
     const { login, isLoading } = useAuthStore();
     const navigate = useNavigate();
 
@@ -41,7 +41,13 @@ export function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="min-h-screen flex flex-col bg-background">
+            {branding.headerUrl && (
+                <div className="w-full">
+                    <img src={branding.headerUrl} alt="Header Branding" className="w-full max-h-24 object-cover" />
+                </div>
+            )}
+            <div className="flex-1 flex items-center justify-center p-4">
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center space-y-2">
                     {branding.logoUrl && (
@@ -82,6 +88,17 @@ export function LoginPage() {
                     </form>
                 </CardContent>
             </Card>
+            </div>
+            {(branding.footerUrl || branding.footerText) && (
+                <div className="w-full bg-muted p-4 text-center">
+                    {branding.footerUrl && (
+                        <img src={branding.footerUrl} alt="Footer Branding" className="max-h-16 w-auto mx-auto object-contain" />
+                    )}
+                    {branding.footerText && (
+                        <p className="text-sm text-muted-foreground mt-2">{branding.footerText}</p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

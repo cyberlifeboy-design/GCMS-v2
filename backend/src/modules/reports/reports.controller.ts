@@ -867,6 +867,92 @@ export class ReportsController {
         }
     }
 
+    static async exportLabelsPdf(req: AuthRequest, res: Response) {
+        try {
+            const { stadiumId } = req.query as any;
+            let filterStadiumId = stadiumId;
+
+            // RBAC scoping: Admin is locked to their stadium
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const [labelsData, settings] = await Promise.all([
+                reportsService.getLabelsData({ stadiumId: filterStadiumId }),
+                prisma.systemSettings.findFirst(),
+            ]);
+
+            // Create PDF in landscape
+            const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename=labels.pdf');
+            doc.pipe(res);
+
+            const pageWidth = doc.page.width;
+            const pageHeight = doc.page.height;
+            const margin = 40;
+
+            labelsData.forEach((label, index) => {
+                if (index > 0) doc.addPage();
+
+                // Header logo (top-left)
+                if (settings?.logoUrl) {
+                    try {
+                        // Use tournament name as text header since image URLs may not be accessible server-side
+                        doc.fontSize(14).font('Helvetica-Bold').fillColor('#333333')
+                            .text(settings.tournamentName || 'GCMS', margin, 20, { width: pageWidth - margin * 2 });
+                    } catch (_) { /* ignore header errors */ }
+                } else if (settings?.tournamentName) {
+                    doc.fontSize(14).font('Helvetica-Bold').fillColor('#333333')
+                        .text(settings.tournamentName, margin, 20, { width: pageWidth - margin * 2 });
+                }
+
+                // Calculate car number font size (220 for ≤3 chars, scale down for more)
+                const carNum = label.carNumber;
+                let carFontSize = 220;
+                if (carNum.length > 3) carFontSize = Math.max(80, Math.floor(220 * 3 / carNum.length));
+
+                // Center the car number vertically
+                const centerY = pageHeight / 2 - 60;
+
+                doc.fontSize(carFontSize).font('Helvetica-Bold').fillColor('#000000')
+                    .text(carNum, margin, centerY, {
+                        width: pageWidth - margin * 2,
+                        align: 'center',
+                        lineBreak: false,
+                    });
+
+                // Department code below car number
+                const deptCode = label.departmentCode || '—';
+                doc.fontSize(48).font('Helvetica-Bold').fillColor('#333333')
+                    .text(deptCode, margin, centerY + carFontSize * 0.85, {
+                        width: pageWidth - margin * 2,
+                        align: 'center',
+                        lineBreak: false,
+                    });
+
+                // Footer (bottom)
+                if (settings?.footerText) {
+                    doc.fontSize(12).font('Helvetica').fillColor('#666666')
+                        .text(settings.footerText, margin, pageHeight - 40, {
+                            width: pageWidth - margin * 2,
+                            align: 'center',
+                        });
+                }
+            });
+
+            if (labelsData.length === 0) {
+                doc.fontSize(16).font('Helvetica').fillColor('#666666')
+                    .text('No assigned cars found for the selected criteria.', { align: 'center' });
+            }
+
+            doc.end();
+        } catch (error) {
+            console.error('Failed to export labels PDF:', error);
+            res.status(500).json({ error: 'Failed to export labels PDF' });
+        }
+    }
+
     static async exportLabelsPptx(req: AuthRequest, res: Response) {
         try {
             const { stadiumId } = req.query as any;

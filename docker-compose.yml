@@ -10,8 +10,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-gcms_password_2024}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     networks:
       - gcms_network
     restart: unless-stopped
@@ -30,9 +28,6 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin123}
     volumes:
       - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     networks:
       - gcms_network
     restart: unless-stopped
@@ -56,8 +51,6 @@ services:
       - FRONTEND_URL=https://gcms.mehaisi.com
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@gcms.local}
-    ports:
-      - "3005:3005"
     depends_on:
       postgres:
         condition: service_healthy

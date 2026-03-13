@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
-import { Pagination } from '@/components/shared/Pagination';
 
 interface FleetCart {
     id: string;
@@ -135,8 +134,8 @@ export function FleetPage() {
 
     const [fleet, setFleet] = useState<FleetCart[]>([]);
     const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
-    const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string; departmentId?: string; department?: { id: string; name: string } }>>([]);
-    const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+    const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string; departmentId?: string; department?: { id: string; name: string; code?: string } }>>([]);
+    const [departments, setDepartments] = useState<Array<{ id: string; name: string; code?: string; stadiumId: string }>>([]);
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [stadiumsLoading, setStadiumsLoading] = useState(false);
@@ -151,12 +150,15 @@ export function FleetPage() {
     const [stadiumFilter, setStadiumFilter] = useState(() => searchParams.get('stadium') || 'all');
     const [departmentFilter, setDepartmentFilter] = useState(() => searchParams.get('department') || 'all');
 
-    // Pagination state
+    // Infinite scroll state
     const [page, setPage] = useState(() => {
         const p = searchParams.get('page');
         return p ? parseInt(p, 10) || 1 : 1;
     });
-    const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 20 });
+    const scrollSentinelRef = useRef<HTMLDivElement>(null);
 
     // Modal states
     const [cartModal, setCartModal] = useState<{ open: boolean; mode: 'create' | 'edit'; cart?: FleetCart }>({ open: false, mode: 'create' });
@@ -188,26 +190,42 @@ export function FleetPage() {
         setSearchParams(params, { replace: true });
     }, [statusFilter, carTypeFilter, stadiumFilter, departmentFilter, page, setSearchParams]);
 
-    const loadFleet = async () => {
+    const loadFleet = async (resetPage = true) => {
         try {
-            setLoading(true);
+            if (resetPage) {
+                setLoading(true);
+            } else {
+                setLoadingMore(true);
+            }
+            const currentPage = resetPage ? 1 : page;
             const params: Record<string, unknown> = {
                 ...(statusFilter !== 'all' && { status: statusFilter }),
                 ...(carTypeFilter.length > 0 && { carType: carTypeFilter.join(',') }),
                 ...(stadiumFilter !== 'all' && { stadiumId: stadiumFilter }),
                 ...(departmentFilter !== 'all' && { departmentId: departmentFilter }),
-                page,
+                page: currentPage,
                 limit: pagination.limit
             };
             const res = await fleetApi.getAll(params);
-            setFleet(res.data.data || []);
+            const newItems = res.data.data || [];
+            if (resetPage) {
+                setFleet(newItems);
+                setPage(1);
+            } else {
+                setFleet(prev => [...prev, ...newItems]);
+            }
             if (res.data.pagination) {
-                setPagination(prev => ({ ...prev, ...res.data.pagination }));
+                const p = res.data.pagination;
+                setPagination(prev => ({ ...prev, ...p }));
+                setHasMore(currentPage < p.totalPages);
+            } else {
+                setHasMore(false);
             }
         } catch (e) {
             console.error(e);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     };
 
@@ -258,9 +276,28 @@ export function FleetPage() {
         if (isFA) {
             loadMyCarts();
         } else {
-            loadFleet();
+            loadFleet(true);
         }
-    }, [statusFilter, carTypeFilter, stadiumFilter, departmentFilter, page]);
+    }, [statusFilter, carTypeFilter, stadiumFilter, departmentFilter]);
+
+    // Infinite scroll: load next page when sentinel enters viewport
+    useEffect(() => {
+        if (isFA || !hasMore || loadingMore || loading) return;
+        const sentinel = scrollSentinelRef.current;
+        if (!sentinel) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+                    const nextPage = page + 1;
+                    setPage(nextPage);
+                    loadFleet(false);
+                }
+            },
+            { threshold: 0.5 }
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, loadingMore, loading, page, isFA]);
 
     // Load stadiums for SuperAdmin (to select venue when creating carts)
     useEffect(() => {
@@ -284,6 +321,11 @@ export function FleetPage() {
             await loadDepartments(stadiumId);
         }
     };
+
+    // Filtered FA users based on currently selected department in form
+    const filteredFAUsers = formData.departmentId
+        ? faUsers.filter(u => u.departmentId === formData.departmentId || u.department?.id === formData.departmentId)
+        : faUsers;
 
     // Handle car type filter changes
     const handleCarTypeFilterChange = (types: string[]) => {
@@ -405,7 +447,7 @@ export function FleetPage() {
                 await fleetApi.update(cartModal.cart!.id, submitData);
             }
             setCartModal({ open: false, mode: 'create' });
-            loadFleet();
+            loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
             if (errorData?.details?.length) {
@@ -428,7 +470,7 @@ export function FleetPage() {
         try {
             await fleetApi.delete(deleteModal.cart.id);
             setDeleteModal({ open: false });
-            loadFleet();
+            loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
             if (errorData?.details?.length) {
@@ -452,7 +494,7 @@ export function FleetPage() {
         try {
             await fleetApi.assignUser(assignModal.cart.id, assignUserId || null);
             setAssignModal({ open: false });
-            loadFleet();
+            loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
             if (errorData?.details?.length) {
@@ -483,7 +525,7 @@ export function FleetPage() {
             const res = await fleetApi.bulkImport(file, stadiumId);
             const { created, errors } = res.data;
             setImportResult(`Imported ${created} carts. ${errors?.length ? `Errors: ${errors.length}` : ''}`);
-            loadFleet();
+            loadFleet(true);
             setBulkModal(false);
         } catch (err: any) {
             setImportResult(err.response?.data?.error || 'Import failed');
@@ -506,7 +548,7 @@ export function FleetPage() {
             setMaintModal({ open: false });
             setMaintForm({ issueDescription: '' });
             setMaintPhotos([]);
-            loadFleet();
+            loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
             if (errorData?.details?.length) {
@@ -525,78 +567,85 @@ export function FleetPage() {
 
     const CartTable = ({ data }: { data: FleetCart[] }) => (
         <div className="flex flex-col">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Car #</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>VAP</TableHead>
-                        <TableHead>FA Focal Point</TableHead>
-                        <TableHead>Department</TableHead>
-                        <TableHead>Stadium</TableHead>
-                        {(isAdmin || isFA) && <TableHead className="text-right">Actions</TableHead>}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {loading ? (
-                        <TableRow><TableCell colSpan={(isAdmin || isFA) ? 8 : 7} className="text-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                        </TableCell></TableRow>
-                    ) : data.length === 0 ? (
-                        <TableRow><TableCell colSpan={(isAdmin || isFA) ? 8 : 7} className="text-center py-8 text-muted-foreground">
-                            No carts found
-                        </TableCell></TableRow>
-                    ) : data.map(cart => (
-                        <TableRow key={cart.id}>
-                            <TableCell className="text-center text-lg font-bold">{cart.carNumber}</TableCell>
-                            <TableCell>
-                                <Badge className={carTypeColors[cart.carType]} variant="secondary">{cart.carType}</Badge>
-                            </TableCell>
-                            <TableCell>
-                                <span className={statusColors[cart.status]}>{cart.status}</span>
-                            </TableCell>
-                            <TableCell>
-                                {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
-                            </TableCell>
-                            <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{cart.department?.code || cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{cart.stadium?.code || cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
-                            {(isAdmin || isFA) && (
-                                <TableCell className="text-right">
-                                    <div className="flex justify-end gap-1">
-                                        {isAdmin && (
-                                            <>
-                                                <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
-                                                    <UserCheck className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
-                                                    <Edit2 className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </>
-                                        )}
-                                        <Button variant="ghost" size="sm" onClick={() => setMaintModal({ open: true, cart })} title="Report Maintenance">
-                                            <Wrench className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </TableCell>
-                            )}
+            <div className="max-h-[600px] overflow-y-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Car #</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>VAP</TableHead>
+                            <TableHead>FA Focal Point</TableHead>
+                            <TableHead>Department</TableHead>
+                            <TableHead>Stadium</TableHead>
+                            {(isAdmin || isFA) && <TableHead className="text-right">Actions</TableHead>}
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-            {!isFA && (
-                <Pagination
-                    page={page}
-                    totalPages={pagination.totalPages}
-                    onPageChange={setPage}
-                    total={pagination.total}
-                    limit={pagination.limit}
-                />
-            )}
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={(isAdmin || isFA) ? 8 : 7} className="text-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                            </TableCell></TableRow>
+                        ) : data.length === 0 ? (
+                            <TableRow><TableCell colSpan={(isAdmin || isFA) ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                                No carts found
+                            </TableCell></TableRow>
+                        ) : data.map(cart => (
+                            <TableRow key={cart.id}>
+                                <TableCell className="text-center text-lg font-bold">{cart.carNumber}</TableCell>
+                                <TableCell>
+                                    <Badge className={carTypeColors[cart.carType]} variant="secondary">{cart.carType}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                    <span className={statusColors[cart.status]}>{cart.status}</span>
+                                </TableCell>
+                                <TableCell>
+                                    {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
+                                </TableCell>
+                                <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                                <TableCell>{cart.department?.code || cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                                <TableCell>{cart.stadium?.code || cart.stadium?.name || <span className="text-muted-foreground">—</span>}</TableCell>
+                                {(isAdmin || isFA) && (
+                                    <TableCell className="text-right">
+                                        <div className="flex justify-end gap-1">
+                                            {isAdmin && (
+                                                <>
+                                                    <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
+                                                        <UserCheck className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" onClick={() => openEdit(cart)} title="Edit">
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setDeleteModal({ open: true, cart })} title="Delete">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </>
+                                            )}
+                                            <Button variant="ghost" size="sm" onClick={() => setMaintModal({ open: true, cart })} title="Report Maintenance">
+                                                <Wrench className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+                {/* Infinite scroll sentinel (non-FA view) */}
+                {!isFA && (
+                    <>
+                        <div ref={scrollSentinelRef} className="h-4" />
+                        {loadingMore && (
+                            <div className="text-center py-3">
+                                <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+                            </div>
+                        )}
+                        {!hasMore && data.length > 0 && (
+                            <p className="text-center text-xs text-muted-foreground py-2">All {data.length} carts loaded</p>
+                        )}
+                    </>
+                )}
+            </div>
         </div>
     );
 
@@ -795,16 +844,23 @@ export function FleetPage() {
                             <Label htmlFor="departmentId">Department</Label>
                             <Select
                                 value={formData.departmentId || '__none__'}
-                                onValueChange={v => setFormData(d => ({ ...d, departmentId: v === '__none__' ? '' : v }))}
+                                onValueChange={v => {
+                                    const newDeptId = v === '__none__' ? '' : v;
+                                    setFormData(d => ({ ...d, departmentId: newDeptId, assignedUserId: '' }));
+                                }}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select department (optional)" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__none__">— None —</SelectItem>
-                                    {departments.map(d => (
-                                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                    ))}
+                                    {departments
+                                        .filter(d => !formData.stadiumId || d.stadiumId === formData.stadiumId)
+                                        .map(d => (
+                                            <SelectItem key={d.id} value={d.id}>
+                                                {d.code ? `${d.code} – ${d.name}` : d.name}
+                                            </SelectItem>
+                                        ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -815,18 +871,26 @@ export function FleetPage() {
                                 onValueChange={v => setFormData(d => ({ ...d, assignedUserId: v === '__none__' ? '' : v }))}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select FA (optional)" />
+                                    <SelectValue placeholder={filteredFAUsers.length === 0 && formData.departmentId ? 'No FAs match this department' : 'Select FA (optional)'} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="__none__">— Unassigned —</SelectItem>
-                                    {faUsers.map(u => (
-                                        <SelectItem key={u.id} value={u.id}>
-                                            {u.name}{u.department?.name ? ` (${u.department.name})` : ''}
-                                        </SelectItem>
-                                    ))}
+                                    {filteredFAUsers.length === 0 && formData.departmentId ? (
+                                        <div className="px-2 py-1 text-sm text-muted-foreground">No FAs found for this department</div>
+                                    ) : (
+                                        filteredFAUsers.map(u => (
+                                            <SelectItem key={u.id} value={u.id}>
+                                                {u.name}{u.department?.name ? ` (${u.department.code || u.department.name})` : ''}
+                                            </SelectItem>
+                                        ))
+                                    )}
                                 </SelectContent>
                             </Select>
-                            <p className="text-xs text-muted-foreground">Assign a Fleet Attendant to this cart during creation</p>
+                            <p className="text-xs text-muted-foreground">
+                                {formData.departmentId
+                                    ? 'Showing FAs matching the selected department'
+                                    : 'Select a department to filter FA users'}
+                            </p>
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setCartModal(m => ({ ...m, open: false }))}>Cancel</Button>

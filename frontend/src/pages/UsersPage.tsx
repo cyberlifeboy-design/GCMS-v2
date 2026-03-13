@@ -40,13 +40,6 @@ interface CarRequest {
     createdAt: string;
 }
 
-const roleColors: Record<string, string> = {
-    'SuperAdmin': 'bg-purple-500 text-white',
-    'Admin': 'bg-blue-500 text-white',
-    'FA': 'bg-green-500 text-white',
-    'Observer': 'bg-gray-400 text-white',
-};
-
 const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer'] as const;
 const ROLE_ORDER = ['SuperAdmin', 'Admin', 'Observer', 'FA'] as const;
 
@@ -74,11 +67,13 @@ export function UsersPage() {
     const canManage = isSuperAdmin || isAdmin;
 
     const [users, setUsers] = useState<User[]>([]);
+    const [allFaUsers, setAllFaUsers] = useState<User[]>([]);
+    const [faLoading, setFaLoading] = useState(true);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
 
-    // Pagination state
+    // Pagination state (system users only)
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 10 });
 
@@ -90,7 +85,7 @@ export function UsersPage() {
     const [importOpen, setImportOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
-    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false });
+    const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false, newPassword: '' });
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string; stadiumId: string }>>([]);
 
@@ -112,11 +107,19 @@ export function UsersPage() {
     const loadUsers = async () => {
         try {
             setLoading(true);
-            const params = {
-                ...(roleFilter !== 'all' && { role: roleFilter }),
-                page,
-                limit: pagination.limit
-            };
+            // Only load non-FA system users with pagination
+            const params: Record<string, unknown> = { page, limit: pagination.limit };
+            if (roleFilter !== 'all' && roleFilter !== 'FA') {
+                params.role = roleFilter;
+            } else if (roleFilter === 'all') {
+                // Exclude FA from paginated system users — FA users loaded separately
+                params.excludeRole = 'FA';
+            } else {
+                // roleFilter === 'FA' — system users section is empty
+                setUsers([]);
+                setLoading(false);
+                return;
+            }
             const res = await usersApi.getAll(params);
             setUsers(res.data.data || []);
             if (res.data.pagination) {
@@ -129,7 +132,20 @@ export function UsersPage() {
         }
     };
 
+    const loadAllFaUsers = async () => {
+        try {
+            setFaLoading(true);
+            const res = await usersApi.getAll({ role: 'FA', limit: 500 });
+            setAllFaUsers(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setFaLoading(false);
+        }
+    };
+
     useEffect(() => { loadUsers(); }, [roleFilter, page]);
+    useEffect(() => { loadAllFaUsers(); }, []);
 
     // Load stadiums for SuperAdmin
     useEffect(() => {
@@ -185,9 +201,6 @@ export function UsersPage() {
         return groups;
     };
 
-    const systemRoles = ['SuperAdmin', 'Admin', 'Observer'] as const;
-    const faRoles = ['FA'] as const;
-
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
@@ -206,6 +219,7 @@ export function UsersPage() {
             setCreateOpen(false);
             setFormData(EMPTY_FORM);
             loadUsers();
+            loadAllFaUsers();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to create user');
         } finally {
@@ -226,6 +240,7 @@ export function UsersPage() {
             setDeleteConfirmOpen(false);
             setDeleteUser(null);
             loadUsers();
+            loadAllFaUsers();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to delete user');
         } finally {
@@ -237,6 +252,7 @@ export function UsersPage() {
         try {
             await usersApi.setStatus(u.id, !u.isActive);
             setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
+            setAllFaUsers(prev => prev.map(x => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to update status');
         }
@@ -246,6 +262,7 @@ export function UsersPage() {
         try {
             await usersApi.setBlocked(u.id, !u.isBlocked);
             setUsers(prev => prev.map(x => x.id === u.id ? { ...x, isBlocked: !u.isBlocked } : x));
+            setAllFaUsers(prev => prev.map(x => x.id === u.id ? { ...x, isBlocked: !u.isBlocked } : x));
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to update block status');
         }
@@ -262,6 +279,7 @@ export function UsersPage() {
             stadiumId: u.stadium?.id || '',
             departmentId: u.department?.id || '',
             assignAllStadiums: u.assignAllStadiums || false,
+            newPassword: '',
         });
         setEditOpen(true);
     };
@@ -280,10 +298,12 @@ export function UsersPage() {
                 stadiumId: isSuperAdmin ? editData.stadiumId || undefined : undefined,
                 departmentId: editData.departmentId || undefined,
                 assignAllStadiums: editData.assignAllStadiums,
+                ...(isSuperAdmin && editData.newPassword ? { password: editData.newPassword } : {}),
             });
             setEditOpen(false);
             setEditUser(null);
             loadUsers();
+            loadAllFaUsers();
         } catch (err: any) {
             const errorData = err.response?.data;
             if (errorData?.details?.length) {
@@ -320,6 +340,7 @@ export function UsersPage() {
             setBulkOpen(false);
             setBulkData('');
             loadUsers();
+            loadAllFaUsers();
             alert(`Created ${parsed.length} users`);
         } catch {
             setBulkError('Failed — check format (JSON array or CSV with headers: name,email,role,password)');
@@ -359,6 +380,7 @@ export function UsersPage() {
             setImportOpen(false);
             setSelectedRequests(new Set());
             loadUsers();
+            loadAllFaUsers();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to import users');
         } finally {
@@ -464,13 +486,14 @@ export function UsersPage() {
                             return (
                                 <div key={roleKey} className="border-b last:border-b-0">
                                     <div className="bg-muted/50 px-4 py-2 font-semibold text-sm flex items-center gap-2">
-                                        <Badge className={roleColors[roleKey]}>{roleKey}</Badge>
+                                        <span>{roleKey}</span>
                                         <span className="text-muted-foreground">({roleUsers.length})</span>
                                     </div>
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Name</TableHead>
+                                                <TableHead>User Type</TableHead>
                                                 <TableHead>Email</TableHead>
                                                 <TableHead>Phone</TableHead>
                                                 {showAccreditation && <TableHead>Accreditation #</TableHead>}
@@ -485,6 +508,7 @@ export function UsersPage() {
                                             {roleUsers.map(u => (
                                                 <TableRow key={u.id}>
                                                     <TableCell className="font-medium">{u.name}</TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">{u.role}</TableCell>
                                                     <TableCell>{u.email}</TableCell>
                                                     <TableCell>{u.phone || '—'}</TableCell>
                                                     {showAccreditation && <TableCell>{u.accreditationNumber || '—'}</TableCell>}
@@ -552,27 +576,108 @@ export function UsersPage() {
                             );
                         };
 
-                        const systemUsersList = [...systemRoles].flatMap(r => groups[r] || []);
-                        const faUsersList = [...faRoles].flatMap(r => groups[r] || []);
+                        const systemUsersList = [...(['SuperAdmin', 'Admin', 'Observer'] as const)].flatMap(r => groups[r] || []);
+
+                        // FA users come from separate state (scrollable, no pagination)
+                        const filteredFaUsers = allFaUsers.filter(u => {
+                            const matchSearch =
+                                u.name?.toLowerCase().includes(search.toLowerCase()) ||
+                                u.email?.toLowerCase().includes(search.toLowerCase()) ||
+                                u.phone?.includes(search) ||
+                                u.accreditationNumber?.toLowerCase().includes(search.toLowerCase());
+                            return matchSearch;
+                        });
+
+                        const renderFaRow = (u: User) => (
+                            <TableRow key={u.id}>
+                                <TableCell className="font-medium">{u.name}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">{u.role}</TableCell>
+                                <TableCell>{u.email}</TableCell>
+                                <TableCell>{u.phone || '—'}</TableCell>
+                                <TableCell>{u.accreditationNumber || '—'}</TableCell>
+                                <TableCell>{u.assignAllStadiums ? 'All Stadiums' : (u.stadium?.name || '—')}</TableCell>
+                                <TableCell>{u.department?.name || '—'}</TableCell>
+                                <TableCell>
+                                    <Badge className={u.isActive ? 'bg-green-500 text-white' : 'bg-red-400 text-white'}>
+                                        {u.isActive ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell>
+                                    {u.isBlocked ? (
+                                        <Badge className="bg-red-600 text-white"><Ban className="w-3 h-3 mr-1" />Blocked</Badge>
+                                    ) : (
+                                        <Badge className="bg-gray-200 text-gray-600">No</Badge>
+                                    )}
+                                </TableCell>
+                                {canManage && (
+                                    <TableCell className="text-right">
+                                        <div className="flex gap-1 justify-end">
+                                            <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="Edit user">
+                                                <Edit2 className="w-4 h-4" />
+                                            </Button>
+                                            {(role === 'Admin' || role === 'SuperAdmin') && (<>
+                                                {isSuperAdmin && u.id !== currentUser?.id && (
+                                                    <Button variant="ghost" size="sm" onClick={() => openDeleteConfirm(u)} title="Delete user">
+                                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                                    </Button>
+                                                )}
+                                                <Button variant="ghost" size="sm" onClick={() => handleToggleBlocked(u)} title={u.isBlocked ? 'Unblock user' : 'Block user'}>
+                                                    {u.isBlocked ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Ban className="w-4 h-4 text-gray-400" />}
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => handleToggleActive(u)} title={u.isActive ? 'Deactivate' : 'Activate'}>
+                                                    {u.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                                                </Button>
+                                            </>)}
+                                        </div>
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                        );
 
                         return (
                             <>
-                                {systemUsersList.length > 0 && (
+                                {(roleFilter === 'all' || roleFilter !== 'FA') && systemUsersList.length > 0 && (
                                     <div>
                                         <div className="bg-blue-50 dark:bg-blue-950/30 px-4 py-2 text-sm font-bold text-blue-800 dark:text-blue-300 border-b flex items-center gap-2">
                                             🔧 System Users
                                             <span className="font-normal text-muted-foreground">({systemUsersList.length})</span>
                                         </div>
-                                        {systemRoles.map(r => renderRoleSection(r, false))}
+                                        {(['SuperAdmin', 'Admin', 'Observer'] as const).map(r => renderRoleSection(r, false))}
                                     </div>
                                 )}
-                                {faUsersList.length > 0 && (
+                                {(roleFilter === 'all' || roleFilter === 'FA') && (
                                     <div>
                                         <div className="bg-green-50 dark:bg-green-950/30 px-4 py-2 text-sm font-bold text-green-800 dark:text-green-300 border-b flex items-center gap-2">
                                             🏟️ FA Department Users
-                                            <span className="font-normal text-muted-foreground">({faUsersList.length})</span>
+                                            <span className="font-normal text-muted-foreground">({filteredFaUsers.length})</span>
                                         </div>
-                                        {faRoles.map(r => renderRoleSection(r, true))}
+                                        {faLoading ? (
+                                            <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
+                                        ) : filteredFaUsers.length === 0 ? (
+                                            <div className="text-center py-6 text-muted-foreground">No FA users found</div>
+                                        ) : (
+                                            <div className="max-h-[600px] overflow-y-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>Name</TableHead>
+                                                            <TableHead>User Type</TableHead>
+                                                            <TableHead>Email</TableHead>
+                                                            <TableHead>Phone</TableHead>
+                                                            <TableHead>Accreditation #</TableHead>
+                                                            <TableHead>Stadium</TableHead>
+                                                            <TableHead>Department</TableHead>
+                                                            <TableHead>Status</TableHead>
+                                                            <TableHead>Blocked</TableHead>
+                                                            {canManage && <TableHead className="text-right">Actions</TableHead>}
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {filteredFaUsers.map(renderFaRow)}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </>
@@ -583,16 +688,18 @@ export function UsersPage() {
                             <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                         </div>
                     )}
-                    {!loading && filtered.length === 0 && (
+                    {!loading && filtered.length === 0 && roleFilter !== 'FA' && (
                         <div className="text-center py-8 text-muted-foreground">No users found</div>
                     )}
-                    <Pagination
-                        page={page}
-                        totalPages={pagination.totalPages}
-                        onPageChange={setPage}
-                        total={pagination.total}
-                        limit={pagination.limit}
-                    />
+                    {roleFilter !== 'FA' && (
+                        <Pagination
+                            page={page}
+                            totalPages={pagination.totalPages}
+                            onPageChange={setPage}
+                            total={pagination.total}
+                            limit={pagination.limit}
+                        />
+                    )}
                 </CardContent>
             </Card>
 
@@ -835,6 +942,12 @@ export function UsersPage() {
                             <Label>Accreditation Number</Label>
                             <Input value={editData.accreditationNumber} onChange={e => setEditData(d => ({ ...d, accreditationNumber: e.target.value }))} placeholder="ACC-12345" />
                         </div>
+                        {isSuperAdmin && (
+                            <div className="space-y-2">
+                                <Label>New Password <span className="text-muted-foreground font-normal">(leave blank to keep unchanged)</span></Label>
+                                <Input type="password" value={editData.newPassword} onChange={e => setEditData(d => ({ ...d, newPassword: e.target.value }))} placeholder="New password" autoComplete="new-password" />
+                            </div>
+                        )}
                         {isSuperAdmin && (
                             <>
                                 <div className="space-y-2">

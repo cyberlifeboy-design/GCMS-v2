@@ -33,6 +33,7 @@ interface FAUser {
     email: string;
     phone?: string;
     stadium?: { id: string; name: string };
+    department?: { id: string; name: string; code?: string };
 }
 
 interface Stadium {
@@ -68,6 +69,8 @@ export function FleetManagementPage() {
     // Modals
     const [assignModalOpen, setAssignModalOpen] = useState(false);
     const [bulkAssignModalOpen, setBulkAssignModalOpen] = useState(false);
+    const [unassignConfirmOpen, setUnassignConfirmOpen] = useState(false);
+    const [cartToUnassign, setCartToUnassign] = useState<FleetCart | null>(null);
     const [selectedCart, setSelectedCart] = useState<FleetCart | null>(null);
     const [assignUserId, setAssignUserId] = useState<string>('');
     const [bulkAssignUserId, setBulkAssignUserId] = useState<string>('');
@@ -180,6 +183,26 @@ export function FleetManagementPage() {
         setSelectedCart(cart);
         setAssignUserId(cart.assignedUser?.id || '');
         setAssignModalOpen(true);
+    };
+
+    const openUnassignConfirm = (cart: FleetCart) => {
+        setCartToUnassign(cart);
+        setUnassignConfirmOpen(true);
+    };
+
+    const handleUnassignConfirm = async () => {
+        if (!cartToUnassign) return;
+        setSubmitting(true);
+        try {
+            await fleetApi.assignUser(cartToUnassign.id, null);
+            setUnassignConfirmOpen(false);
+            setCartToUnassign(null);
+            loadFleet();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to unassign');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const toggleCartSelection = (cartId: string) => {
@@ -306,21 +329,28 @@ export function FleetManagementPage() {
                                             </div>
                                             {/* Focal Points at this stadium */}
                                             <div className="mt-3 pt-3 border-t">
-                                                <p className="text-xs text-muted-foreground mb-1">Focal Points at this venue:</p>
-                                                <div className="flex flex-wrap gap-1">
+                                                <p className="text-xs text-muted-foreground mb-2">Focal Points at this venue:</p>
+                                                <div className="flex flex-col gap-1">
                                                     {faUsers
                                                         .filter(u => u.stadium?.id === stadiumId)
-                                                        .slice(0, 5)
+                                                        .sort((a, b) => (a.department?.code || '').localeCompare(b.department?.code || ''))
+                                                        .slice(0, 8)
                                                         .map(u => (
-                                                            <Badge key={u.id} variant="outline" className="text-xs">
-                                                                {u.name}{u.phone ? ` · ${u.phone}` : ''}
-                                                            </Badge>
+                                                            <div key={u.id} className="flex items-center justify-between text-xs py-0.5">
+                                                                <span className="font-medium truncate">{u.name}</span>
+                                                                <Badge variant="outline" className="text-xs ml-2 flex-shrink-0">
+                                                                    {u.department?.code || u.department?.name || '—'}
+                                                                </Badge>
+                                                            </div>
                                                         ))
                                                     }
-                                                    {faUsers.filter(u => u.stadium?.id === stadiumId).length > 5 && (
+                                                    {faUsers.filter(u => u.stadium?.id === stadiumId).length > 8 && (
                                                         <span className="text-xs text-muted-foreground">
-                                                            +{faUsers.filter(u => u.stadium?.id === stadiumId).length - 5} more
+                                                            +{faUsers.filter(u => u.stadium?.id === stadiumId).length - 8} more
                                                         </span>
+                                                    )}
+                                                    {faUsers.filter(u => u.stadium?.id === stadiumId).length === 0 && (
+                                                        <span className="text-xs text-muted-foreground italic">No focal points assigned</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -479,10 +509,22 @@ export function FleetManagementPage() {
                                                         {cart.requiresVAP && <Badge variant="outline" className="text-orange-600 border-orange-400">VAP</Badge>}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" onClick={() => openAssignModal(cart)}>
-                                                            <ArrowRightLeft className="w-4 h-4 mr-1" />
-                                                            Assign
-                                                        </Button>
+                                                        {cart.assignedUser ? (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                                                onClick={() => openUnassignConfirm(cart)}
+                                                            >
+                                                                <X className="w-4 h-4 mr-1" />
+                                                                Un-assign
+                                                            </Button>
+                                                        ) : (
+                                                            <Button variant="outline" size="sm" onClick={() => openAssignModal(cart)}>
+                                                                <ArrowRightLeft className="w-4 h-4 mr-1" />
+                                                                Assign
+                                                            </Button>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
@@ -577,6 +619,25 @@ export function FleetManagementPage() {
                         <Button onClick={handleBulkAssign} disabled={submitting || !bulkAssignUserId}>
                             {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                             Assign to {selectedCarts.size} Carts
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Un-assign Confirmation Dialog */}
+            <Dialog open={unassignConfirmOpen} onOpenChange={setUnassignConfirmOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Un-assign Focal Point</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to remove <strong>{cartToUnassign?.assignedUser?.name}</strong> from cart <strong>{cartToUnassign?.carNumber}</strong>? The cart status will revert to Available.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setUnassignConfirmOpen(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleUnassignConfirm} disabled={submitting}>
+                            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Un-assign
                         </Button>
                     </DialogFooter>
                 </DialogContent>

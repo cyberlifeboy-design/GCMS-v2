@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { handoverApi, fleetApi, usersApi } from '@/lib/api';
+import { handoverApi, fleetApi, usersApi, departmentsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,7 @@ interface PoolStatusStadium {
     assigned: number;
     dispatched: number;
     underMaintenance: number;
+    carTypeBreakdown?: Record<string, number>;
 }
 
 interface UserAssignedCart {
@@ -148,6 +149,8 @@ export function HandoverPage() {
     const [handoverEventEndDate, setHandoverEventEndDate] = useState('');
     const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
     const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
+    const [handoverTargetDeptIds, setHandoverTargetDeptIds] = useState<string[]>([]);
+    const [allDepartments, setAllDepartments] = useState<Array<{ id: string; name: string; code?: string | null }>>([]);
     const [settingsSaving, setSettingsSaving] = useState(false);
     const [settingsSaved, setSettingsSaved] = useState(false);
     const [stadiumFilter, setStadiumFilter] = useState('all');
@@ -201,7 +204,29 @@ export function HandoverPage() {
         loadPoolDashboard();
     }, []);
 
-    useEffect(() => { loadData(); }, [actionFilter, page]);
+    useEffect(() => {
+        if (currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Admin') {
+            const loadSettingsAndDepts = async () => {
+                try {
+                    const { settingsApi } = await import('@/lib/api');
+                    const [settingsRes, deptsRes] = await Promise.all([
+                        settingsApi.get(),
+                        departmentsApi.getAll(),
+                    ]);
+                    const s = settingsRes.data?.data || settingsRes.data || {};
+                    if (s.handoverDefaultDurationDays) setHandoverDefaultDurationDays(s.handoverDefaultDurationDays);
+                    if (s.handoverEventStartDate) setHandoverEventStartDate(s.handoverEventStartDate.slice(0, 16));
+                    if (s.handoverEventEndDate) setHandoverEventEndDate(s.handoverEventEndDate.slice(0, 16));
+                    if (typeof s.enableHandoverReminder === 'boolean') setEnableHandoverReminder(s.enableHandoverReminder);
+                    if (s.handoverReminderHoursBefore) setHandoverReminderHoursBefore(s.handoverReminderHoursBefore);
+                    if (Array.isArray(s.handoverTargetDeptIds)) setHandoverTargetDeptIds(s.handoverTargetDeptIds);
+                    const depts = deptsRes.data?.data || deptsRes.data || [];
+                    setAllDepartments(Array.isArray(depts) ? depts : []);
+                } catch (_) {}
+            };
+            loadSettingsAndDepts();
+        }
+    }, [currentUser?.role]);
 
     const handleCheckin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -308,6 +333,7 @@ export function HandoverPage() {
             fd.append('handoverEventEndDate', handoverEventEndDate ? new Date(handoverEventEndDate).toISOString() : '');
             fd.append('enableHandoverReminder', String(enableHandoverReminder));
             fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
+            fd.append('handoverTargetDeptIds', JSON.stringify(handoverTargetDeptIds));
             await settingsApi.update(fd);
             setSettingsSaved(true);
             setTimeout(() => setSettingsSaved(false), 2000);
@@ -470,6 +496,42 @@ export function HandoverPage() {
                                                 </div>
                                             </div>
 
+                                            {/* Target Department Codes */}
+                                            {allDepartments.length > 0 && (
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <h4 className="text-sm font-medium">Target Department Codes</h4>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            Select which departments this duration rule applies to. Leave all unchecked to apply globally.
+                                                        </p>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3 bg-muted/30">
+                                                        {allDepartments.map(dept => (
+                                                            <div key={dept.id} className="flex items-center gap-2">
+                                                                <Checkbox
+                                                                    id={`dept-${dept.id}`}
+                                                                    checked={handoverTargetDeptIds.includes(dept.id)}
+                                                                    onCheckedChange={checked => {
+                                                                        setHandoverTargetDeptIds(prev =>
+                                                                            checked
+                                                                                ? [...prev, dept.id]
+                                                                                : prev.filter(id => id !== dept.id)
+                                                                        );
+                                                                    }}
+                                                                />
+                                                                <label htmlFor={`dept-${dept.id}`} className="text-sm cursor-pointer">
+                                                                    {dept.code && <span className="font-mono font-semibold text-xs mr-1">[{dept.code}]</span>}
+                                                                    {dept.name}
+                                                                </label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    {handoverTargetDeptIds.length > 0 && (
+                                                        <p className="text-xs text-blue-600">{handoverTargetDeptIds.length} department(s) selected</p>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {/* Event/Tournament Date Range */}
                                             <div className="space-y-4">
                                                 <h4 className="text-sm font-medium">Event/Tournament Date Range</h4>
@@ -599,70 +661,70 @@ export function HandoverPage() {
                                 Pool Status by Stadium
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Stadium</TableHead>
-                                        <TableHead className="text-center">Total</TableHead>
-                                        <TableHead className="text-center">Available</TableHead>
-                                        <TableHead className="text-center">Assigned</TableHead>
-                                        <TableHead className="text-center">In Use</TableHead>
-                                        <TableHead className="text-center">Maintenance</TableHead>
-                                        <TableHead className="text-center">Utilization</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {(filteredStadiums?.length || 0) === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                                No stadiums found
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (filteredStadiums || []).map(stadium => {
+                        <CardContent>
+                            {(filteredStadiums?.length || 0) === 0 ? (
+                                <p className="text-center py-8 text-muted-foreground">No stadiums found</p>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    {(filteredStadiums || []).map(stadium => {
                                         const utilization = stadium.total > 0
                                             ? Math.round((stadium.dispatched / stadium.total) * 100)
                                             : 0;
+                                        const typeEntries = Object.entries(stadium.carTypeBreakdown || {}).sort(([a], [b]) => a.localeCompare(b));
                                         return (
-                                            <TableRow key={stadium.stadiumId}>
-                                                <TableCell className="font-medium">{stadium.stadiumName}</TableCell>
-                                                <TableCell className="text-center font-semibold">{stadium.total}</TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                                        {stadium.available}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                                        {stadium.assigned}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                                                        {stadium.dispatched}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                                                        {stadium.underMaintenance}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                            <div
-                                                                className="h-full bg-amber-500 rounded-full"
-                                                                style={{ width: `${utilization}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-xs text-muted-foreground">{utilization}%</span>
+                                            <div key={stadium.stadiumId} className="border rounded-lg p-4 bg-card">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div>
+                                                        <h3 className="font-semibold text-sm">{stadium.stadiumName}</h3>
+                                                        <Badge variant="outline" className="text-xs mt-0.5">{stadium.stadiumCode}</Badge>
                                                     </div>
-                                                </TableCell>
-                                            </TableRow>
+                                                    <div className="text-right">
+                                                        <p className="text-2xl font-bold">{stadium.total}</p>
+                                                        <p className="text-xs text-muted-foreground">Total</p>
+                                                    </div>
+                                                </div>
+                                                {/* Car type breakdown */}
+                                                {typeEntries.length > 0 && (
+                                                    <div className="grid grid-cols-2 gap-1.5 mb-3">
+                                                        {typeEntries.map(([type, count]) => (
+                                                            <div key={type} className="bg-muted/50 rounded px-2 py-1 flex justify-between items-center">
+                                                                <span className="text-xs text-muted-foreground truncate">{type}</span>
+                                                                <span className="text-xs font-semibold ml-1">{count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {/* Status summary */}
+                                                <div className="grid grid-cols-4 gap-1 text-center">
+                                                    <div className="bg-green-50 rounded p-1">
+                                                        <p className="text-xs font-semibold text-green-700">{stadium.available}</p>
+                                                        <p className="text-[10px] text-green-600">Avail.</p>
+                                                    </div>
+                                                    <div className="bg-blue-50 rounded p-1">
+                                                        <p className="text-xs font-semibold text-blue-700">{stadium.assigned}</p>
+                                                        <p className="text-[10px] text-blue-600">Assigned</p>
+                                                    </div>
+                                                    <div className="bg-amber-50 rounded p-1">
+                                                        <p className="text-xs font-semibold text-amber-700">{stadium.dispatched}</p>
+                                                        <p className="text-[10px] text-amber-600">In Use</p>
+                                                    </div>
+                                                    <div className="bg-red-50 rounded p-1">
+                                                        <p className="text-xs font-semibold text-red-700">{stadium.underMaintenance}</p>
+                                                        <p className="text-[10px] text-red-600">Maint.</p>
+                                                    </div>
+                                                </div>
+                                                {/* Utilization bar */}
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${utilization}%` }} />
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground">{utilization}%</span>
+                                                </div>
+                                            </div>
                                         );
                                     })}
-                                </TableBody>
-                            </Table>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

@@ -10,6 +10,7 @@ export interface PoolStatusByStadium {
     assigned: number;
     dispatched: number;
     underMaintenance: number;
+    carTypeBreakdown: Record<string, number>;
 }
 
 export interface PoolDashboardData {
@@ -280,6 +281,7 @@ export class HandoverService {
             select: {
                 stadiumId: true,
                 status: true,
+                carType: true,
             },
         });
 
@@ -296,6 +298,7 @@ export class HandoverService {
                 assigned: 0,
                 dispatched: 0,
                 underMaintenance: 0,
+                carTypeBreakdown: {},
             };
         }
 
@@ -303,6 +306,8 @@ export class HandoverService {
             const stadiumStatus = statusByStadium[cart.stadiumId];
             if (stadiumStatus) {
                 stadiumStatus.total++;
+                // Track car type breakdown
+                stadiumStatus.carTypeBreakdown[cart.carType] = (stadiumStatus.carTypeBreakdown[cart.carType] || 0) + 1;
                 switch (cart.status) {
                     case 'Available':
                         stadiumStatus.available++;

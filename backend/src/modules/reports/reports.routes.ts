@@ -70,4 +70,7 @@ router.get('/labels/docx', requireRole('SuperAdmin', 'Admin', 'Observer'), audit
 // Export print labels (PowerPoint)
 router.get('/labels/pptx', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsPptx);
 
+// Export print labels (PDF - one per page, landscape, large font)
+router.get('/labels/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsPdf);
+
 export default router;

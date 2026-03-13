@@ -49,7 +49,11 @@ export function MaintenancePage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [stadiumFilter, setStadiumFilter] = useState('all');
+    // Pre-set stadium filter for Admin (scoped to their stadium) and FA
+    const [stadiumFilter, setStadiumFilter] = useState(() => {
+        if (currentUser?.role === 'Admin' && currentUser?.stadiumId) return currentUser.stadiumId;
+        return 'all';
+    });
     const [cartFilter, setCartFilter] = useState('all');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -121,7 +125,9 @@ export function MaintenancePage() {
         const matchesStadium = stadiumFilter === 'all' || i.fleet?.stadium?.id === stadiumFilter;
         const matchesDateFrom = !dateFrom || new Date(i.reportedAt || i.createdAt) >= new Date(dateFrom);
         const matchesDateTo = !dateTo || new Date(i.reportedAt || i.createdAt) <= new Date(dateTo + 'T23:59:59');
-        return matchesSearch && matchesCart && matchesStadium && matchesDateFrom && matchesDateTo;
+        // FA users only see their own reports
+        const matchesFA = role !== 'FA' || i.reportedBy?.email === currentUser?.email;
+        return matchesSearch && matchesCart && matchesStadium && matchesDateFrom && matchesDateTo && matchesFA;
     });
 
     const loadCartHistory = async (fleetId: string, carNumber: string) => {
@@ -323,10 +329,10 @@ export function MaintenancePage() {
                                 {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                             </SelectContent>
                         </Select>
-                        <Select value={stadiumFilter} onValueChange={v => { setStadiumFilter(v); setPage(1); }}>
+                        <Select value={stadiumFilter} onValueChange={v => { setStadiumFilter(v); setPage(1); }} disabled={role === 'Admin'}>
                             <SelectTrigger className="w-40"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">All Stadiums</SelectItem>
+                                {role !== 'Admin' && <SelectItem value="all">All Stadiums</SelectItem>}
                                 {stadiums.map(s => (
                                     <SelectItem key={s.id} value={s.id}>{s.code || s.name}</SelectItem>
                                 ))}

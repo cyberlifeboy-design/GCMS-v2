@@ -30,6 +30,7 @@ const updateUserSchema = z.object({
     assignAllStadiums: z.boolean().optional(),
     grantedPages: z.array(z.string()).optional(),
     venueReportAccess: z.enum(['assigned', 'all']).optional(),
+    password: z.string().min(6).optional(),
 });
 
 const updatePreferencesSchema = z.object({
@@ -199,6 +200,12 @@ export class UsersController {
                     res.status(403).json({ error: 'Admin cannot change role' });
                     return;
                 }
+            }
+
+            // Only SuperAdmin can update passwords
+            if (validatedData.password && req.user?.role !== 'SuperAdmin') {
+                res.status(403).json({ error: 'Only SuperAdmin can update passwords' });
+                return;
             }
 
             const user = await usersService.update(id, validatedData);

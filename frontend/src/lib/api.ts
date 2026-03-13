@@ -66,6 +66,8 @@ export const authApi = {
         apiClient.post('/auth/forgot-password', { email }),
     resetPassword: (data: Record<string, string>) =>
         apiClient.post('/auth/reset-password', data),
+    changePassword: (currentPassword: string, newPassword: string) =>
+        apiClient.post('/auth/change-password', { currentPassword, newPassword }),
 };
 
 // Fleet  (carNumber, requiresVAP, assignedUserId, statuses: Available/Dispatched/Under Maintenance/Retired)
@@ -217,8 +219,8 @@ export const reportsApi = {
         apiClient.get('/reports/audit'),
 
     // Stadium reports
-    getStadiumReports: () =>
-        apiClient.get('/reports/stadiums'),
+    getStadiumReports: (params?: Record<string, unknown>) =>
+        apiClient.get('/reports/stadiums', { params }),
     exportStadiumReport: (format: 'xlsx' | 'pdf' = 'xlsx') =>
         apiClient.get(`/reports/stadiums/export${format === 'pdf' ? '/pdf' : ''}`, { responseType: 'blob' }),
 
@@ -235,7 +237,7 @@ export const reportsApi = {
         apiClient.get(`/reports/users/export${format === 'pdf' ? '/pdf' : ''}`, { responseType: 'blob' }),
 
     // Print Labels
-    exportLabels: (format: 'docx' | 'pptx' = 'docx', params?: Record<string, unknown>) =>
+    exportLabels: (format: 'docx' | 'pptx' | 'pdf' = 'pdf', params?: Record<string, unknown>) =>
         apiClient.get(`/reports/labels/${format}`, { params, responseType: 'blob' }),
 };
 

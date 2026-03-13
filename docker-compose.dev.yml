@@ -1,0 +1,13 @@
+# GCMS — DEV OVERRIDES ONLY
+# Exposes DB and Service ports for local access. NEVER use alone in production.
+services:
+  postgres:
+    ports:
+      - "5431:5432"  # Slot from PORT REGISTRY
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+  backend:
+    ports:
+      - "3005:3005"

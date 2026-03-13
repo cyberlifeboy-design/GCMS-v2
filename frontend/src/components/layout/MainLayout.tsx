@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { formatDate } from '@/lib/dateUtils';
 
@@ -36,18 +36,19 @@ function DateTimeDisplay() {
 }
 
 const navItems = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'Observer'] },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA'] },
     { name: 'Fleet', href: '/fleet', icon: Car, roles: ['SuperAdmin', 'Admin', 'Observer'] },
     { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin'] },
     { name: 'Handover', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'] },
-    { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
+    { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer'] },
     { name: 'Requests', href: '/requests', icon: Inbox, roles: ['SuperAdmin', 'Admin', 'Observer'] },
     { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'] },
     { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'] },
     { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'] },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'] },
-    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
+    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer'] },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'] },
+    { name: 'Account Settings', href: '/profile', icon: UserCircle, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'] },
 ];
 
 export function MainLayout({ children }: { children: React.ReactNode }) {

@@ -90,7 +90,10 @@ export function ReportsPage() {
     const [loadingUser, setLoadingUser] = useState(false);
     const [exporting, setExporting] = useState<string | null>(null);
 
-    const [selectedStadiumFilter, setSelectedStadiumFilter] = useState<string>('');
+    const [selectedStadiumFilter, setSelectedStadiumFilter] = useState<string>(() => {
+        if (user?.role === 'Admin' && user?.stadiumId) return user.stadiumId;
+        return '';
+    });
     const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('');
     const [selectedLabelStadium, setSelectedLabelStadium] = useState<string>('');
     const [allStadiums, setAllStadiums] = useState<Array<{id: string; name: string; code: string}>>([]);
@@ -116,7 +119,9 @@ export function ReportsPage() {
     const loadStadiumReports = async () => {
         setLoadingStadium(true);
         try {
-            const res = await reportsApi.getStadiumReports();
+            const params: Record<string, string> = {};
+            if (selectedStadiumFilter) params.stadiumId = selectedStadiumFilter;
+            const res = await reportsApi.getStadiumReports(params);
             setStadiumReports(res.data.data || res.data || []);
         } catch { } finally { setLoadingStadium(false); }
     };
@@ -193,13 +198,13 @@ export function ReportsPage() {
         finally { setExporting(null); }
     };
 
-    const handleExportLabels = async (format: 'docx' | 'pptx') => {
+    const handleExportLabels = async (format: 'docx' | 'pptx' | 'pdf') => {
         setExporting('labels');
         try {
             const params: Record<string, unknown> = {};
             if (selectedLabelStadium) params.stadiumId = selectedLabelStadium;
             const res = await reportsApi.exportLabels(format, params);
-            const ext = format === 'pptx' ? 'pptx' : 'docx';
+            const ext = format;
             downloadBlob(res.data, `labels_${new Date().toISOString().split('T')[0]}.${ext}`);
         } catch { alert('Export failed'); }
         finally { setExporting(null); }
@@ -284,9 +289,21 @@ export function ReportsPage() {
                 <TabsContent value="stadiums">
                     <Card>
                         <CardHeader>
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
                                 <CardTitle>Stadium-wise Report</CardTitle>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 flex-wrap items-center">
+                                    {role !== 'Admin' && (
+                                        <Select value={selectedStadiumFilter || '__all__'} onValueChange={v => setSelectedStadiumFilter(v === '__all__' ? '' : v)}>
+                                            <SelectTrigger className="w-44"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__all__">All Stadiums</SelectItem>
+                                                {allStadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} – {s.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                    <Button variant="outline" size="sm" onClick={loadStadiumReports} disabled={loadingStadium}>
+                                        {loadingStadium ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}Load
+                                    </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -382,13 +399,14 @@ export function ReportsPage() {
                             <div className="flex items-center justify-between">
                                 <CardTitle>Department-wise Report</CardTitle>
                                 <div className="flex gap-2 items-center">
-                                    {role === 'SuperAdmin' && (
+                                    {role !== 'Admin' && (
                                         <Select value={selectedStadiumFilter || '__all__'} onValueChange={v => setSelectedStadiumFilter(v === '__all__' ? '' : v)}>
                                             <SelectTrigger className="w-48">
                                                 <SelectValue placeholder="All Stadiums" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="__all__">All Stadiums</SelectItem>
+                                                {allStadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} – {s.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     )}
@@ -695,7 +713,19 @@ export function ReportsPage() {
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-sm font-medium">Export Format</p>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap">
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleExportLabels('pdf')}
+                                                disabled={exporting === 'labels'}
+                                            >
+                                                {exporting === 'labels' ? (
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <FileText className="w-4 h-4 mr-2" />
+                                                )}
+                                                PDF (Recommended)
+                                            </Button>
                                             <Button
                                                 variant="outline"
                                                 size="sm"

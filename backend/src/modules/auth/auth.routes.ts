@@ -55,4 +55,11 @@ router.post('/forgot-password', authLimiter, AuthController.forgotPassword);
  */
 router.post('/reset-password', authLimiter, AuthController.resetPassword);
 
+/**
+ * @route   POST /api/v1/auth/change-password
+ * @desc    Change own password (requires current password)
+ * @access  Protected
+ */
+router.post('/change-password', authenticate, AuthController.changePassword);
+
 export default router;
