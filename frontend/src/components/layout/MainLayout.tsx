@@ -88,12 +88,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
-            {/* Top Bar with Notifications and Date/Time */}
-            <div className="hidden lg:flex items-center justify-between px-6 py-2 border-b bg-card">
-                <DateTimeDisplay />
-                <NotificationCenter />
-            </div>
-
             <div className="flex flex-1 overflow-hidden">
                 {/* Mobile overlay */}
                 {sidebarOpen && (
