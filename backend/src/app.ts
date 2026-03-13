@@ -82,7 +82,8 @@ app.get('/api/v1', (req: Request, res: Response) => {
 // Storage proxy - serve MinIO files through the API
 const allowedBuckets = new Set(Object.values(BUCKETS));
 app.get('/api/v1/storage/:bucket/:filename', async (req: Request, res: Response) => {
-    const { bucket, filename } = req.params;
+    const bucket = req.params.bucket as string;
+    const filename = req.params.filename as string;
     if (!allowedBuckets.has(bucket)) {
         return res.status(404).json({ error: 'Not found' });
     }

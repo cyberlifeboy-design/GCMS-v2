@@ -29,6 +29,8 @@ interface FAUser {
     email: string;
 }
 
+type MergedDept = Department & { stadiums: Array<{ id: string; name: string; code: string }>; ids: string[] };
+
 type CreateMode = 'single' | 'all' | 'select';
 
 export function DepartmentsPage() {
@@ -44,11 +46,12 @@ export function DepartmentsPage() {
     const [search, setSearch] = useState('');
     const [stadiumFilter, setStadiumFilter] = useState<string>('all');
 
-    const [modal, setModal] = useState<{ open: boolean; mode: 'create' | 'edit'; department?: Department }>({ open: false, mode: 'create' });
+    const [modal, setModal] = useState<{ open: boolean; mode: 'create' | 'edit'; department?: MergedDept }>({ open: false, mode: 'create' });
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({ name: '', code: '', stadiumId: '', focalPointId: '' });
     const [createMode, setCreateMode] = useState<CreateMode>('single');
     const [selectedStadiumIds, setSelectedStadiumIds] = useState<string[]>([]);
+    const [editStadiumIds, setEditStadiumIds] = useState<string[]>([]);
 
     const loadDepartments = async (stadiumId?: string) => {
         try {
@@ -121,7 +124,6 @@ export function DepartmentsPage() {
         try {
             if (modal.mode === 'create' && isSuperAdmin) {
                 if (createMode === 'all') {
-                    // Create for all stadiums
                     const allStadiumIds = stadiums.map(s => s.id);
                     await departmentsApi.createBulk({
                         name: formData.name,
@@ -129,7 +131,6 @@ export function DepartmentsPage() {
                         stadiumIds: allStadiumIds,
                     });
                 } else if (createMode === 'select') {
-                    // Create for selected stadiums
                     if (selectedStadiumIds.length === 0) {
                         alert('Please select at least one stadium');
                         setSubmitting(false);
@@ -141,12 +142,44 @@ export function DepartmentsPage() {
                         stadiumIds: selectedStadiumIds,
                     });
                 } else {
-                    // Single stadium
-                    const data = { ...formData, stadiumId: formData.stadiumId };
-                    await departmentsApi.create(data);
+                    await departmentsApi.create({ ...formData, stadiumId: formData.stadiumId });
+                }
+            } else if (modal.mode === 'edit' && isSuperAdmin && modal.department) {
+                // SuperAdmin edit: handle multi-stadium association changes
+                if (editStadiumIds.length === 0) {
+                    alert('Please select at least one stadium');
+                    setSubmitting(false);
+                    return;
+                }
+                const mergedDept = modal.department;
+                const currentMap = new Map<string, string>(); // stadiumId -> deptId
+                mergedDept.stadiums.forEach((s, i) => currentMap.set(s.id, mergedDept.ids[i]));
+                const newStadiumSet = new Set(editStadiumIds);
+
+                // Update or delete existing records
+                for (const [stadiumId, deptId] of currentMap) {
+                    if (newStadiumSet.has(stadiumId)) {
+                        await departmentsApi.update(deptId, {
+                            name: formData.name,
+                            code: formData.code || undefined,
+                            focalPointId: formData.focalPointId || null,
+                        });
+                    } else {
+                        await departmentsApi.delete(deptId);
+                    }
+                }
+                // Create records for newly added stadiums
+                for (const stadiumId of editStadiumIds) {
+                    if (!currentMap.has(stadiumId)) {
+                        await departmentsApi.create({
+                            name: formData.name,
+                            code: formData.code || undefined,
+                            stadiumId,
+                        });
+                    }
                 }
             } else {
-                // Admin or edit mode
+                // Admin create or Admin edit (single stadium)
                 const stadiumId = isSuperAdmin ? formData.stadiumId : (user?.stadiumId || '');
                 const data = {
                     name: formData.name,
@@ -154,7 +187,6 @@ export function DepartmentsPage() {
                     stadiumId,
                     ...(modal.mode === 'edit' && { focalPointId: formData.focalPointId || null }),
                 };
-
                 if (modal.mode === 'create') {
                     await departmentsApi.create(data);
                 } else {
@@ -174,6 +206,7 @@ export function DepartmentsPage() {
         setFormData({ name: '', code: '', stadiumId: isSuperAdmin ? '' : (user?.stadiumId || ''), focalPointId: '' });
         setCreateMode('single');
         setSelectedStadiumIds([]);
+        setEditStadiumIds([]);
         setModal({ open: true, mode: 'create' });
     };
 
@@ -276,6 +309,7 @@ export function DepartmentsPage() {
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="sm" onClick={() => {
                                                 setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
+                                                setEditStadiumIds(d.stadiums.map(s => s.id));
                                                 setModal({ open: true, mode: 'edit', department: d });
                                             }}><Edit2 className="w-4 h-4" /></Button>
                                         </TableCell>
@@ -364,6 +398,31 @@ export function DepartmentsPage() {
                         {!isSuperAdmin && modal.mode === 'create' && (
                             <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground">
                                 Department will be created in your assigned venue.
+                            </div>
+                        )}
+
+                        {modal.mode === 'edit' && isSuperAdmin && (
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <Label>Venue Associations ({editStadiumIds.length} selected)</Label>
+                                    <div className="flex gap-2">
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => setEditStadiumIds(stadiums.map(s => s.id))}>All</Button>
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => setEditStadiumIds([])}>None</Button>
+                                    </div>
+                                </div>
+                                <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                                    {stadiums.map(s => (
+                                        <label key={s.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded cursor-pointer">
+                                            <Checkbox
+                                                checked={editStadiumIds.includes(s.id)}
+                                                onCheckedChange={() => setEditStadiumIds(prev =>
+                                                    prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id]
+                                                )}
+                                            />
+                                            <span className="text-sm"><span className="font-mono text-xs bg-muted px-1 rounded mr-1">{s.code}</span>{s.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
                         )}
 

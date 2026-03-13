@@ -146,13 +146,35 @@ export class StadiumsService {
             where: { id },
             include: {
                 _count: {
-                    select: { fleet: true, users: true, departments: true },
+                    select: { fleet: true, users: true },
+                },
+                departments: {
+                    include: {
+                        _count: { select: { users: true, fleet: true } },
+                    },
                 },
             },
         });
 
-        if (stadium && (stadium._count.fleet > 0 || stadium._count.users > 0 || stadium._count.departments > 0)) {
-            throw new Error(`Cannot delete stadium with associated data (${stadium._count.fleet} carts, ${stadium._count.users} users, ${stadium._count.departments} departments). Make it inactive instead.`);
+        if (!stadium) {
+            throw new Error('Stadium not found');
+        }
+
+        if (stadium._count.fleet > 0 || stadium._count.users > 0) {
+            throw new Error(`Cannot delete stadium with ${stadium._count.fleet} carts and ${stadium._count.users} users assigned. Make it inactive instead.`);
+        }
+
+        // Check if any departments have users or carts
+        const deptWithData = stadium.departments.find(d => d._count.users > 0 || d._count.fleet > 0);
+        if (deptWithData) {
+            throw new Error(`Cannot delete stadium: department "${deptWithData.name}" has associated users or carts. Make it inactive instead.`);
+        }
+
+        // Cascade delete empty departments first
+        if (stadium.departments.length > 0) {
+            await this.prisma.department.deleteMany({
+                where: { stadiumId: id },
+            });
         }
 
         return this.prisma.stadium.delete({
