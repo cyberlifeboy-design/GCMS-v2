@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { maintenanceApi, fleetApi } from '@/lib/api';
+import { maintenanceApi, fleetApi, stadiumsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -45,9 +45,11 @@ export function MaintenancePage() {
 
     const [issues, setIssues] = useState<MaintenanceLog[]>([]);
     const [fleet, setFleet] = useState<Array<{ id: string; carNumber: string; carType: string; status: string }>>([]);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [stadiumFilter, setStadiumFilter] = useState('all');
     const [cartFilter, setCartFilter] = useState('all');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -80,15 +82,17 @@ export function MaintenancePage() {
                 page,
                 limit: pagination.limit
             };
-            const [issuesRes, fleetRes] = await Promise.all([
+            const [issuesRes, fleetRes, stadiumsRes] = await Promise.all([
                 maintenanceApi.getAll(params),
                 fleetApi.getAll(),
+                stadiumsApi.getAll(),
             ]);
             setIssues(issuesRes.data.data || []);
             if (issuesRes.data.pagination) {
                 setPagination(prev => ({ ...prev, ...issuesRes.data.pagination }));
             }
             setFleet(fleetRes.data.data || []);
+            setStadiums(stadiumsRes.data.data || []);
         } catch (e) {
             console.error(e);
         } finally {
@@ -114,9 +118,10 @@ export function MaintenancePage() {
             i.issueDescription?.toLowerCase().includes(search.toLowerCase()) ||
             i.reportedBy?.name?.toLowerCase().includes(search.toLowerCase());
         const matchesCart = cartFilter === 'all' || i.fleetId === cartFilter;
+        const matchesStadium = stadiumFilter === 'all' || i.fleet?.stadium?.id === stadiumFilter;
         const matchesDateFrom = !dateFrom || new Date(i.reportedAt || i.createdAt) >= new Date(dateFrom);
         const matchesDateTo = !dateTo || new Date(i.reportedAt || i.createdAt) <= new Date(dateTo + 'T23:59:59');
-        return matchesSearch && matchesCart && matchesDateFrom && matchesDateTo;
+        return matchesSearch && matchesCart && matchesStadium && matchesDateFrom && matchesDateTo;
     });
 
     const loadCartHistory = async (fleetId: string, carNumber: string) => {
@@ -318,6 +323,15 @@ export function MaintenancePage() {
                                 {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                             </SelectContent>
                         </Select>
+                        <Select value={stadiumFilter} onValueChange={v => { setStadiumFilter(v); setPage(1); }}>
+                            <SelectTrigger className="w-40"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Stadiums</SelectItem>
+                                {stadiums.map(s => (
+                                    <SelectItem key={s.id} value={s.id}>{s.code || s.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         <Select value={cartFilter} onValueChange={v => { setCartFilter(v); setPage(1); }}>
                             <SelectTrigger className="w-40"><SelectValue placeholder="All Carts" /></SelectTrigger>
                             <SelectContent>
@@ -372,7 +386,6 @@ export function MaintenancePage() {
                                 <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
                             ) : filtered.map(issue => {
                                 const reportedDate = issue.reportedAt || issue.createdAt;
-                                const dateObj = reportedDate ? new Date(reportedDate) : null;
                                 return (
                                     <TableRow key={issue.id}>
                                         <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
@@ -510,7 +523,6 @@ export function MaintenancePage() {
                             <div className="space-y-6 relative before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-0.5 before:bg-muted">
                                 {cartHistory.map((h, _i) => {
                                     const reportedDate = h.reportedAt || h.createdAt;
-                                    const dateObj = reportedDate ? new Date(reportedDate) : null;
                                     return (
                                         <div key={h.id} className="relative pl-10">
                                             <div className={`absolute left-0 top-1 w-9 h-9 rounded-full border-4 border-background flex items-center justify-center ${issueStatusColors[h.status]}`}>

@@ -194,6 +194,79 @@ export function DashboardPage() {
                 ))}
             </div>
 
+            {/* System Activity Summary — directly below stats banner */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-primary" /> System Activity Summary
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/maintenance')}
+                        >
+                            <div className="p-3 rounded-full bg-red-100 mb-2">
+                                <Wrench className="w-5 h-5 text-red-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.openIssues || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Open Issues</p>
+                        </div>
+                        <div
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/handover')}
+                        >
+                            <div className="p-3 rounded-full bg-green-100 mb-2">
+                                <ArrowRightLeft className="w-5 h-5 text-green-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.checkIns || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Check-Ins</p>
+                        </div>
+                        <div
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/handover')}
+                        >
+                            <div className="p-3 rounded-full bg-blue-100 mb-2">
+                                <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.checkOuts || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Check-Outs</p>
+                        </div>
+                        <div
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/requests')}
+                        >
+                            <div className="p-3 rounded-full bg-purple-100 mb-2">
+                                <Car className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.carRequests || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Car Requests</p>
+                        </div>
+                        <div
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/requests?status=Pending')}
+                        >
+                            <div className="p-3 rounded-full bg-yellow-100 mb-2">
+                                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.pendingRequests || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Pending Requests</p>
+                        </div>
+                        <div
+                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
+                            onClick={() => navigate('/maintenance?status=Open')}
+                        >
+                            <div className="p-3 rounded-full bg-orange-100 mb-2">
+                                <AlertCircle className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <p className="text-2xl font-bold">{notifStats?.issuesReported || 0}</p>
+                            <p className="text-xs text-muted-foreground text-center">Issues Reported</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Stadium Information & FA Fleet Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Active Stadiums List */}
@@ -395,78 +468,7 @@ export function DashboardPage() {
                 </CardContent>
             </Card>
 
-            {/* Notification Summary */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                        <Bell className="w-5 h-5 text-primary" /> System Activity Summary
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        <div
-                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => navigate('/maintenance')}
-                        >
-                            <div className="p-3 rounded-full bg-red-100 mb-2">
-                                <Wrench className="w-5 h-5 text-red-600" />
-                            </div>
-                            <p className="text-2xl font-bold">{notifStats?.openIssues || 0}</p>
-                            <p className="text-xs text-muted-foreground text-center">Open Issues</p>
-                        </div>
-                        <div
-                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => navigate('/handover')}
-                        >
-                            <div className="p-3 rounded-full bg-green-100 mb-2">
-                                <ArrowRightLeft className="w-5 h-5 text-green-600" />
-                            </div>
-                            <p className="text-2xl font-bold">{notifStats?.checkIns || 0}</p>
-                            <p className="text-xs text-muted-foreground text-center">Check-Ins</p>
-                        </div>
-                        <div
-                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => navigate('/handover')}
-                        >
-                            <div className="p-3 rounded-full bg-blue-100 mb-2">
-                                <ArrowRightLeft className="w-5 h-5 text-blue-600" />
-                            </div>
-                            <p className="text-2xl font-bold">{notifStats?.checkOuts || 0}</p>
-                            <p className="text-xs text-muted-foreground text-center">Check-Outs</p>
-                        </div>
-                        <div
-                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => navigate('/requests')}
-                        >
-                            <div className="p-3 rounded-full bg-purple-100 mb-2">
-                                <Car className="w-5 h-5 text-purple-600" />
-                            </div>
-                            <p className="text-2xl font-bold">{notifStats?.carRequests || 0}</p>
-                            <p className="text-xs text-muted-foreground text-center">Car Requests</p>
-                        </div>
-                        <div
-                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => navigate('/requests?status=Pending')}
-                        >
-                            <div className="p-3 rounded-full bg-yellow-100 mb-2">
-                                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                            </div>
-                            <p className="text-2xl font-bold">{notifStats?.pendingRequests || 0}</p>
-                            <p className="text-xs text-muted-foreground text-center">Pending Requests</p>
-                        </div>
-                        <div
-                            className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
-                            onClick={() => navigate('/maintenance?status=Open')}
-                        >
-                            <div className="p-3 rounded-full bg-orange-100 mb-2">
-                                <AlertCircle className="w-5 h-5 text-orange-600" />
-                            </div>
-                            <p className="text-2xl font-bold">{notifStats?.issuesReported || 0}</p>
-                            <p className="text-xs text-muted-foreground text-center">Issues Reported</p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+            {/* Notification Summary - removed, moved above */}
         </div>
     );
 }

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Users, Grid, History as HistoryIcon, X, ArrowRightLeft } from 'lucide-react';
+import { Loader2, Users, Grid, History as HistoryIcon, X, ArrowRightLeft, FilterX } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { AssignmentHistory } from '@/components/fleet/AssignmentHistory';
@@ -285,7 +285,7 @@ export function FleetManagementPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {Object.entries(fleetByStadium).map(([stadiumId, { stadium, carts }]) => (
                                         <div key={stadiumId} className="border rounded-lg p-3">
-                                            <h3 className="font-semibold mb-2">{stadium.name}</h3>
+                                            <h3 className="font-semibold mb-2">{stadium.code} — {stadium.name}</h3>
                                             <div className="text-sm text-muted-foreground">
                                                 <div className="flex justify-between">
                                                     <span>Total Carts:</span>
@@ -313,7 +313,7 @@ export function FleetManagementPage() {
                                                         .slice(0, 5)
                                                         .map(u => (
                                                             <Badge key={u.id} variant="outline" className="text-xs">
-                                                                {u.name}
+                                                                {u.name}{u.phone ? ` · ${u.phone}` : ''}
                                                             </Badge>
                                                         ))
                                                     }
@@ -376,10 +376,25 @@ export function FleetManagementPage() {
                                         <SelectContent>
                                             <SelectItem value="all">All Stadiums</SelectItem>
                                             {stadiums.map(s => (
-                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                )}
+                                {(searchTerm || carTypeFilter !== 'all' || faFilter !== 'all' || (isSuperAdmin && selectedStadium !== 'all')) && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            setCarTypeFilter('all');
+                                            setFaFilter('all');
+                                            if (isSuperAdmin) setSelectedStadium('all');
+                                        }}
+                                    >
+                                        <FilterX className="w-4 h-4 mr-2" />
+                                        Clear Filters
+                                    </Button>
                                 )}
                             </div>
                         </CardHeader>
@@ -403,6 +418,7 @@ export function FleetManagementPage() {
                                             {isSuperAdmin && <TableHead>Stadium</TableHead>}
                                             <TableHead>Status</TableHead>
                                             <TableHead>Focal Point</TableHead>
+                                            <TableHead>Contact #</TableHead>
                                             <TableHead>Dept</TableHead>
                                             <TableHead>VAP</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
@@ -411,7 +427,7 @@ export function FleetManagementPage() {
                                     <TableBody>
                                         {filteredFleet.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-muted-foreground">
+                                                <TableCell colSpan={isSuperAdmin ? 10 : 9} className="text-center py-8 text-muted-foreground">
                                                     No carts found
                                                 </TableCell>
                                             </TableRow>
@@ -443,6 +459,13 @@ export function FleetManagementPage() {
                                                             <span className="font-medium">{cart.assignedUser.name}</span>
                                                         ) : (
                                                             <span className="text-muted-foreground italic">Unassigned</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {cart.assignedUser?.phone ? (
+                                                            <span className="text-sm">{cart.assignedUser.phone}</span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">—</span>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
@@ -498,7 +521,7 @@ export function FleetManagementPage() {
                                         .filter(u => !selectedStadium || selectedStadium === 'all' || u.stadium?.id === selectedStadium)
                                         .map(u => (
                                             <SelectItem key={u.id} value={u.id}>
-                                                {u.name} {u.stadium ? `(${u.stadium.name})` : ''}
+                                                {u.name}{u.phone ? ` · ${u.phone}` : ''} {u.stadium ? `(${u.stadium.name})` : ''}
                                             </SelectItem>
                                         ))
                                     }
@@ -507,6 +530,7 @@ export function FleetManagementPage() {
                         </div>
                         <p className="text-xs text-muted-foreground">
                             Current Focal Point: {selectedCart?.assignedUser?.name || 'Unassigned'}
+                            {selectedCart?.assignedUser?.phone ? ` · ${selectedCart.assignedUser.phone}` : ''}
                         </p>
                     </div>
                     <DialogFooter>

@@ -137,7 +137,7 @@ export function FleetPage() {
     const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
     const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string; departmentId?: string; department?: { id: string; name: string } }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
-    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [stadiumsLoading, setStadiumsLoading] = useState(false);
     const [search, setSearch] = useState('');
@@ -675,7 +675,7 @@ export function FleetPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Stadiums</SelectItem>
-                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 )}
@@ -742,7 +742,7 @@ export function FleetPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             {stadiums.map(s => (
-                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
@@ -900,7 +900,7 @@ export function FleetPage() {
                             <Select value={bulkStadiumId} onValueChange={setBulkStadiumId}>
                                 <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                 <SelectContent>
-                                    {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                    {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>

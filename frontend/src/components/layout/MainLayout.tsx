@@ -197,6 +197,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         </div>
                     </header>
 
+                    {/* Desktop top bar */}
+                    <header className="hidden lg:flex items-center justify-between px-6 py-3 border-b bg-card">
+                        <DateTimeDisplay />
+                        <NotificationCenter />
+                    </header>
+
                     {/* Page content */}
                     <main className="flex-1 overflow-auto p-4 lg:p-6 flex flex-col">
                         <div className="flex-1">

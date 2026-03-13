@@ -6,6 +6,8 @@ export interface CreateCarRequestData {
     requesterName: string;
     requesterEmail: string;
     requesterPhone?: string;
+    accreditationNumber?: string;
+    requestType?: string;
     departmentId: string;
     stadiumId: string;
     cargoCount: number;
@@ -40,6 +42,8 @@ export class RequestsService {
                 requesterName: data.requesterName,
                 requesterEmail: data.requesterEmail,
                 requesterPhone: data.requesterPhone,
+                accreditationNumber: data.accreditationNumber,
+                requestType: data.requestType || 'one-time',
                 departmentId: data.departmentId,
                 stadiumId: data.stadiumId,
                 cargoCount: data.cargoCount,

@@ -162,6 +162,8 @@ export class UsersService {
         exportFormat: string;
         exportPreferences: object;
         assignAllStadiums: boolean;
+        grantedPages: string[];
+        venueReportAccess: string;
     }>) {
         return prisma.user.update({
             where: { id },
@@ -178,6 +180,8 @@ export class UsersService {
                 exportFormat: true,
                 exportPreferences: true,
                 assignAllStadiums: true,
+                grantedPages: true,
+                venueReportAccess: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 departmentId: true,

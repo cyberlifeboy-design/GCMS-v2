@@ -132,6 +132,7 @@ export class StadiumsService {
         name: string;
         code: string;
         location: string;
+        isActive: boolean;
     }>) {
         return this.prisma.stadium.update({
             where: { id },
@@ -140,18 +141,18 @@ export class StadiumsService {
     }
 
     async delete(id: string) {
-        // Check if stadium has associated fleet or users
+        // Check if stadium has associated data
         const stadium = await this.prisma.stadium.findUnique({
             where: { id },
             include: {
                 _count: {
-                    select: { fleet: true, users: true },
+                    select: { fleet: true, users: true, departments: true },
                 },
             },
         });
 
-        if (stadium && (stadium._count.fleet > 0 || stadium._count.users > 0)) {
-            throw new Error('Cannot delete stadium with associated fleet or users');
+        if (stadium && (stadium._count.fleet > 0 || stadium._count.users > 0 || stadium._count.departments > 0)) {
+            throw new Error(`Cannot delete stadium with associated data (${stadium._count.fleet} carts, ${stadium._count.users} users, ${stadium._count.departments} departments). Make it inactive instead.`);
         }
 
         return this.prisma.stadium.delete({

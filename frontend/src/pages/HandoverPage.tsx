@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { handoverApi, fleetApi } from '@/lib/api';
+import { handoverApi, fleetApi, usersApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, Users, Building2, 
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
-import { formatDate, formatDateTime } from '@/lib/dateUtils';
+import { formatDateTime } from '@/lib/dateUtils';
 
 interface HandoverLog {
     id: string;
@@ -126,7 +126,7 @@ export function HandoverPage() {
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
-    const [checkinForm, setCheckinForm] = useState({ fleetId: '', conditionNotes: '' });
+    const [checkinForm, setCheckinForm] = useState({ fleetId: '', conditionNotes: '', assignToUserId: '' });
     const [checkoutForm, setCheckoutForm] = useState<{
         fleetId: string;
         conditionNotes: string;
@@ -150,6 +150,8 @@ export function HandoverPage() {
     const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
     const [settingsSaving, setSettingsSaving] = useState(false);
     const [settingsSaved, setSettingsSaved] = useState(false);
+    const [stadiumFilter, setStadiumFilter] = useState('all');
+    const [allUsers, setAllUsers] = useState<Array<{id: string; name: string; phone?: string; department?: {id: string; name: string; code?: string | null} | null}>>([]);
 
     const loadPoolDashboard = async () => {
         try {
@@ -182,6 +184,12 @@ export function HandoverPage() {
             const all: FleetCart[] = fleetRes.data.data || [];
             setAvailableFleet(all.filter(v => v.status === 'Available' || v.status === 'Assigned'));
             setDispatchedFleet(all.filter(v => v.status === 'Dispatched'));
+            if (role === 'Admin' || role === 'SuperAdmin') {
+                try {
+                    const usersRes = await usersApi.getAll({ role: 'FA', isActive: true });
+                    setAllUsers(usersRes.data.data || usersRes.data || []);
+                } catch (_) {}
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -200,9 +208,9 @@ export function HandoverPage() {
         if (!checkinForm.fleetId) { alert('Select a cart'); return; }
         setSubmitting(true);
         try {
-            await handoverApi.checkIn({ fleetId: checkinForm.fleetId, conditionNotes: checkinForm.conditionNotes });
+            await handoverApi.checkIn({ fleetId: checkinForm.fleetId, conditionNotes: checkinForm.conditionNotes, ...(checkinForm.assignToUserId && { assignToUserId: checkinForm.assignToUserId }) });
             setCheckinOpen(false);
-            setCheckinForm({ fleetId: '', conditionNotes: '' });
+            setCheckinForm({ fleetId: '', conditionNotes: '', assignToUserId: '' });
             loadData();
             loadPoolDashboard();
         } catch (err: any) {
@@ -317,12 +325,23 @@ export function HandoverPage() {
         return matchSearch;
     });
 
-    // Pool stats summary
-    const totalCarts = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.total, 0) || 0;
-    const totalAvailable = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.available, 0) || 0;
-    const totalAssigned = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.assigned, 0) || 0;
-    const totalDispatched = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.dispatched, 0) || 0;
-    const totalMaintenance = poolDashboard?.stadiums?.reduce((sum, s) => sum + s.underMaintenance, 0) || 0;
+    // Stadium filtered views
+    const filteredStadiums = stadiumFilter === 'all'
+        ? poolDashboard?.stadiums
+        : poolDashboard?.stadiums?.filter(s => s.stadiumId === stadiumFilter);
+    const filteredAvailableFleet = stadiumFilter === 'all'
+        ? availableFleet
+        : availableFleet.filter(v => v.stadiumId === stadiumFilter);
+    const filteredDispatchedFleet = stadiumFilter === 'all'
+        ? dispatchedFleet
+        : dispatchedFleet.filter(v => v.stadiumId === stadiumFilter);
+
+    // Pool stats summary (respects stadium filter)
+    const totalCarts = (filteredStadiums || poolDashboard?.stadiums || []).reduce((sum, s) => sum + s.total, 0);
+    const totalAvailable = (filteredStadiums || poolDashboard?.stadiums || []).reduce((sum, s) => sum + s.available, 0);
+    const totalAssigned = (filteredStadiums || poolDashboard?.stadiums || []).reduce((sum, s) => sum + s.assigned, 0);
+    const totalDispatched = (filteredStadiums || poolDashboard?.stadiums || []).reduce((sum, s) => sum + s.dispatched, 0);
+    const totalMaintenance = (filteredStadiums || poolDashboard?.stadiums || []).reduce((sum, s) => sum + s.underMaintenance, 0);
 
     return (
         <div className="space-y-6">
@@ -330,7 +349,7 @@ export function HandoverPage() {
                 <h1 className="text-3xl font-bold">Handover Management</h1>
                 {canHandover && (
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => { setCheckinForm({ fleetId: '', conditionNotes: '' }); setCheckinOpen(true); }}>
+                        <Button variant="outline" onClick={() => { setCheckinForm({ fleetId: '', conditionNotes: '', assignToUserId: '' }); setCheckinOpen(true); }}>
                             <LogIn className="w-4 h-4 mr-2" />Check Out
                         </Button>
                         <Button onClick={() => { setCheckoutForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] }); setCheckoutOpen(true); }}>
@@ -559,6 +578,19 @@ export function HandoverPage() {
                         </Card>
                     )}
 
+                    {/* Stadium Filter Buttons */}
+                    {(poolDashboard?.stadiums?.length || 0) > 1 && (
+                        <div className="flex gap-2 flex-wrap items-center">
+                            <span className="text-sm text-muted-foreground font-medium">Venue:</span>
+                            <Button variant={stadiumFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setStadiumFilter('all')}>All</Button>
+                            {poolDashboard?.stadiums?.map(s => (
+                                <Button key={s.stadiumId} variant={stadiumFilter === s.stadiumId ? 'default' : 'outline'} size="sm" onClick={() => setStadiumFilter(s.stadiumId)}>
+                                    {s.stadiumCode || s.stadiumName}
+                                </Button>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Pool Status by Stadium */}
                     <Card>
                         <CardHeader className="pb-2">
@@ -581,13 +613,13 @@ export function HandoverPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {poolDashboard.stadiums.length === 0 ? (
+                                    {(filteredStadiums?.length || 0) === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                                                 No stadiums found
                                             </TableCell>
                                         </TableRow>
-                                    ) : poolDashboard.stadiums.map(stadium => {
+                                    ) : (filteredStadiums || []).map(stadium => {
                                         const utilization = stadium.total > 0
                                             ? Math.round((stadium.dispatched / stadium.total) * 100)
                                             : 0;
@@ -687,8 +719,8 @@ export function HandoverPage() {
                     <TabsTrigger value="history"><History className="w-4 h-4 mr-2" />History</TabsTrigger>
                     {canHandover && (
                         <>
-                            <TabsTrigger value="available">Available ({availableFleet.length})</TabsTrigger>
-                            <TabsTrigger value="dispatched">Dispatched ({dispatchedFleet.length})</TabsTrigger>
+                            <TabsTrigger value="available">Available ({filteredAvailableFleet.length})</TabsTrigger>
+                            <TabsTrigger value="dispatched">Dispatched ({filteredDispatchedFleet.length})</TabsTrigger>
                         </>
                     )}
                 </TabsList>
@@ -790,15 +822,15 @@ export function HandoverPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {availableFleet.length === 0 ? (
+                                            {filteredAvailableFleet.length === 0 ? (
                                                 <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No available carts</TableCell></TableRow>
-                                            ) : availableFleet.map(v => (
+                                            ) : filteredAvailableFleet.map(v => (
                                                 <TableRow key={v.id} className={selectedAvailable.includes(v.id) ? 'bg-blue-50' : ''}>
                                                     <TableCell><Checkbox checked={selectedAvailable.includes(v.id)} onCheckedChange={() => toggleAvailableSelection(v.id)} /></TableCell>
                                                     <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
                                                     <TableCell><Badge className={carTypeColors[v.carType] || 'bg-gray-500 text-white'} variant="secondary">{v.carType}</Badge></TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button size="sm" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '' }); setCheckinOpen(true); }}><LogIn className="w-4 h-4 mr-1" />Check Out</Button>
+                                                        <Button size="sm" onClick={() => { setCheckinForm({ fleetId: v.id, conditionNotes: '', assignToUserId: '' }); setCheckinOpen(true); }}><LogIn className="w-4 h-4 mr-1" />Check Out</Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -836,9 +868,9 @@ export function HandoverPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {dispatchedFleet.length === 0 ? (
+                                            {filteredDispatchedFleet.length === 0 ? (
                                                 <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No dispatched carts</TableCell></TableRow>
-                                            ) : dispatchedFleet.map(v => (
+                                            ) : filteredDispatchedFleet.map(v => (
                                                 <TableRow key={v.id} className={selectedDispatched.includes(v.id) ? 'bg-green-50' : ''}>
                                                     <TableCell><Checkbox checked={selectedDispatched.includes(v.id)} onCheckedChange={() => toggleDispatchedSelection(v.id)} /></TableCell>
                                                     <TableCell className="font-mono font-semibold">{v.carNumber}</TableCell>
@@ -868,14 +900,52 @@ export function HandoverPage() {
                     <form onSubmit={handleCheckin} className="space-y-4">
                         <div className="space-y-2">
                             <Label>Cart *</Label>
-                            <Select value={checkinForm.fleetId} onValueChange={v => setCheckinForm(f => ({ ...f, fleetId: v }))}>
+                            <Select value={checkinForm.fleetId} onValueChange={v => setCheckinForm(f => ({ ...f, fleetId: v, assignToUserId: '' }))}>
                                 <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>
                                     {availableFleet.map(v => (
-                                        <SelectItem key={v.id} value={v.id}>{v.carNumber} ({v.carType})</SelectItem>
+                                        <SelectItem key={v.id} value={v.id}>
+                                            {v.carNumber} ({v.carType}){v.assignedUser ? ` — ${v.assignedUser.name}` : ' — unassigned'}
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {checkinForm.fleetId && (() => {
+                                const selectedCart = availableFleet.find(v => v.id === checkinForm.fleetId);
+                                if (!selectedCart) return null;
+                                if (selectedCart.assignedUser) {
+                                    return (
+                                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm space-y-1">
+                                            <p className="font-medium text-blue-800">Assigned User</p>
+                                            <p className="text-blue-900">
+                                                <span className="font-semibold">{selectedCart.assignedUser.name}</span>
+                                                {selectedCart.assignedUser.phone && <span className="text-blue-600 ml-2">· {selectedCart.assignedUser.phone}</span>}
+                                            </p>
+                                            {selectedCart.department && (
+                                                <p className="text-blue-700 text-xs">{selectedCart.department.name}{(selectedCart.department as any).code ? ` (${(selectedCart.department as any).code})` : ''}</p>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if ((role === 'Admin' || role === 'SuperAdmin') && allUsers.length > 0) {
+                                    return (
+                                        <div className="mt-2 space-y-1">
+                                            <Label className="text-xs text-muted-foreground">Assign to FA user (optional)</Label>
+                                            <Select value={checkinForm.assignToUserId} onValueChange={v => setCheckinForm(f => ({ ...f, assignToUserId: v }))}>
+                                                <SelectTrigger><SelectValue placeholder="Select user to assign" /></SelectTrigger>
+                                                <SelectContent>
+                                                    {allUsers.map(u => (
+                                                        <SelectItem key={u.id} value={u.id}>
+                                                            {u.name}{u.phone ? ` · ${u.phone}` : ''}{u.department?.name ? ` — ${u.department.name}` : ''}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
                         </div>
                         <div className="space-y-2">
                             <Label>Condition Notes</Label>

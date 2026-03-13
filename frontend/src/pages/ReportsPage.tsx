@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { reportsApi } from '@/lib/api';
+import { reportsApi, stadiumsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -92,6 +92,8 @@ export function ReportsPage() {
 
     const [selectedStadiumFilter, setSelectedStadiumFilter] = useState<string>('');
     const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('');
+    const [selectedLabelStadium, setSelectedLabelStadium] = useState<string>('');
+    const [allStadiums, setAllStadiums] = useState<Array<{id: string; name: string; code: string}>>([]);
 
     useEffect(() => {
         if (!canViewReports) return;
@@ -101,7 +103,14 @@ export function ReportsPage() {
                 setUtilization(res.data);
             } catch { } finally { setLoadingUtil(false); }
         };
+        const loadStadiumsList = async () => {
+            try {
+                const res = await stadiumsApi.getAll({ isActive: true });
+                setAllStadiums(res.data.data || res.data || []);
+            } catch { }
+        };
         loadUtil();
+        loadStadiumsList();
     }, [canViewReports]);
 
     const loadStadiumReports = async () => {
@@ -187,7 +196,9 @@ export function ReportsPage() {
     const handleExportLabels = async (format: 'docx' | 'pptx') => {
         setExporting('labels');
         try {
-            const res = await reportsApi.exportLabels(format);
+            const params: Record<string, unknown> = {};
+            if (selectedLabelStadium) params.stadiumId = selectedLabelStadium;
+            const res = await reportsApi.exportLabels(format, params);
             const ext = format === 'pptx' ? 'pptx' : 'docx';
             downloadBlob(res.data, `labels_${new Date().toISOString().split('T')[0]}.${ext}`);
         } catch { alert('Export failed'); }
@@ -332,7 +343,10 @@ export function ReportsPage() {
                                         <TableBody>
                                             {stadiumReports.map((stadium) => (
                                                 <TableRow key={stadium.id}>
-                                                    <TableCell className="font-medium">{stadium.name}</TableCell>
+                                                    <TableCell className="font-medium">
+                                                        <span className="font-mono text-sm bg-muted px-1 rounded">{stadium.code}</span>
+                                                        <span className="ml-2 text-muted-foreground text-sm">{stadium.name}</span>
+                                                    </TableCell>
                                                     <TableCell className="text-center">{stadium.totalCarts}</TableCell>
                                                     <TableCell className="text-center text-green-600">
                                                         {stadium.cartsByStatus['Available'] || 0}
@@ -410,54 +424,105 @@ export function ReportsPage() {
                                 <div className="text-center py-8 text-muted-foreground">
                                     Click "Load" to view department reports
                                 </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Department</TableHead>
-                                                <TableHead>Code</TableHead>
-                                                <TableHead>Stadium</TableHead>
-                                                <TableHead className="text-center">Total Carts</TableHead>
-                                                <TableHead className="text-center">Available</TableHead>
-                                                <TableHead className="text-center">Assigned</TableHead>
-                                                <TableHead className="text-center">Dispatched</TableHead>
-                                                <TableHead className="text-center">Maintenance</TableHead>
-                                                <TableHead className="text-center">Assigned FAs</TableHead>
-                                                <TableHead className="text-center">Active FAs</TableHead>
-                                                <TableHead className="text-center">Check-ins (7d)</TableHead>
-                                                <TableHead className="text-center">Check-outs (7d)</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {departmentReports.map((dept) => (
-                                                <TableRow key={dept.id}>
-                                                    <TableCell className="font-medium">{dept.name}</TableCell>
-                                                    <TableCell>{dept.code || '—'}</TableCell>
-                                                    <TableCell>{dept.stadium.name}</TableCell>
-                                                    <TableCell className="text-center">{dept.totalCarts}</TableCell>
-                                                    <TableCell className="text-center text-green-600">
-                                                        {dept.cartsByStatus['Available'] || 0}
-                                                    </TableCell>
-                                                    <TableCell className="text-center text-blue-600">
-                                                        {dept.cartsByStatus['Assigned'] || 0}
-                                                    </TableCell>
-                                                    <TableCell className="text-center text-purple-600">
-                                                        {dept.cartsByStatus['Dispatched'] || 0}
-                                                    </TableCell>
-                                                    <TableCell className="text-center text-yellow-600">
-                                                        {dept.cartsByStatus['Under Maintenance'] || 0}
-                                                    </TableCell>
-                                                    <TableCell className="text-center">{dept.assignedFAs}</TableCell>
-                                                    <TableCell className="text-center">{dept.activeFAs}</TableCell>
-                                                    <TableCell className="text-center">{dept.handoverActivity.checkIns}</TableCell>
-                                                    <TableCell className="text-center">{dept.handoverActivity.checkOuts}</TableCell>
+                            ) : (() => {
+                                // Merge department rows by name, aggregating stadiums and stats
+                                type MergedDept = {
+                                    key: string;
+                                    name: string;
+                                    code: string | null;
+                                    stadiumCodes: string[];
+                                    totalCarts: number;
+                                    cartsByStatus: Record<string, number>;
+                                    assignedFAs: number;
+                                    activeFAs: number;
+                                    checkIns: number;
+                                    checkOuts: number;
+                                };
+                                const mergedMap = new Map<string, MergedDept>();
+                                for (const dept of departmentReports) {
+                                    const key = dept.name;
+                                    if (!mergedMap.has(key)) {
+                                        mergedMap.set(key, {
+                                            key,
+                                            name: dept.name,
+                                            code: dept.code,
+                                            stadiumCodes: [],
+                                            totalCarts: 0,
+                                            cartsByStatus: {},
+                                            assignedFAs: 0,
+                                            activeFAs: 0,
+                                            checkIns: 0,
+                                            checkOuts: 0,
+                                        });
+                                    }
+                                    const m = mergedMap.get(key)!;
+                                    const sc = (dept.stadium as any)?.code || dept.stadium?.name;
+                                    if (sc && !m.stadiumCodes.includes(sc)) m.stadiumCodes.push(sc);
+                                    m.totalCarts += dept.totalCarts;
+                                    for (const [status, count] of Object.entries(dept.cartsByStatus)) {
+                                        m.cartsByStatus[status] = (m.cartsByStatus[status] || 0) + count;
+                                    }
+                                    m.assignedFAs += dept.assignedFAs;
+                                    m.activeFAs += dept.activeFAs;
+                                    m.checkIns += dept.handoverActivity.checkIns;
+                                    m.checkOuts += dept.handoverActivity.checkOuts;
+                                }
+                                const merged = Array.from(mergedMap.values());
+                                return (
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Department</TableHead>
+                                                    <TableHead>Code</TableHead>
+                                                    <TableHead>Venues</TableHead>
+                                                    <TableHead className="text-center">Total Carts</TableHead>
+                                                    <TableHead className="text-center">Available</TableHead>
+                                                    <TableHead className="text-center">Assigned</TableHead>
+                                                    <TableHead className="text-center">Dispatched</TableHead>
+                                                    <TableHead className="text-center">Maintenance</TableHead>
+                                                    <TableHead className="text-center">Assigned FAs</TableHead>
+                                                    <TableHead className="text-center">Active FAs</TableHead>
+                                                    <TableHead className="text-center">Check-ins (7d)</TableHead>
+                                                    <TableHead className="text-center">Check-outs (7d)</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            )}
+                                            </TableHeader>
+                                            <TableBody>
+                                                {merged.map((dept) => (
+                                                    <TableRow key={dept.key}>
+                                                        <TableCell className="font-medium">{dept.name}</TableCell>
+                                                        <TableCell>{dept.code || '—'}</TableCell>
+                                                        <TableCell>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {dept.stadiumCodes.map(sc => (
+                                                                    <Badge key={sc} variant="outline" className="font-mono text-xs">{sc}</Badge>
+                                                                ))}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-center">{dept.totalCarts}</TableCell>
+                                                        <TableCell className="text-center text-green-600">
+                                                            {dept.cartsByStatus['Available'] || 0}
+                                                        </TableCell>
+                                                        <TableCell className="text-center text-blue-600">
+                                                            {dept.cartsByStatus['Assigned'] || 0}
+                                                        </TableCell>
+                                                        <TableCell className="text-center text-purple-600">
+                                                            {dept.cartsByStatus['Dispatched'] || 0}
+                                                        </TableCell>
+                                                        <TableCell className="text-center text-yellow-600">
+                                                            {dept.cartsByStatus['Under Maintenance'] || 0}
+                                                        </TableCell>
+                                                        <TableCell className="text-center">{dept.assignedFAs}</TableCell>
+                                                        <TableCell className="text-center">{dept.activeFAs}</TableCell>
+                                                        <TableCell className="text-center">{dept.checkIns}</TableCell>
+                                                        <TableCell className="text-center">{dept.checkOuts}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                );
+                            })()}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -521,50 +586,83 @@ export function ReportsPage() {
                                 <div className="text-center py-8 text-muted-foreground">
                                     Click "Load" to view user reports
                                 </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Name</TableHead>
-                                                <TableHead>Email</TableHead>
-                                                <TableHead>Role</TableHead>
-                                                <TableHead>Stadium</TableHead>
-                                                <TableHead>Department</TableHead>
-                                                <TableHead>Dept Code</TableHead>
-                                                <TableHead className="text-center">Assigned Carts</TableHead>
-                                                <TableHead className="text-center">Check-ins</TableHead>
-                                                <TableHead className="text-center">Check-outs</TableHead>
-                                                <TableHead className="text-center">Issues</TableHead>
-                                                <TableHead>Last Activity</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {userReports.map((u) => (
-                                                <TableRow key={u.id}>
-                                                    <TableCell className="font-medium">{u.name}</TableCell>
-                                                    <TableCell className="text-sm">{u.email}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline">{u.role}</Badge>
-                                                    </TableCell>
-                                                    <TableCell>{u.stadium?.name || '—'}</TableCell>
-                                                    <TableCell>{u.department?.name || '—'}</TableCell>
-                                                    <TableCell>{u.department?.code || '—'}</TableCell>
-                                                    <TableCell className="text-center">{u.assignedCarts}</TableCell>
-                                                    <TableCell className="text-center">{u.activitySummary.totalCheckIns}</TableCell>
-                                                    <TableCell className="text-center">{u.activitySummary.totalCheckOuts}</TableCell>
-                                                    <TableCell className="text-center">{u.activitySummary.issuesReported}</TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {u.activitySummary.lastActivity
-                                                            ? new Date(u.activitySummary.lastActivity).toLocaleDateString()
-                                                            : 'Never'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            )}
+                            ) : (() => {
+                                const systemRoles = ['SuperAdmin', 'Admin', 'Observer'];
+                                const systemUsers = userReports.filter(u => systemRoles.includes(u.role));
+                                const faUsers = userReports.filter(u => u.role === 'FA');
+                                const userTableHeaders = (showDept: boolean) => (
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Email</TableHead>
+                                            <TableHead>Role</TableHead>
+                                            {showDept && <TableHead>Stadium</TableHead>}
+                                            {showDept && <TableHead>Department</TableHead>}
+                                            {showDept && <TableHead>Dept Code</TableHead>}
+                                            <TableHead className="text-center">Assigned Carts</TableHead>
+                                            <TableHead className="text-center">Check-ins</TableHead>
+                                            <TableHead className="text-center">Check-outs</TableHead>
+                                            <TableHead className="text-center">Issues</TableHead>
+                                            <TableHead>Last Activity</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                );
+                                const userTableRow = (u: UserReport, showDept: boolean) => (
+                                    <TableRow key={u.id}>
+                                        <TableCell className="font-medium">{u.name}</TableCell>
+                                        <TableCell className="text-sm">{u.email}</TableCell>
+                                        <TableCell><Badge variant="outline">{u.role}</Badge></TableCell>
+                                        {showDept && <TableCell>{u.stadium ? <span className="font-mono text-xs bg-muted px-1 rounded">{(u.stadium as any).code || u.stadium.name}</span> : '—'}</TableCell>}
+                                        {showDept && <TableCell>{u.department?.name || '—'}</TableCell>}
+                                        {showDept && <TableCell>{u.department?.code || '—'}</TableCell>}
+                                        <TableCell className="text-center">{u.assignedCarts}</TableCell>
+                                        <TableCell className="text-center">{u.activitySummary.totalCheckIns}</TableCell>
+                                        <TableCell className="text-center">{u.activitySummary.totalCheckOuts}</TableCell>
+                                        <TableCell className="text-center">{u.activitySummary.issuesReported}</TableCell>
+                                        <TableCell className="text-sm">
+                                            {u.activitySummary.lastActivity
+                                                ? new Date(u.activitySummary.lastActivity).toLocaleDateString()
+                                                : 'Never'}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                                return (
+                                    <div className="space-y-6">
+                                        {systemUsers.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-3 px-1">
+                                                    <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">🔧 System Users</span>
+                                                    <Badge variant="secondary">{systemUsers.length}</Badge>
+                                                </div>
+                                                <div className="overflow-x-auto rounded-md border">
+                                                    <Table>
+                                                        {userTableHeaders(false)}
+                                                        <TableBody>
+                                                            {systemUsers.map(u => userTableRow(u, false))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {faUsers.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-3 px-1">
+                                                    <span className="text-sm font-semibold text-green-700 dark:text-green-400">🏟️ FA Department Users</span>
+                                                    <Badge variant="secondary">{faUsers.length}</Badge>
+                                                </div>
+                                                <div className="overflow-x-auto rounded-md border">
+                                                    <Table>
+                                                        {userTableHeaders(true)}
+                                                        <TableBody>
+                                                            {faUsers.map(u => userTableRow(u, true))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -575,15 +673,28 @@ export function ReportsPage() {
                         <CardHeader>
                             <CardTitle>Print Labels</CardTitle>
                             <p className="text-sm text-muted-foreground">
-                                Generate printable labels for golf cars with car number and FA accreditation code.
-                                Labels are formatted in landscape orientation with tournament header/footer.
+                                Generate printable labels for golf cars. Landscape orientation with car number, department code, and system branding.
                             </p>
                         </CardHeader>
                         <CardContent>
                             <div className="flex flex-col gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium mb-2">Export Format</p>
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    <div className="space-y-1 min-w-[200px]">
+                                        <p className="text-sm font-medium">Stadium Filter</p>
+                                        <Select value={selectedLabelStadium || '__all__'} onValueChange={v => setSelectedLabelStadium(v === '__all__' ? '' : v)}>
+                                            <SelectTrigger className="w-56">
+                                                <SelectValue placeholder="All Stadiums" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__all__">All Stadiums</SelectItem>
+                                                {allStadiums.map(s => (
+                                                    <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium">Export Format</p>
                                         <div className="flex gap-2">
                                             <Button
                                                 variant="outline"
@@ -618,10 +729,12 @@ export function ReportsPage() {
                                     <h4 className="font-medium mb-2">Label Format</h4>
                                     <ul className="text-sm text-muted-foreground space-y-1">
                                         <li>• Page orientation: Landscape</li>
-                                        <li>• Header: Tournament name (from system settings)</li>
-                                        <li>• Footer: Tournament footer text (from system settings)</li>
-                                        <li>• Center: Golf car number and FA code in bold, large font</li>
-                                        <li>• Each page contains up to 6 labels</li>
+                                        <li>• Content centered on each page</li>
+                                        <li>• Car number — large bold font (size 220, auto-adjusts for longer numbers)</li>
+                                        <li>• Department code — below car number</li>
+                                        <li>• Header logo — top left corner (from system branding)</li>
+                                        <li>• Footer logo — bottom of page (from system branding)</li>
+                                        <li>• Sequence continues for all assigned cars in selected stadium</li>
                                     </ul>
                                 </div>
                             </div>

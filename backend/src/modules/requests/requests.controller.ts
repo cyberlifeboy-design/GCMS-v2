@@ -8,6 +8,8 @@ const createRequestSchema = z.object({
     requesterName: z.string().min(1, 'Name is required'),
     requesterEmail: z.string().email('Valid email is required'),
     requesterPhone: z.string().optional(),
+    accreditationNumber: z.string().optional(),
+    requestType: z.enum(['one-time', 'dedicated']).default('one-time'),
     departmentId: z.string().min(1, 'Department is required'),
     stadiumId: z.string().min(1, 'Stadium is required'),
     cargoCount: z.number().int().min(0).default(0),

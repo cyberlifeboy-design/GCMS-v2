@@ -81,6 +81,8 @@ model User {
   exportFormat        String          @default("xlsx") // xlsx, pdf, docx
   exportPreferences   Json?           // Granular export preferences per report type
   assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
+  grantedPages        String[]        @default([]) // SuperAdmin-granted page access overrides
+  venueReportAccess   String          @default("assigned") // "assigned" or "all" - controls which venue reports the user can see
   stadiumId           String?
   stadium             Stadium?        @relation(fields: [stadiumId], references: [id])
   departmentId        String?
@@ -237,6 +239,8 @@ model CarRequest {
   requesterName    String
   requesterEmail   String
   requesterPhone   String?
+  accreditationNumber String? // Optional accreditation/badge number
+  requestType      String    @default("one-time") // one-time | dedicated
   departmentId     String
   department       Department @relation(fields: [departmentId], references: [id])
   stadiumId        String

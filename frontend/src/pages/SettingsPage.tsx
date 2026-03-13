@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { settingsApi, usersApi, stadiumsApi, departmentsApi } from '@/lib/api';
+import { settingsApi, usersApi, stadiumsApi, departmentsApi, announcementsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Upload, Image, FileSpreadsheet, FileText, File, Link, Copy, Check, Bell, Clock, ToggleLeft, ToggleRight, Megaphone, Mail, Sun, Moon, Monitor, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Save, Upload, Image, FileSpreadsheet, FileText, File, Link, Copy, Check, Bell, Clock, ToggleLeft, ToggleRight, Megaphone, Mail, Sun, Moon, Monitor, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -134,6 +134,9 @@ export function SettingsPage() {
     // New settings (SuperAdmin only)
     const [maintenanceNotificationEmails, setMaintenanceNotificationEmails] = useState('');
     const [handoverTimeoutMinutes, setHandoverTimeoutMinutes] = useState(120);
+    // Timeout in days+hours for display
+    const [handoverTimeoutDays, setHandoverTimeoutDays] = useState(0);
+    const [handoverTimeoutHoursField, setHandoverTimeoutHoursField] = useState(2);
     const [defaultStadiumId, setDefaultStadiumId] = useState('');
     // Feature toggles
     const [enableMaintenanceReports, setEnableMaintenanceReports] = useState(true);
@@ -144,11 +147,16 @@ export function SettingsPage() {
     const [enableBulkOperations, setEnableBulkOperations] = useState(true);
     const [enableAdvancedReports, setEnableAdvancedReports] = useState(true);
     const [enableAssignmentMatrix, setEnableAssignmentMatrix] = useState(true);
+    // Feature toggle targets: key → 'all' | 'system' | 'fa'
+    const [featureToggleTargets, setFeatureToggleTargets] = useState<Record<string, 'all' | 'system' | 'fa'>>({});
     // Legacy system announcement
     const [systemAnnouncement, setSystemAnnouncement] = useState('');
     const [announcementExpiry, setAnnouncementExpiry] = useState('');
+    const [announcementTarget, setAnnouncementTarget] = useState<'all' | 'system' | 'fa'>('all');
+    const [pushingAnnouncement, setPushingAnnouncement] = useState(false);
     // Handover duration settings
     const [handoverDefaultDurationDays, setHandoverDefaultDurationDays] = useState(1);
+    const [handoverDefaultDurationHours, setHandoverDefaultDurationHours] = useState(0);
     const [handoverEventStartDate, setHandoverEventStartDate] = useState('');
     const [handoverEventEndDate, setHandoverEventEndDate] = useState('');
     const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
@@ -192,7 +200,10 @@ export function SettingsPage() {
                 setFooterText(d.footerText || '');
                 // New settings
                 setMaintenanceNotificationEmails(d.maintenanceNotificationEmails || '');
-                setHandoverTimeoutMinutes(d.handoverTimeoutMinutes ?? 120);
+                const rawMinutes = d.handoverTimeoutMinutes ?? 120;
+                setHandoverTimeoutMinutes(rawMinutes);
+                setHandoverTimeoutDays(Math.floor(rawMinutes / (24 * 60)));
+                setHandoverTimeoutHoursField(Math.floor((rawMinutes % (24 * 60)) / 60));
                 setDefaultStadiumId(d.defaultStadiumId || '');
                 // Feature toggles
                 setEnableMaintenanceReports(d.enableMaintenanceReports ?? true);
@@ -216,6 +227,7 @@ export function SettingsPage() {
                     timezone?: string;
                 };
                 setHandoverDefaultDurationDays(settings.handoverDefaultDurationDays ?? 1);
+                setHandoverDefaultDurationHours(0); // Not stored separately yet, default 0
                 setHandoverEventStartDate(settings.handoverEventStartDate ? settings.handoverEventStartDate.slice(0, 16) : '');
                 setHandoverEventEndDate(settings.handoverEventEndDate ? settings.handoverEventEndDate.slice(0, 16) : '');
                 setEnableHandoverReminder(settings.enableHandoverReminder ?? true);
@@ -365,7 +377,8 @@ export function SettingsPage() {
             fd.append('footerText', footerText);
             // Notification settings
             fd.append('maintenanceNotificationEmails', maintenanceNotificationEmails);
-            fd.append('handoverTimeoutMinutes', String(handoverTimeoutMinutes));
+            const computedTimeoutMinutes = handoverTimeoutDays * 24 * 60 + handoverTimeoutHoursField * 60;
+            fd.append('handoverTimeoutMinutes', String(computedTimeoutMinutes));
             fd.append('defaultStadiumId', defaultStadiumId || '');
             // Feature toggles
             fd.append('enableMaintenanceReports', String(enableMaintenanceReports));
@@ -808,86 +821,93 @@ export function SettingsPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Handover Settings Section */}
+                    {/* Handover Settings Section - consolidated */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <Clock className="w-5 h-5" />
                                 Handover Settings
                             </CardTitle>
-                            <CardDescription>Configure handover status timeout and defaults</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="handoverTimeoutMinutes">Handover Timeout (minutes)</Label>
-                                    <Input
-                                        id="handoverTimeoutMinutes"
-                                        type="number"
-                                        min={1}
-                                        value={handoverTimeoutMinutes}
-                                        onChange={e => setHandoverTimeoutMinutes(parseInt(e.target.value) || 120)}
-                                        placeholder="120"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        Time before handover status automatically times out
-                                    </p>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="defaultStadiumId">Default Stadium for New Users</Label>
-                                    <Select value={defaultStadiumId || '__none__'} onValueChange={v => setDefaultStadiumId(v === '__none__' ? '' : v)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select default stadium" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="__none__">No default</SelectItem>
-                                            {stadiums.map(s => (
-                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Handover Duration Settings Section */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Clock className="w-5 h-5" />
-                                Handover Duration & Notifications
-                            </CardTitle>
-                            <CardDescription>Configure cart handover duration limits and reminder notifications</CardDescription>
+                            <CardDescription>Configure handover timeout, duration limits, and reminder notifications</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            {/* Default Duration */}
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium">Default Handover Duration</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Timeout */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-medium">Handover Timeout</h4>
+                                <p className="text-xs text-muted-foreground">Time before handover status automatically times out</p>
+                                <div className="grid grid-cols-2 gap-4 max-w-xs">
                                     <div className="space-y-2">
-                                        <Label htmlFor="handoverDefaultDurationDays">Maximum Duration (days)</Label>
+                                        <Label htmlFor="handoverTimeoutDays">Days</Label>
+                                        <Input
+                                            id="handoverTimeoutDays"
+                                            type="number"
+                                            min={0}
+                                            value={handoverTimeoutDays}
+                                            onChange={e => setHandoverTimeoutDays(parseInt(e.target.value) || 0)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverTimeoutHoursField">Hours</Label>
+                                        <Input
+                                            id="handoverTimeoutHoursField"
+                                            type="number"
+                                            min={0}
+                                            max={23}
+                                            value={handoverTimeoutHoursField}
+                                            onChange={e => setHandoverTimeoutHoursField(Math.min(23, parseInt(e.target.value) || 0))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Default Stadium */}
+                            <div className="space-y-2">
+                                <Label htmlFor="defaultStadiumId">Default Stadium for New Users</Label>
+                                <Select value={defaultStadiumId || '__none__'} onValueChange={v => setDefaultStadiumId(v === '__none__' ? '' : v)}>
+                                    <SelectTrigger className="max-w-xs">
+                                        <SelectValue placeholder="Select default stadium" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__none__">No default</SelectItem>
+                                        {stadiums.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Default Duration */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-medium">Default Handover Duration</h4>
+                                <p className="text-xs text-muted-foreground">Maximum duration a cart can be checked out</p>
+                                <div className="grid grid-cols-2 gap-4 max-w-xs">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverDefaultDurationDays">Days</Label>
                                         <Input
                                             id="handoverDefaultDurationDays"
                                             type="number"
-                                            min={1}
+                                            min={0}
                                             value={handoverDefaultDurationDays}
-                                            onChange={e => setHandoverDefaultDurationDays(parseInt(e.target.value) || 1)}
-                                            placeholder="1"
+                                            onChange={e => setHandoverDefaultDurationDays(parseInt(e.target.value) || 0)}
                                         />
-                                        <p className="text-xs text-muted-foreground">
-                                            Default maximum number of days a cart can be checked out
-                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="handoverDefaultDurationHours">Hours</Label>
+                                        <Input
+                                            id="handoverDefaultDurationHours"
+                                            type="number"
+                                            min={0}
+                                            max={23}
+                                            value={handoverDefaultDurationHours}
+                                            onChange={e => setHandoverDefaultDurationHours(Math.min(23, parseInt(e.target.value) || 0))}
+                                        />
                                     </div>
                                 </div>
                             </div>
 
                             {/* Event/Tournament Date Range */}
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 <h4 className="text-sm font-medium">Event/Tournament Date Range</h4>
-                                <p className="text-xs text-muted-foreground">
-                                    Set specific dates for tournaments where handover duration limits may differ
-                                </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="handoverEventStartDate">Event Start Date</Label>
@@ -917,7 +937,7 @@ export function SettingsPage() {
                                     <div className="space-y-0.5">
                                         <Label htmlFor="enableHandoverReminder">Enable Reminder Notifications</Label>
                                         <p className="text-xs text-muted-foreground">
-                                            Send notifications to users when handover timeout is approaching
+                                            Send notifications when handover timeout is approaching
                                         </p>
                                     </div>
                                     <Switch
@@ -927,7 +947,7 @@ export function SettingsPage() {
                                     />
                                 </div>
                                 {enableHandoverReminder && (
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 max-w-xs">
                                         <Label htmlFor="handoverReminderHoursBefore">Hours Before Timeout</Label>
                                         <Input
                                             id="handoverReminderHoursBefore"
@@ -935,11 +955,7 @@ export function SettingsPage() {
                                             min={1}
                                             value={handoverReminderHoursBefore}
                                             onChange={e => setHandoverReminderHoursBefore(parseInt(e.target.value) || 1)}
-                                            placeholder="1"
                                         />
-                                        <p className="text-xs text-muted-foreground">
-                                            Hours before handover timeout to send reminder notification
-                                        </p>
                                     </div>
                                 )}
                             </div>
@@ -1012,6 +1028,7 @@ export function SettingsPage() {
                                             <SelectItem value="Europe/Berlin">Europe/Berlin (CET/CEST)</SelectItem>
                                             <SelectItem value="Europe/Moscow">Europe/Moscow (MSK)</SelectItem>
                                             <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
+                                            <SelectItem value="Asia/Qatar">Asia/Qatar (Qatar Time, UTC+3)</SelectItem>
                                             <SelectItem value="Asia/Karachi">Asia/Karachi (PKT)</SelectItem>
                                             <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
                                             <SelectItem value="Asia/Bangkok">Asia/Bangkok (ICT)</SelectItem>
@@ -1071,113 +1088,46 @@ export function SettingsPage() {
                                 )}
                                 Feature Toggles
                             </CardTitle>
-                            <CardDescription>Enable or disable system features</CardDescription>
+                            <CardDescription>Enable or disable system features and specify which user types have access</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableMaintenanceReports">Enable Maintenance Reports</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow users to create and manage maintenance reports
-                                    </p>
+                            {[
+                                { id: 'enableMaintenanceReports', label: 'Enable Maintenance Reports', desc: 'Allow users to create and manage maintenance reports', value: enableMaintenanceReports, setter: setEnableMaintenanceReports },
+                                { id: 'enableHandoverPhotos', label: 'Enable Handover Photos', desc: 'Allow photo uploads during handover check-in/out', value: enableHandoverPhotos, setter: setEnableHandoverPhotos },
+                                { id: 'enableFleetManagement', label: 'Enable Fleet Management', desc: 'Allow cart assignment and management features', value: enableFleetManagement, setter: setEnableFleetManagement },
+                                { id: 'enableCarRequests', label: 'Enable Car Requests', desc: 'Allow public car request submissions', value: enableCarRequests, setter: setEnableCarRequests },
+                                { id: 'enableUserImport', label: 'Enable User Import', desc: 'Allow bulk user import from requests', value: enableUserImport, setter: setEnableUserImport },
+                                { id: 'enableBulkOperations', label: 'Enable Bulk Operations', desc: 'Allow bulk checkout/checkin operations', value: enableBulkOperations, setter: setEnableBulkOperations },
+                                { id: 'enableAdvancedReports', label: 'Enable Advanced Reports', desc: 'Allow export to PDF and advanced report generation', value: enableAdvancedReports, setter: setEnableAdvancedReports },
+                                { id: 'enableAssignmentMatrix', label: 'Enable Assignment Matrix', desc: 'Show fleet assignment matrix view', value: enableAssignmentMatrix, setter: setEnableAssignmentMatrix },
+                            ].map(toggle => (
+                                <div key={toggle.id} className="flex items-center justify-between gap-4">
+                                    <div className="flex-1 space-y-0.5">
+                                        <Label htmlFor={toggle.id}>{toggle.label}</Label>
+                                        <p className="text-xs text-muted-foreground">{toggle.desc}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Select
+                                            value={featureToggleTargets[toggle.id] || 'all'}
+                                            onValueChange={v => setFeatureToggleTargets(prev => ({ ...prev, [toggle.id]: v as 'all' | 'system' | 'fa' }))}
+                                        >
+                                            <SelectTrigger className="w-36 h-8 text-xs">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Users</SelectItem>
+                                                <SelectItem value="system">System Users</SelectItem>
+                                                <SelectItem value="fa">FA Users Only</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Switch
+                                            id={toggle.id}
+                                            checked={toggle.value}
+                                            onCheckedChange={toggle.setter}
+                                        />
+                                    </div>
                                 </div>
-                                <Switch
-                                    id="enableMaintenanceReports"
-                                    checked={enableMaintenanceReports}
-                                    onCheckedChange={setEnableMaintenanceReports}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableHandoverPhotos">Enable Handover Photos</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow photo uploads during handover check-in/out
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableHandoverPhotos"
-                                    checked={enableHandoverPhotos}
-                                    onCheckedChange={setEnableHandoverPhotos}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableFleetManagement">Enable Fleet Management</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow cart assignment and management features
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableFleetManagement"
-                                    checked={enableFleetManagement}
-                                    onCheckedChange={setEnableFleetManagement}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableCarRequests">Enable Car Requests</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow public car request submissions
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableCarRequests"
-                                    checked={enableCarRequests}
-                                    onCheckedChange={setEnableCarRequests}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableUserImport">Enable User Import</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow bulk user import from requests
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableUserImport"
-                                    checked={enableUserImport}
-                                    onCheckedChange={setEnableUserImport}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableBulkOperations">Enable Bulk Operations</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow bulk checkout/checkin operations
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableBulkOperations"
-                                    checked={enableBulkOperations}
-                                    onCheckedChange={setEnableBulkOperations}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableAdvancedReports">Enable Advanced Reports</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Allow export to PDF and advanced report generation
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableAdvancedReports"
-                                    checked={enableAdvancedReports}
-                                    onCheckedChange={setEnableAdvancedReports}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="enableAssignmentMatrix">Enable Assignment Matrix</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Show fleet assignment matrix view
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="enableAssignmentMatrix"
-                                    checked={enableAssignmentMatrix}
-                                    onCheckedChange={setEnableAssignmentMatrix}
-                                />
-                            </div>
+                            ))}
                         </CardContent>
                     </Card>
 
@@ -1188,7 +1138,7 @@ export function SettingsPage() {
                                 <Megaphone className="w-5 h-5" />
                                 System Announcement
                             </CardTitle>
-                            <CardDescription>Display a system-wide announcement to all users</CardDescription>
+                            <CardDescription>Push a system-wide announcement to targeted users</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
@@ -1197,22 +1147,62 @@ export function SettingsPage() {
                                     id="systemAnnouncement"
                                     value={systemAnnouncement}
                                     onChange={e => setSystemAnnouncement(e.target.value)}
-                                    placeholder="Enter system-wide announcement (optional)"
+                                    placeholder="Enter announcement message..."
                                     rows={3}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="announcementExpiry">Announcement Expiry</Label>
-                                <Input
-                                    id="announcementExpiry"
-                                    type="datetime-local"
-                                    value={announcementExpiry}
-                                    onChange={e => setAnnouncementExpiry(e.target.value)}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Announcement will automatically hide after this time (optional)
-                                </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Target Audience</Label>
+                                    <Select value={announcementTarget} onValueChange={v => setAnnouncementTarget(v as 'all' | 'system' | 'fa')}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Users</SelectItem>
+                                            <SelectItem value="system">System Users Only</SelectItem>
+                                            <SelectItem value="fa">FA Department Users Only</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="announcementExpiry">Expiry (Optional)</Label>
+                                    <Input
+                                        id="announcementExpiry"
+                                        type="datetime-local"
+                                        value={announcementExpiry}
+                                        onChange={e => setAnnouncementExpiry(e.target.value)}
+                                    />
+                                </div>
                             </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!systemAnnouncement.trim() || pushingAnnouncement}
+                                onClick={async () => {
+                                    if (!systemAnnouncement.trim()) return;
+                                    setPushingAnnouncement(true);
+                                    try {
+                                        const res = await announcementsApi.create({
+                                            title: 'System Announcement',
+                                            message: systemAnnouncement,
+                                            type: 'info',
+                                            targetType: announcementTarget === 'system' ? 'users' : announcementTarget === 'fa' ? 'fas' : 'all',
+                                            expiresAt: announcementExpiry ? new Date(announcementExpiry).toISOString() : undefined,
+                                        });
+                                        await announcementsApi.sendNow(res.data.data.id);
+                                        setSystemAnnouncement('');
+                                        alert('Announcement pushed successfully!');
+                                    } catch (err: any) {
+                                        alert(err.response?.data?.error || 'Failed to push announcement');
+                                    } finally {
+                                        setPushingAnnouncement(false);
+                                    }
+                                }}
+                            >
+                                {pushingAnnouncement ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Megaphone className="w-4 h-4 mr-2" />}
+                                Push Now
+                            </Button>
                         </CardContent>
                     </Card>
 
@@ -1229,6 +1219,11 @@ export function SettingsPage() {
             {/* Request Link Generator (SuperAdmin only) */}
             {isSuperAdmin && (
                 <RequestLinkGenerator stadiums={stadiums} />
+            )}
+
+            {/* User Page Access Control (SuperAdmin only) */}
+            {isSuperAdmin && (
+                <UserAccessControl />
             )}
 
             {!isSuperAdmin && (
@@ -1384,3 +1379,121 @@ function RequestLinkGenerator({ stadiums }: { stadiums: Stadium[] }) {
         </Card>
     );
 }
+
+const AVAILABLE_PAGES = [
+    { key: 'fleet', label: 'Fleet Management' },
+    { key: 'handover', label: 'Handover' },
+    { key: 'maintenance', label: 'Maintenance' },
+    { key: 'reports', label: 'Reports' },
+    { key: 'requests', label: 'Car Requests' },
+    { key: 'users', label: 'User Management' },
+    { key: 'departments', label: 'Departments' },
+    { key: 'stadiums', label: 'Stadiums' },
+    { key: 'notifications', label: 'Notifications' },
+];
+
+function UserAccessControl() {
+    const [users, setUsers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        usersApi.getAll({ role: 'Admin,Observer', limit: 100 }).then(res => {
+            setUsers(res.data.data || []);
+        }).catch(() => {}).finally(() => setLoading(false));
+    }, []);
+
+    const handleTogglePage = async (userId: string, page: string, currentPages: string[]) => {
+        const newPages = currentPages.includes(page)
+            ? currentPages.filter(p => p !== page)
+            : [...currentPages, page];
+        setSaving(prev => ({ ...prev, [userId]: true }));
+        try {
+            await usersApi.update(userId, { grantedPages: newPages });
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, grantedPages: newPages } : u));
+        } catch (err) {
+            console.error('Failed to update page access', err);
+        } finally {
+            setSaving(prev => ({ ...prev, [userId]: false }));
+        }
+    };
+
+    const handleVenueAccess = async (userId: string, value: string) => {
+        setSaving(prev => ({ ...prev, [userId]: true }));
+        try {
+            await usersApi.update(userId, { venueReportAccess: value });
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, venueReportAccess: value } : u));
+        } catch (err) {
+            console.error('Failed to update venue access', err);
+        } finally {
+            setSaving(prev => ({ ...prev, [userId]: false }));
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    User Page Access Control
+                </CardTitle>
+                <CardDescription>
+                    Grant Admin and Observer users access to specific pages and configure venue report access
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loading ? (
+                    <div className="flex justify-center py-4"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                ) : users.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No Admin or Observer users found.</p>
+                ) : (
+                    <div className="space-y-6">
+                        {users.map(u => (
+                            <div key={u.id} className="border rounded-lg p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="font-medium">{u.name}</p>
+                                        <p className="text-sm text-muted-foreground">{u.email} · {u.role}</p>
+                                    </div>
+                                    {saving[u.id] && <Loader2 className="w-4 h-4 animate-spin" />}
+                                </div>
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">Page Access</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        {AVAILABLE_PAGES.map(page => {
+                                            const granted = (u.grantedPages || []).includes(page.key);
+                                            return (
+                                                <label key={page.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                                                    <Checkbox
+                                                        checked={granted}
+                                                        onCheckedChange={() => handleTogglePage(u.id, page.key, u.grantedPages || [])}
+                                                    />
+                                                    {page.label}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <p className="text-xs font-medium text-muted-foreground">Venue Report Access:</p>
+                                    <Select
+                                        value={u.venueReportAccess || 'assigned'}
+                                        onValueChange={v => handleVenueAccess(u.id, v)}
+                                    >
+                                        <SelectTrigger className="w-48 h-8 text-xs">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="assigned">Assigned Venue Only</SelectItem>
+                                            <SelectItem value="all">All Venues</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}}

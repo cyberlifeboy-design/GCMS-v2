@@ -32,6 +32,8 @@ interface CarRequest {
     requesterName: string;
     requesterEmail: string;
     requesterPhone?: string;
+    accreditationNumber?: string;
+    requestType?: string;
     stadiumId: string;
     stadium: { id: string; name: string; code?: string };
     departmentId: string;
@@ -535,6 +537,9 @@ export function RequestsManagementPage() {
                                     {selectedRequest.requesterPhone && (
                                         <p className="text-sm text-muted-foreground">{selectedRequest.requesterPhone}</p>
                                     )}
+                                    {selectedRequest.accreditationNumber && (
+                                        <p className="text-xs text-muted-foreground">Acc#: {selectedRequest.accreditationNumber}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <p className="text-sm text-muted-foreground">Location</p>
@@ -563,6 +568,12 @@ export function RequestsManagementPage() {
                                 <div>
                                     <p className="text-sm text-muted-foreground">Notes</p>
                                     <p>{selectedRequest.notes}</p>
+                                </div>
+                            )}
+                            {selectedRequest.requestType && (
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Request Type</p>
+                                    <p className="capitalize">{selectedRequest.requestType === 'dedicated' ? 'Dedicated tournament operational use' : 'One-time use'}</p>
                                 </div>
                             )}
                             <div>

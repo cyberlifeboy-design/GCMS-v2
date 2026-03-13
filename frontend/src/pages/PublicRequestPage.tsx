@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { requestsApi, stadiumsApi, departmentsApi } from '@/lib/api';
+import { requestsApi, publicDataApi, publicSettingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, CheckCircle, XCircle, Mail, Phone, Building, MapPin } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, CheckCircle, XCircle, Mail, Phone, Building, MapPin, Lock } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
 
 interface Stadium {
@@ -23,10 +24,22 @@ interface Department {
     stadiumId: string;
 }
 
+interface Branding {
+    tournamentName: string;
+    logoUrl: string | null;
+    headerUrl: string | null;
+    footerUrl: string | null;
+    footerText: string | null;
+}
+
 export function PublicRequestPage() {
     const [searchParams] = useSearchParams();
     const stadiumIdParam = searchParams.get('stadium');
     const departmentIdParam = searchParams.get('department');
+
+    // When dept param is set without stadium, we'll resolve it
+    const isStadiumLocked = !!stadiumIdParam;
+    const isDeptLocked = !!departmentIdParam;
 
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
@@ -36,11 +49,14 @@ export function PublicRequestPage() {
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [loadingInitial, setLoadingInitial] = useState(true);
+    const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
 
     const [formData, setFormData] = useState({
         requesterName: '',
         requesterEmail: '',
         requesterPhone: '',
+        accreditationNumber: '',
+        requestType: 'one-time',
         stadiumId: stadiumIdParam || '',
         departmentId: departmentIdParam || '',
         cargoCount: 0,
@@ -53,10 +69,12 @@ export function PublicRequestPage() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [stadiumsRes] = await Promise.all([
-                    stadiumsApi.getAll(),
+                const [stadiumsRes, brandingRes] = await Promise.all([
+                    publicDataApi.getStadiums(),
+                    publicSettingsApi.getBranding(),
                 ]);
                 setStadiums(stadiumsRes.data.data || []);
+                setBranding(brandingRes.data);
             } catch (err) {
                 console.error('Failed to load initial data:', err);
             } finally {
@@ -73,7 +91,7 @@ export function PublicRequestPage() {
                 return;
             }
             try {
-                const res = await departmentsApi.getAll({ stadiumId: formData.stadiumId });
+                const res = await publicDataApi.getDepartments(formData.stadiumId);
                 setDepartments(res.data.data || []);
             } catch (err) {
                 console.error('Failed to load departments:', err);
@@ -81,6 +99,19 @@ export function PublicRequestPage() {
         };
         loadDepartments();
     }, [formData.stadiumId]);
+
+    // If departmentIdParam is set but stadiumId is missing, fetch dept to get stadiumId
+    useEffect(() => {
+        if (departmentIdParam && !stadiumIdParam) {
+            publicDataApi.getDepartments().then(res => {
+                const depts: Department[] = res.data.data || [];
+                const dept = depts.find(d => d.id === departmentIdParam);
+                if (dept) {
+                    setFormData(f => ({ ...f, stadiumId: dept.stadiumId }));
+                }
+            }).catch(() => {});
+        }
+    }, [departmentIdParam, stadiumIdParam]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -104,6 +135,8 @@ export function PublicRequestPage() {
                 requesterName: formData.requesterName,
                 requesterEmail: formData.requesterEmail,
                 requesterPhone: formData.requesterPhone || undefined,
+                accreditationNumber: formData.accreditationNumber || undefined,
+                requestType: formData.requestType,
                 stadiumId: formData.stadiumId,
                 departmentId: formData.departmentId,
                 cargoCount: formData.cargoCount,
@@ -159,114 +192,182 @@ export function PublicRequestPage() {
         );
     }
 
+    const selectedStadium = stadiums.find(s => s.id === formData.stadiumId);
+    const selectedDept = departments.find(d => d.id === formData.departmentId);
+
     return (
-        <div className="min-h-screen bg-gray-50 py-8 px-4">
-            <div className="max-w-2xl mx-auto">
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold">Car Request Form</h1>
-                    <p className="text-muted-foreground mt-2">
-                        Submit a request for golf carts for your department
-                    </p>
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            {/* Header branding */}
+            {branding.headerUrl ? (
+                <div className="w-full bg-white border-b">
+                    <img src={branding.headerUrl} alt="Header" className="w-full max-h-32 object-contain" />
                 </div>
+            ) : (
+                <div className="w-full bg-primary py-4 px-6 flex items-center gap-3">
+                    {branding.logoUrl && <img src={branding.logoUrl} alt="Logo" className="h-10 object-contain" />}
+                    <span className="text-white font-bold text-xl">{branding.tournamentName}</span>
+                </div>
+            )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Request Details</CardTitle>
-                        <CardDescription>
-                            Fill in the form below to request golf carts for your department.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* Requester Information */}
-                            <div className="space-y-4">
-                                <h3 className="font-medium flex items-center gap-2">
-                                    <Mail className="w-4 h-4" />
-                                    Contact Information
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="requesterName">Your Name *</Label>
-                                        <Input
-                                            id="requesterName"
-                                            value={formData.requesterName}
-                                            onChange={(e) => setFormData({ ...formData, requesterName: e.target.value })}
-                                            placeholder="John Doe"
-                                            required
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="requesterEmail">Email Address *</Label>
-                                        <Input
-                                            id="requesterEmail"
-                                            type="email"
-                                            value={formData.requesterEmail}
-                                            onChange={(e) => setFormData({ ...formData, requesterEmail: e.target.value })}
-                                            placeholder="john@department.org"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="requesterPhone" className="flex items-center gap-2">
-                                        <Phone className="w-3 h-3" />
-                                        Phone Number (Optional)
-                                    </Label>
-                                    <Input
-                                        id="requesterPhone"
-                                        value={formData.requesterPhone}
-                                        onChange={(e) => setFormData({ ...formData, requesterPhone: e.target.value })}
-                                        placeholder="+1 234 567 8900"
-                                    />
-                                </div>
+            <div className="flex-1 py-8 px-4">
+                <div className="max-w-2xl mx-auto">
+                    <div className="text-center mb-8">
+                        <h1 className="text-3xl font-bold">Car Request Form</h1>
+                        <p className="text-muted-foreground mt-2">
+                            Submit a request for golf carts for your department
+                        </p>
+                        {(isStadiumLocked || isDeptLocked) && (
+                            <div className="mt-3 flex items-center justify-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-2 inline-flex mx-auto">
+                                <Lock className="w-4 h-4" />
+                                <span>
+                                    {isDeptLocked ? 'Department and stadium pre-selected by link' : 'Stadium pre-selected by link'}
+                                </span>
                             </div>
+                        )}
+                    </div>
 
-                            {/* Stadium & Department */}
-                            <div className="space-y-4">
-                                <h3 className="font-medium flex items-center gap-2">
-                                    <MapPin className="w-4 h-4" />
-                                    Location
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Request Details</CardTitle>
+                            <CardDescription>
+                                Fill in the form below to request golf carts for your department.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                {/* Requester Information */}
+                                <div className="space-y-4">
+                                    <h3 className="font-medium flex items-center gap-2">
+                                        <Mail className="w-4 h-4" />
+                                        Contact Information
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="requesterName">Your Name *</Label>
+                                            <Input
+                                                id="requesterName"
+                                                value={formData.requesterName}
+                                                onChange={(e) => setFormData({ ...formData, requesterName: e.target.value })}
+                                                placeholder="John Doe"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="requesterEmail">Email Address *</Label>
+                                            <Input
+                                                id="requesterEmail"
+                                                type="email"
+                                                value={formData.requesterEmail}
+                                                onChange={(e) => setFormData({ ...formData, requesterEmail: e.target.value })}
+                                                placeholder="john@department.org"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="requesterPhone" className="flex items-center gap-2">
+                                                <Phone className="w-3 h-3" />
+                                                Phone Number (Optional)
+                                            </Label>
+                                            <Input
+                                                id="requesterPhone"
+                                                value={formData.requesterPhone}
+                                                onChange={(e) => setFormData({ ...formData, requesterPhone: e.target.value })}
+                                                placeholder="+1 234 567 8900"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="accreditationNumber">Accreditation / Badge # (Optional)</Label>
+                                            <Input
+                                                id="accreditationNumber"
+                                                value={formData.accreditationNumber}
+                                                onChange={(e) => setFormData({ ...formData, accreditationNumber: e.target.value })}
+                                                placeholder="e.g. ACC-12345"
+                                            />
+                                        </div>
+                                    </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="stadium">Stadium *</Label>
+                                        <Label htmlFor="requestType">Request Type *</Label>
                                         <Select
-                                            value={formData.stadiumId}
-                                            onValueChange={(value) => setFormData({ ...formData, stadiumId: value, departmentId: '' })}
+                                            value={formData.requestType}
+                                            onValueChange={(value) => setFormData({ ...formData, requestType: value })}
                                         >
                                             <SelectTrigger>
-                                                <SelectValue placeholder="Select stadium" />
+                                                <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {stadiums.map((s) => (
-                                                    <SelectItem key={s.id} value={s.id}>
-                                                        {s.name}
-                                                    </SelectItem>
-                                                ))}
+                                                <SelectItem value="one-time">One-time use</SelectItem>
+                                                <SelectItem value="dedicated">Dedicated tournament operational use</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="department">Department *</Label>
-                                        <Select
-                                            value={formData.departmentId}
-                                            onValueChange={(value) => setFormData({ ...formData, departmentId: value })}
-                                            disabled={!formData.stadiumId}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder={formData.stadiumId ? "Select department" : "Select stadium first"} />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {departments.map((d) => (
-                                                    <SelectItem key={d.id} value={d.id}>
-                                                        {d.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                </div>
+
+                                {/* Stadium & Department */}
+                                <div className="space-y-4">
+                                    <h3 className="font-medium flex items-center gap-2">
+                                        <MapPin className="w-4 h-4" />
+                                        Location
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="stadium" className="flex items-center gap-2">
+                                                Stadium *
+                                                {isStadiumLocked && <Badge variant="outline" className="text-xs flex items-center gap-1"><Lock className="w-3 h-3" />Locked</Badge>}
+                                            </Label>
+                                            {isStadiumLocked && selectedStadium ? (
+                                                <div className="p-2 border rounded-md bg-muted text-sm font-medium">
+                                                    {selectedStadium.code} — {selectedStadium.name}
+                                                </div>
+                                            ) : (
+                                                <Select
+                                                    value={formData.stadiumId}
+                                                    onValueChange={(value) => setFormData({ ...formData, stadiumId: value, departmentId: '' })}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select stadium" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {stadiums.map((s) => (
+                                                            <SelectItem key={s.id} value={s.id}>
+                                                                {s.code} — {s.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="department" className="flex items-center gap-2">
+                                                Department *
+                                                {isDeptLocked && <Badge variant="outline" className="text-xs flex items-center gap-1"><Lock className="w-3 h-3" />Locked</Badge>}
+                                            </Label>
+                                            {isDeptLocked && selectedDept ? (
+                                                <div className="p-2 border rounded-md bg-muted text-sm font-medium">
+                                                    {selectedDept.name}{selectedDept.code ? ` (${selectedDept.code})` : ''}
+                                                </div>
+                                            ) : (
+                                                <Select
+                                                    value={formData.departmentId}
+                                                    onValueChange={(value) => setFormData({ ...formData, departmentId: value })}
+                                                    disabled={!formData.stadiumId}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder={formData.stadiumId ? "Select department" : "Select stadium first"} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {departments.map((d) => (
+                                                            <SelectItem key={d.id} value={d.id}>
+                                                                {d.name}{d.code ? ` (${d.code})` : ''}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
                             {/* Cart Quantities */}
                             <div className="space-y-4">
@@ -334,8 +435,7 @@ export function PublicRequestPage() {
                             </div>
 
                             {error && (
-                                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm flex items-center gap-2">
-                                    <XCircle className="w-4 h-4" />
+                                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
                                     {error}
                                 </div>
                             )}
@@ -354,6 +454,18 @@ export function PublicRequestPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Footer branding */}
+            {(branding.footerUrl || branding.footerText) && (
+                <div className="w-full mt-8 border-t bg-white py-4 px-6 text-center">
+                    {branding.footerUrl && (
+                        <img src={branding.footerUrl} alt="Footer" className="h-12 object-contain mx-auto mb-2" />
+                    )}
+                    {branding.footerText && (
+                        <p className="text-sm text-muted-foreground">{branding.footerText}</p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

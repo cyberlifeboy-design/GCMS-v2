@@ -53,6 +53,15 @@ export default {
     			lg: 'var(--radius)',
     			md: 'calc(var(--radius) - 2px)',
     			sm: 'calc(var(--radius) - 4px)'
+    		},
+    		keyframes: {
+    			wiggle: {
+    				'0%, 100%': { transform: 'rotate(-8deg)' },
+    				'50%': { transform: 'rotate(8deg)' },
+    			}
+    		},
+    		animation: {
+    			wiggle: 'wiggle 0.8s ease-in-out infinite',
     		}
     	}
     },

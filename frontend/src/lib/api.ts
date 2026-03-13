@@ -153,6 +153,8 @@ export const stadiumsApi = {
         apiClient.put(`/stadiums/${id}`, data),
     delete: (id: string) =>
         apiClient.delete(`/stadiums/${id}`),
+    toggleActive: (id: string, isActive: boolean) =>
+        apiClient.put(`/stadiums/${id}`, { isActive }),
 };
 
 // Departments
@@ -245,6 +247,15 @@ export const settingsApi = {
         }),
 };
 
+export const publicSettingsApi = {
+    getBranding: () => axios.get(`${API_URL}/settings/public`),
+};
+
+export const publicDataApi = {
+    getStadiums: () => axios.get(`${API_URL}/public/stadiums`),
+    getDepartments: (stadiumId?: string) => axios.get(`${API_URL}/public/departments`, { params: stadiumId ? { stadiumId } : {} }),
+};
+
 // Car Requests (public and admin)
 export const requestsApi = {
     // Public endpoints (no auth)
@@ -252,6 +263,8 @@ export const requestsApi = {
         requesterName: string;
         requesterEmail: string;
         requesterPhone?: string;
+        accreditationNumber?: string;
+        requestType?: string;
         departmentId: string;
         stadiumId: string;
         cargoCount: number;

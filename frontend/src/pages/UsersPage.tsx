@@ -91,7 +91,7 @@ export function UsersPage() {
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
     const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false });
-    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string; stadiumId: string }>>([]);
 
     // Import from requests
@@ -179,6 +179,9 @@ export function UsersPage() {
         });
         return groups;
     };
+
+    const systemRoles = ['SuperAdmin', 'Admin', 'Observer'] as const;
+    const faRoles = ['FA'] as const;
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -429,9 +432,10 @@ export function UsersPage() {
                 <CardContent className="p-0">
                     {(() => {
                         const groups = groupedUsers();
-                        return ROLE_ORDER.map(roleKey => {
+
+                        const renderRoleSection = (roleKey: string, showAccreditation: boolean) => {
                             const roleUsers = groups[roleKey];
-                            if (roleUsers.length === 0) return null;
+                            if (!roleUsers || roleUsers.length === 0) return null;
                             return (
                                 <div key={roleKey} className="border-b last:border-b-0">
                                     <div className="bg-muted/50 px-4 py-2 font-semibold text-sm flex items-center gap-2">
@@ -444,7 +448,7 @@ export function UsersPage() {
                                                 <TableHead>Name</TableHead>
                                                 <TableHead>Email</TableHead>
                                                 <TableHead>Phone</TableHead>
-                                                <TableHead>Accreditation #</TableHead>
+                                                {showAccreditation && <TableHead>Accreditation #</TableHead>}
                                                 <TableHead>Stadium</TableHead>
                                                 <TableHead>Department</TableHead>
                                                 <TableHead>Status</TableHead>
@@ -458,7 +462,7 @@ export function UsersPage() {
                                                     <TableCell className="font-medium">{u.name}</TableCell>
                                                     <TableCell>{u.email}</TableCell>
                                                     <TableCell>{u.phone || '—'}</TableCell>
-                                                    <TableCell>{u.accreditationNumber || '—'}</TableCell>
+                                                    {showAccreditation && <TableCell>{u.accreditationNumber || '—'}</TableCell>}
                                                     <TableCell>{u.assignAllStadiums ? 'All Stadiums' : (u.stadium?.name || '—')}</TableCell>
                                                     <TableCell>{u.department?.name || '—'}</TableCell>
                                                     <TableCell>
@@ -476,16 +480,10 @@ export function UsersPage() {
                                                     {canManage && (
                                                         <TableCell className="text-right">
                                                             <div className="flex gap-1 justify-end">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    onClick={() => openEdit(u)}
-                                                                    title="Edit user"
-                                                                >
+                                                                <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="Edit user">
                                                                     <Edit2 className="w-4 h-4" />
                                                                 </Button>
-                                                                {u.id !== currentUser?.id && (
-                                                                    <>
+                                                                        {(role === 'Admin' || role === 'SuperAdmin') && (<>
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="sm"
@@ -517,7 +515,33 @@ export function UsersPage() {
                                     </Table>
                                 </div>
                             );
-                        });
+                        };
+
+                        const systemUsersList = [...systemRoles].flatMap(r => groups[r] || []);
+                        const faUsersList = [...faRoles].flatMap(r => groups[r] || []);
+
+                        return (
+                            <>
+                                {systemUsersList.length > 0 && (
+                                    <div>
+                                        <div className="bg-blue-50 dark:bg-blue-950/30 px-4 py-2 text-sm font-bold text-blue-800 dark:text-blue-300 border-b flex items-center gap-2">
+                                            🔧 System Users
+                                            <span className="font-normal text-muted-foreground">({systemUsersList.length})</span>
+                                        </div>
+                                        {systemRoles.map(r => renderRoleSection(r, false))}
+                                    </div>
+                                )}
+                                {faUsersList.length > 0 && (
+                                    <div>
+                                        <div className="bg-green-50 dark:bg-green-950/30 px-4 py-2 text-sm font-bold text-green-800 dark:text-green-300 border-b flex items-center gap-2">
+                                            🏟️ FA Department Users
+                                            <span className="font-normal text-muted-foreground">({faUsersList.length})</span>
+                                        </div>
+                                        {faRoles.map(r => renderRoleSection(r, true))}
+                                    </div>
+                                )}
+                            </>
+                        );
                     })()}
                     {loading && (
                         <div className="text-center py-8">
@@ -557,10 +581,12 @@ export function UsersPage() {
                             <Label>Phone</Label>
                             <Input value={formData.phone} onChange={e => setFormData(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 0100" />
                         </div>
+                        {formData.role === 'FA' && (
                         <div className="space-y-2">
                             <Label>Accreditation Number (Optional)</Label>
                             <Input value={formData.accreditationNumber} onChange={e => setFormData(f => ({ ...f, accreditationNumber: e.target.value }))} placeholder="ACC-12345" />
                         </div>
+                        )}
                         <div className="space-y-2">
                             <Label>Role *</Label>
                             <Select value={formData.role} onValueChange={v => setFormData(f => ({ ...f, role: v }))}>
@@ -585,7 +611,7 @@ export function UsersPage() {
                                         <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="__none__">No Stadium</SelectItem>
-                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -796,7 +822,7 @@ export function UsersPage() {
                                         <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="__none__">No Stadium</SelectItem>
-                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>

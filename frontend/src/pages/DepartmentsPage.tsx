@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search, Edit2, Loader2, Building2, User } from 'lucide-react';
+import { Plus, Search, Edit2, Loader2, User } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
 
 interface Department {
@@ -93,8 +94,26 @@ export function DepartmentsPage() {
     const filtered = departments.filter(d =>
         d.name.toLowerCase().includes(search.toLowerCase()) ||
         (d.code?.toLowerCase().includes(search.toLowerCase())) ||
-        d.stadium.name.toLowerCase().includes(search.toLowerCase())
+        d.stadium.name.toLowerCase().includes(search.toLowerCase()) ||
+        d.stadium.code.toLowerCase().includes(search.toLowerCase())
     );
+
+    // Merge departments by name for display
+    const mergedDepartments = filtered.reduce((acc, d) => {
+        const key = d.name;
+        if (!acc[key]) {
+            acc[key] = { ...d, stadiums: [d.stadium], ids: [d.id] };
+        } else {
+            acc[key].stadiums.push(d.stadium);
+            acc[key].ids.push(d.id);
+            // Sum up counts
+            if (acc[key]._count && d._count) {
+                acc[key]._count.users += d._count.users;
+                acc[key]._count.fleet += d._count.fleet;
+            }
+        }
+        return acc;
+    }, {} as Record<string, Department & { stadiums: Array<{ id: string; name: string; code: string }>; ids: string[] }>);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -218,8 +237,7 @@ export function DepartmentsPage() {
                             <TableRow>
                                 <TableHead>Department Name</TableHead>
                                 <TableHead>Code</TableHead>
-                                {isSuperAdmin && <TableHead>Stadium Code</TableHead>}
-                                <TableHead>Venue</TableHead>
+                                <TableHead>Venues</TableHead>
                                 <TableHead>Focal Point</TableHead>
                                 <TableHead>Users / Carts</TableHead>
                                 {canManage && <TableHead className="text-right">Actions</TableHead>}
@@ -227,27 +245,32 @@ export function DepartmentsPage() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
-                            ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={canManage ? 7 : 6} className="text-center py-8 text-muted-foreground">No departments found</TableCell></TableRow>
-                            ) : filtered.map(d => (
-                                <TableRow key={d.id}>
+                                <TableRow><TableCell colSpan={canManage ? 6 : 5} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
+                            ) : Object.keys(mergedDepartments).length === 0 ? (
+                                <TableRow><TableCell colSpan={canManage ? 6 : 5} className="text-center py-8 text-muted-foreground">No departments found</TableCell></TableRow>
+                            ) : Object.values(mergedDepartments).map(d => (
+                                <TableRow key={d.name}>
                                     <TableCell className="font-semibold">{d.name}</TableCell>
                                     <TableCell><code className="bg-muted px-1 rounded">{d.code || '—'}</code></TableCell>
-                                    {isSuperAdmin && <TableCell><code className="bg-muted px-1 rounded text-xs">{d.stadium.code || '—'}</code></TableCell>}
-                                    <TableCell className="flex items-center gap-1 text-muted-foreground"><Building2 className="w-3 h-3" /> {d.stadium.name}</TableCell>
-                                    <TableCell className="flex items-center gap-1">
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1">
+                                            {d.stadiums.map(s => (
+                                                <Badge key={s.id} variant="outline" className="text-xs font-mono">{s.code}</Badge>
+                                            ))}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
                                         {d.focalPoint ? (
-                                            <>
+                                            <div className="flex items-center gap-1">
                                                 <User className="w-3 h-3 text-muted-foreground" />
                                                 <span className="text-sm">{d.focalPoint.name}</span>
-                                            </>
+                                            </div>
                                         ) : (
                                             <span className="text-muted-foreground text-sm">—</span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-sm">
-                                        <span className="text-muted-foreground">Users:</span> {d._count?.users} / <span className="text-muted-foreground">Carts:</span> {d._count?.fleet}
+                                        <span className="text-muted-foreground">Users:</span> {d._count?.users ?? '—'} / <span className="text-muted-foreground">Carts:</span> {d._count?.fleet ?? '—'}
                                     </TableCell>
                                     {canManage && (
                                         <TableCell className="text-right">
@@ -301,7 +324,7 @@ export function DepartmentsPage() {
                                         <Select value={formData.stadiumId} onValueChange={v => setFormData(f => ({ ...f, stadiumId: v }))}>
                                             <SelectTrigger><SelectValue placeholder="Select venue" /></SelectTrigger>
                                             <SelectContent>
-                                                {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>

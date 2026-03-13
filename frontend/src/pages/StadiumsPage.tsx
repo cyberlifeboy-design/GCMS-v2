@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility } from 'lucide-react';
+import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility, PowerOff, Power, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 interface FleetStats {
@@ -38,6 +38,7 @@ export function StadiumsPage() {
     const [modal, setModal] = useState<{ open: boolean; mode: 'create' | 'edit'; stadium?: Stadium }>({ open: false, mode: 'create' });
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({ name: '', code: '', location: '' });
+    const [deleteConfirm, setDeleteConfirm] = useState<Stadium | null>(null);
 
     const loadStadiums = async () => {
         try {
@@ -77,6 +78,29 @@ export function StadiumsPage() {
         }
     };
 
+    const handleToggleActive = async (stadium: Stadium) => {
+        try {
+            await stadiumsApi.toggleActive(stadium.id, !stadium.isActive);
+            loadStadiums();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update stadium status');
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!deleteConfirm) return;
+        setSubmitting(true);
+        try {
+            await stadiumsApi.delete(deleteConfirm.id);
+            setDeleteConfirm(null);
+            loadStadiums();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to delete stadium');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     if (!isSuperAdmin) {
         return <div className="p-8 text-center text-muted-foreground">Access denied. SuperAdmin only.</div>;
     }
@@ -109,20 +133,26 @@ export function StadiumsPage() {
                                 <TableHead>Venue Name</TableHead>
                                 <TableHead>Code</TableHead>
                                 <TableHead>Location</TableHead>
+                                <TableHead>Status</TableHead>
                                 <TableHead>Fleet</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No venues found</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No venues found</TableCell></TableRow>
                             ) : filtered.map(s => (
-                                <TableRow key={s.id}>
+                                <TableRow key={s.id} className={!s.isActive ? 'opacity-60 bg-muted/30' : ''}>
                                     <TableCell className="font-semibold">{s.name}</TableCell>
                                     <TableCell><code className="bg-muted px-1 rounded">{s.code}</code></TableCell>
                                     <TableCell className="flex items-center gap-1 text-muted-foreground"><MapPin className="w-3 h-3" /> {s.location}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={s.isActive ? 'default' : 'secondary'} className={s.isActive ? 'bg-green-600' : 'bg-gray-400'}>
+                                            {s.isActive ? 'Active' : 'Inactive'}
+                                        </Badge>
+                                    </TableCell>
                                     <TableCell>
                                         {s.fleetStats ? (
                                             <div className="flex items-center gap-2 flex-wrap">
@@ -153,10 +183,18 @@ export function StadiumsPage() {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm" onClick={() => {
-                                            setFormData({ name: s.name, code: s.code, location: s.location });
-                                            setModal({ open: true, mode: 'edit', stadium: s });
-                                        }}><Edit2 className="w-4 h-4" /></Button>
+                                        <div className="flex justify-end gap-1">
+                                            <Button variant="ghost" size="sm" title="Edit" onClick={() => {
+                                                setFormData({ name: s.name, code: s.code, location: s.location });
+                                                setModal({ open: true, mode: 'edit', stadium: s });
+                                            }}><Edit2 className="w-4 h-4" /></Button>
+                                            <Button variant="ghost" size="sm" title={s.isActive ? 'Make Inactive' : 'Make Active'} onClick={() => handleToggleActive(s)}>
+                                                {s.isActive ? <PowerOff className="w-4 h-4 text-yellow-600" /> : <Power className="w-4 h-4 text-green-600" />}
+                                            </Button>
+                                            <Button variant="ghost" size="sm" title="Delete" onClick={() => setDeleteConfirm(s)}>
+                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -191,6 +229,26 @@ export function StadiumsPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={!!deleteConfirm} onOpenChange={o => !o && setDeleteConfirm(null)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Delete Stadium</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete <strong>{deleteConfirm?.name}</strong>?
+                            This action cannot be undone. If the stadium has associated carts, users, or departments, deletion will be prevented — use "Make Inactive" instead.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+                            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Delete Stadium
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

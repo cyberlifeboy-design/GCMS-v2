@@ -28,6 +28,8 @@ const updateUserSchema = z.object({
     isActive: z.boolean().optional(),
     isBlocked: z.boolean().optional(),
     assignAllStadiums: z.boolean().optional(),
+    grantedPages: z.array(z.string()).optional(),
+    venueReportAccess: z.enum(['assigned', 'all']).optional(),
 });
 
 const updatePreferencesSchema = z.object({
