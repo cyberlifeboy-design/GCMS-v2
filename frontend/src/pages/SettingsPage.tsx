@@ -133,7 +133,6 @@ export function SettingsPage() {
 
     // New settings (SuperAdmin only)
     const [maintenanceNotificationEmails, setMaintenanceNotificationEmails] = useState('');
-    const [handoverTimeoutMinutes, setHandoverTimeoutMinutes] = useState(120);
     // Timeout in days+hours for display
     const [handoverTimeoutDays, setHandoverTimeoutDays] = useState(0);
     const [handoverTimeoutHoursField, setHandoverTimeoutHoursField] = useState(2);
@@ -201,7 +200,6 @@ export function SettingsPage() {
                 // New settings
                 setMaintenanceNotificationEmails(d.maintenanceNotificationEmails || '');
                 const rawMinutes = d.handoverTimeoutMinutes ?? 120;
-                setHandoverTimeoutMinutes(rawMinutes);
                 setHandoverTimeoutDays(Math.floor(rawMinutes / (24 * 60)));
                 setHandoverTimeoutHoursField(Math.floor((rawMinutes % (24 * 60)) / 60));
                 setDefaultStadiumId(d.defaultStadiumId || '');
@@ -1496,4 +1494,4 @@ function UserAccessControl() {
             </CardContent>
         </Card>
     );
-}}
+}

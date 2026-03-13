@@ -467,6 +467,7 @@ export function PublicRequestPage() {
                 </div>
             )}
         </div>
+    </div>
     );
 }
 
