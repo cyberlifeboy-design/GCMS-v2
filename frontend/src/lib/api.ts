@@ -193,6 +193,8 @@ export const usersApi = {
         apiClient.post('/users/import-requests', { requestIds }),
     updatePreferences: (data: { exportFormat?: string; exportPreferences?: Record<string, unknown>; emailNotifications?: { maintenance?: boolean; handover?: boolean; requests?: boolean; assignments?: boolean } }) =>
         apiClient.patch('/users/me/preferences', data),
+    delete: (id: string) =>
+        apiClient.delete(`/users/${id}`),
 };
 
 // Reports & Exports

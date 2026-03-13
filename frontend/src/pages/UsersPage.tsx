@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight, Edit2, Download, Ban, CheckCircle, UserPlus } from 'lucide-react';
+import { Plus, Search, Upload, Loader2, ToggleLeft, ToggleRight, Edit2, Download, Ban, CheckCircle, UserPlus, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
 import { formatDate } from '@/lib/dateUtils';
@@ -93,6 +93,11 @@ export function UsersPage() {
     const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false });
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [departments, setDepartments] = useState<Array<{ id: string; name: string; stadiumId: string }>>([]);
+
+    // Delete
+    const [deleteUser, setDeleteUser] = useState<User | null>(null);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     // Import from requests
     const [pendingRequests, setPendingRequests] = useState<CarRequest[]>([]);
@@ -205,6 +210,26 @@ export function UsersPage() {
             alert(err.response?.data?.error || 'Failed to create user');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const openDeleteConfirm = (u: User) => {
+        setDeleteUser(u);
+        setDeleteConfirmOpen(true);
+    };
+
+    const handleDelete = async () => {
+        if (!deleteUser) return;
+        setDeleting(true);
+        try {
+            await usersApi.delete(deleteUser.id);
+            setDeleteConfirmOpen(false);
+            setDeleteUser(null);
+            loadUsers();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to delete user');
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -484,6 +509,16 @@ export function UsersPage() {
                                                                     <Edit2 className="w-4 h-4" />
                                                                 </Button>
                                                                         {(role === 'Admin' || role === 'SuperAdmin') && (<>
+                                                                        {isSuperAdmin && u.id !== currentUser?.id && (
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                onClick={() => openDeleteConfirm(u)}
+                                                                                title="Delete user"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                                                            </Button>
+                                                                        )}
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="sm"
@@ -884,6 +919,25 @@ export function UsersPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Delete User</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to permanently delete <strong>{deleteUser?.name}</strong> ({deleteUser?.email})? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+                        <Button type="button" variant="destructive" onClick={handleDelete} disabled={deleting}>
+                            {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Delete User
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
