@@ -98,6 +98,79 @@ export class ReportsService {
         });
     }
 
+    async getFaAuditTrail(filters: { stadiumId?: string; userId?: string; startDate?: Date; endDate?: Date; limit?: number; offset?: number }) {
+        // Build where clause for handover logs (FA's primary activity)
+        const handoverWhere: any = {
+            user: { role: 'FA' },
+        };
+        if (filters.stadiumId) handoverWhere.fleet = { stadiumId: filters.stadiumId };
+        if (filters.userId) handoverWhere.userId = filters.userId;
+        if (filters.startDate || filters.endDate) {
+            handoverWhere.timestamp = {
+                ...(filters.startDate && { gte: filters.startDate }),
+                ...(filters.endDate && { lte: filters.endDate }),
+            };
+        }
+
+        const [handoverLogs, total] = await Promise.all([
+            this.prisma.handoverLog.findMany({
+                where: handoverWhere,
+                include: {
+                    fleet: {
+                        select: {
+                            carNumber: true,
+                            carType: true,
+                            stadium: { select: { id: true, name: true, code: true } },
+                            department: { select: { code: true, name: true } },
+                        },
+                    },
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            role: true,
+                            accreditationNumber: true,
+                            department: { select: { code: true, name: true } },
+                        },
+                    },
+                },
+                orderBy: { timestamp: 'desc' },
+                skip: filters.offset || 0,
+                take: filters.limit || 50,
+            }),
+            this.prisma.handoverLog.count({ where: handoverWhere }),
+        ]);
+
+        return {
+            logs: handoverLogs.map(log => ({
+                id: log.id,
+                action: log.action,
+                timestamp: log.timestamp,
+                fa: {
+                    id: log.user.id,
+                    name: log.user.name,
+                    email: log.user.email,
+                    accreditationNumber: log.user.accreditationNumber,
+                    departmentCode: log.user.department?.code || null,
+                    departmentName: log.user.department?.name || null,
+                },
+                car: {
+                    carNumber: log.fleet.carNumber,
+                    carType: log.fleet.carType,
+                },
+                stadium: {
+                    id: log.fleet.stadium.id,
+                    name: log.fleet.stadium.name,
+                    code: log.fleet.stadium.code,
+                },
+                departmentCode: log.fleet.department?.code || log.user.department?.code || null,
+                conditionNotes: log.conditionNotes || null,
+            })),
+            total,
+        };
+    }
+
     async getHandoverReports(filters: HandoverFilters) {
         const where: any = {
             ...(filters.fleetId && { fleetId: filters.fleetId }),

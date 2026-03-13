@@ -11,6 +11,9 @@ router.use(authenticate);
 // Export audit logs (SuperAdmin only)
 router.get('/audit', requireRole('SuperAdmin'), auditLog(), ReportsController.exportAuditLogs);
 
+// FA user audit trail (Admin + SuperAdmin)
+router.get('/fa-trail', requireRole('SuperAdmin', 'Admin'), ReportsController.getFaAuditTrail);
+
 // Get utilization stats (SuperAdmin/Admin/Observer)
 router.get('/utilization', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUtilization);
 

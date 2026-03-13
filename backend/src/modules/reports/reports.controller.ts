@@ -8,6 +8,34 @@ import PptxGenJS from 'pptxgenjs';
 import { prisma } from '../../config/database';
 
 export class ReportsController {
+    static async getFaAuditTrail(req: AuthRequest, res: Response) {
+        try {
+            const { userId, startDate, endDate, page = '1', limit = '50' } = req.query as Record<string, string>;
+            let stadiumId = req.query.stadiumId as string | undefined;
+
+            // Admin: scoped to own stadium only
+            if (req.user?.role === 'Admin') {
+                stadiumId = req.user.stadiumId || undefined;
+            }
+
+            const pageNum = Math.max(1, parseInt(page));
+            const pageSize = Math.min(100, parseInt(limit) || 50);
+
+            const result = await reportsService.getFaAuditTrail({
+                stadiumId,
+                userId,
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate ? new Date(endDate) : undefined,
+                limit: pageSize,
+                offset: (pageNum - 1) * pageSize,
+            });
+
+            res.status(200).json({ ...result, page: pageNum, limit: pageSize });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch FA audit trail' });
+        }
+    }
+
     static async exportAuditLogs(req: AuthRequest, res: Response) {
         try {
             const logs = await reportsService.getAuditLogs({});

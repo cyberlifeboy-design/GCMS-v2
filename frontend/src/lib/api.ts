@@ -217,6 +217,8 @@ export const reportsApi = {
         apiClient.get('/reports/full', { responseType: 'blob' }),
     getAuditLog: () =>
         apiClient.get('/reports/audit'),
+    getFaTrail: (params?: Record<string, unknown>) =>
+        apiClient.get('/reports/fa-trail', { params }),
 
     // Stadium reports
     getStadiumReports: (params?: Record<string, unknown>) =>

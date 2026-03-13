@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { reportsApi, stadiumsApi } from '@/lib/api';
+import { reportsApi, stadiumsApi, usersApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag } from 'lucide-react';
+import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag, Activity, Search } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
 interface UtilizationData {
@@ -98,6 +99,30 @@ export function ReportsPage() {
     const [selectedLabelStadium, setSelectedLabelStadium] = useState<string>('');
     const [allStadiums, setAllStadiums] = useState<Array<{id: string; name: string; code: string}>>([]);
 
+    // FA Audit Trail state
+    const [faTrailLogs, setFaTrailLogs] = useState<any[]>([]);
+    const [faTrailTotal, setFaTrailTotal] = useState(0);
+    const [faTrailPage, setFaTrailPage] = useState(1);
+    const [faTrailLoading, setFaTrailLoading] = useState(false);
+    const [faTrailStadiumFilter, setFaTrailStadiumFilter] = useState<string>(() =>
+        role === 'Admin' && user?.stadiumId ? user.stadiumId : ''
+    );
+    const [faTrailUserFilter, setFaTrailUserFilter] = useState<string>('');
+    const [faUsers, setFaUsers] = useState<Array<{id: string; name: string; email: string}>>([]);
+
+    const loadFaTrail = async (page = 1) => {
+        setFaTrailLoading(true);
+        try {
+            const params: Record<string, unknown> = { page, limit: 25 };
+            if (faTrailStadiumFilter) params.stadiumId = faTrailStadiumFilter;
+            if (faTrailUserFilter) params.userId = faTrailUserFilter;
+            const res = await reportsApi.getFaTrail(params);
+            setFaTrailLogs(res.data.logs || []);
+            setFaTrailTotal(res.data.total || 0);
+            setFaTrailPage(page);
+        } catch { } finally { setFaTrailLoading(false); }
+    };
+
     useEffect(() => {
         if (!canViewReports) return;
         const loadUtil = async () => {
@@ -112,8 +137,20 @@ export function ReportsPage() {
                 setAllStadiums(res.data.data || res.data || []);
             } catch { }
         };
+        const loadFaUsersList = async () => {
+            try {
+                const res = await usersApi.getAll({ role: 'FA' });
+                const users = res.data.data || res.data || [];
+                // Admin scoping: filter to own stadium
+                const filtered = role === 'Admin' && user?.stadiumId
+                    ? users.filter((u: any) => u.stadiumId === user.stadiumId)
+                    : users;
+                setFaUsers(filtered);
+            } catch { }
+        };
         loadUtil();
         loadStadiumsList();
+        if (role === 'SuperAdmin' || role === 'Admin') loadFaUsersList();
     }, [canViewReports]);
 
     const loadStadiumReports = async () => {
@@ -266,7 +303,7 @@ export function ReportsPage() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="stadiums" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="stadiums" className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Stadium Reports
@@ -278,6 +315,10 @@ export function ReportsPage() {
                     <TabsTrigger value="users" className="flex items-center gap-2">
                         <Users className="w-4 h-4" />
                         User Reports
+                    </TabsTrigger>
+                    <TabsTrigger value="fa-audit" className="flex items-center gap-2">
+                        <Activity className="w-4 h-4" />
+                        FA Audit Trail
                     </TabsTrigger>
                     <TabsTrigger value="labels" className="flex items-center gap-2">
                         <Tag className="w-4 h-4" />
@@ -681,6 +722,135 @@ export function ReportsPage() {
                                     </div>
                                 );
                             })()}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* FA Audit Trail Tab */}
+                <TabsContent value="fa-audit">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div>
+                                    <CardTitle>FA User Audit Trail</CardTitle>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        All check-in, check-out, and issue report actions by FA users
+                                        {role === 'Admin' ? ' in your stadium' : ' across all stadiums'}.
+                                    </p>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {/* Filters */}
+                                <div className="flex gap-3 flex-wrap items-end">
+                                    {role !== 'Admin' && (
+                                        <div className="space-y-1 min-w-[180px]">
+                                            <p className="text-xs font-medium text-muted-foreground">Stadium</p>
+                                            <Select value={faTrailStadiumFilter || '__all__'} onValueChange={v => setFaTrailStadiumFilter(v === '__all__' ? '' : v)}>
+                                                <SelectTrigger className="w-48">
+                                                    <SelectValue placeholder="All Stadiums" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="__all__">All Stadiums</SelectItem>
+                                                    {allStadiums.map(s => (
+                                                        <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+                                    <div className="space-y-1 min-w-[180px]">
+                                        <p className="text-xs font-medium text-muted-foreground">FA User</p>
+                                        <Select value={faTrailUserFilter || '__all__'} onValueChange={v => setFaTrailUserFilter(v === '__all__' ? '' : v)}>
+                                            <SelectTrigger className="w-48">
+                                                <SelectValue placeholder="All FA Users" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__all__">All FA Users</SelectItem>
+                                                {faUsers.map(u => (
+                                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <Button onClick={() => loadFaTrail(1)} disabled={faTrailLoading} size="sm">
+                                        {faTrailLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                                        Load Trail
+                                    </Button>
+                                </div>
+
+                                {/* Table */}
+                                {faTrailLogs.length > 0 ? (
+                                    <div className="space-y-2">
+                                        <div className="overflow-x-auto rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Timestamp</TableHead>
+                                                        <TableHead>FA User</TableHead>
+                                                        <TableHead>Dept Code</TableHead>
+                                                        <TableHead>Action</TableHead>
+                                                        <TableHead>Car #</TableHead>
+                                                        <TableHead>Venue</TableHead>
+                                                        <TableHead>Notes</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {faTrailLogs.map((log: any) => (
+                                                        <TableRow key={log.id}>
+                                                            <TableCell className="text-xs whitespace-nowrap">
+                                                                {new Date(log.timestamp).toLocaleString()}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="text-sm font-medium">{log.fa?.name}</div>
+                                                                <div className="text-xs text-muted-foreground">{log.fa?.accreditationNumber}</div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant="outline" className="font-mono text-xs">
+                                                                    {log.departmentCode || log.fa?.departmentCode || '—'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge className={
+                                                                    log.action === 'CheckedIn' ? 'bg-green-100 text-green-800' :
+                                                                    log.action === 'CheckedOut' ? 'bg-blue-100 text-blue-800' :
+                                                                    'bg-orange-100 text-orange-800'
+                                                                }>
+                                                                    {log.action === 'CheckedIn' ? 'Check In' :
+                                                                     log.action === 'CheckedOut' ? 'Check Out' : 'Issue Reported'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="font-mono font-semibold">{log.car?.carNumber}</TableCell>
+                                                            <TableCell className="text-sm">{log.stadium?.code || log.stadium?.name}</TableCell>
+                                                            <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                                                                {log.conditionNotes || '—'}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                            <span>Showing {faTrailLogs.length} of {faTrailTotal} entries</span>
+                                            <div className="flex gap-2">
+                                                <Button size="sm" variant="outline" onClick={() => loadFaTrail(faTrailPage - 1)} disabled={faTrailPage <= 1 || faTrailLoading}>Previous</Button>
+                                                <span className="self-center">Page {faTrailPage}</span>
+                                                <Button size="sm" variant="outline" onClick={() => loadFaTrail(faTrailPage + 1)} disabled={faTrailLogs.length < 25 || faTrailLoading}>Next</Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : faTrailLoading ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12 text-muted-foreground">
+                                        <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                        <p>Click "Load Trail" to view FA user activity</p>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
