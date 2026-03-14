@@ -283,10 +283,10 @@ export function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     {user?.role !== 'Admin' && stadiums.length > 0 && (
-                        <Select value={stadiumFilter} onValueChange={setStadiumFilter}>
+                        <Select value={stadiumFilter || '__all__'} onValueChange={v => setStadiumFilter(v === '__all__' ? '' : v)}>
                             <SelectTrigger className="w-44"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Stadiums</SelectItem>
+                                <SelectItem value="__all__">All Stadiums</SelectItem>
                                 {stadiums.map(s => (
                                     <SelectItem key={s.id} value={s.id}>{s.code} – {s.name}</SelectItem>
                                 ))}
