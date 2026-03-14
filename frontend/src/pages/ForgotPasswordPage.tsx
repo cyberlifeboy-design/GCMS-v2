@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { authApi } from '@/lib/api';
+import { authApi, settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,11 +8,43 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
+type Branding = { tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string };
+
+function BrandingShell({ branding, children }: { branding: Branding; children: React.ReactNode }) {
+    return (
+        <div className="min-h-screen flex flex-col bg-background">
+            {branding.headerUrl && (
+                <div className="w-full">
+                    <img src={branding.headerUrl} alt="Header Branding" className="w-full max-h-24 object-cover" />
+                </div>
+            )}
+            <div className="flex-1 flex items-center justify-center p-4">
+                {children}
+            </div>
+            {(branding.footerUrl || branding.footerText) && (
+                <div className="w-full bg-muted p-4 text-center">
+                    {branding.footerUrl && (
+                        <img src={branding.footerUrl} alt="Footer Branding" className="max-h-16 w-auto mx-auto object-contain" />
+                    )}
+                    {branding.footerText && (
+                        <p className="text-sm text-muted-foreground mt-2">{branding.footerText}</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [branding, setBranding] = useState<Branding>({});
+
+    useEffect(() => {
+        settingsApi.get().then(res => setBranding(res.data.data || {})).catch(() => {});
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,7 +67,7 @@ export function ForgotPasswordPage() {
 
     if (isSubmitted) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background p-4">
+            <BrandingShell branding={branding}>
                 <Card className="w-full max-w-md text-center">
                     <CardHeader>
                         <div className="flex justify-center mb-4">
@@ -60,15 +92,20 @@ export function ForgotPasswordPage() {
                         </Button>
                     </CardFooter>
                 </Card>
-            </div>
+            </BrandingShell>
         );
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <BrandingShell branding={branding}>
             <Card className="w-full max-w-md">
-                <CardHeader>
-                    <CardTitle>Forgot Password</CardTitle>
+                <CardHeader className="text-center space-y-2">
+                    {branding.logoUrl && (
+                        <div className="flex justify-center mb-2">
+                            <img src={branding.logoUrl} alt="Logo" className="h-16 w-auto object-contain" />
+                        </div>
+                    )}
+                    <CardTitle>{branding.tournamentName || 'GCMS'} – Forgot Password</CardTitle>
                     <CardDescription>
                         Enter your email address and we'll send you a link to reset your password.
                     </CardDescription>
@@ -100,6 +137,6 @@ export function ForgotPasswordPage() {
                     </Button>
                 </CardFooter>
             </Card>
-        </div>
+        </BrandingShell>
     );
 }
