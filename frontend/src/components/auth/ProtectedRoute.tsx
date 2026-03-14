@@ -48,3 +48,23 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
     return verified ? <>{children}</> : <Navigate to="/login" replace />;
 }
+
+/**
+ * Guards a page by its pageKey — redirects to dashboard if the user's
+ * grantedPages list is non-empty and does not include the given pageKey.
+ * SuperAdmin and FA users are never restricted.
+ */
+export function PageGuard({ pageKey, children }: { pageKey: string; children: React.ReactNode }) {
+    const { user } = useAuthStore();
+
+    if (!user || user.role === 'SuperAdmin' || user.role === 'FA') {
+        return <>{children}</>;
+    }
+
+    const granted = user.grantedPages;
+    if (granted && granted.length > 0 && !granted.includes(pageKey)) {
+        return <Navigate to="/" replace />;
+    }
+
+    return <>{children}</>;
+}

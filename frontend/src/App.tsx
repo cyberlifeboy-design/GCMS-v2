@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { ProtectedRoute, PageGuard } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -62,17 +62,17 @@ function AppContent() {
                             <MainLayout>
                                 <Routes>
                                     <Route path="/" element={<HomeRedirect />} />
-                                    <Route path="/fleet" element={<FleetPage />} />
-                                    <Route path="/handover" element={<HandoverPage />} />
-                                    <Route path="/maintenance" element={<MaintenancePage />} />
-                                    <Route path="/users" element={<UsersPage />} />
-                                    <Route path="/stadiums" element={<StadiumsPage />} />
-                                    <Route path="/departments" element={<DepartmentsPage />} />
-                                    <Route path="/fleet-management" element={<FleetManagementPage />} />
-                                    <Route path="/reports" element={<ReportsPage />} />
-                                    <Route path="/notifications" element={<NotificationCenterPage />} />
-                                    <Route path="/settings" element={<SettingsPage />} />
-                                    <Route path="/requests" element={<RequestsManagementPage />} />
+                                    <Route path="/fleet" element={<PageGuard pageKey="fleet"><FleetPage /></PageGuard>} />
+                                    <Route path="/handover" element={<PageGuard pageKey="handover"><HandoverPage /></PageGuard>} />
+                                    <Route path="/maintenance" element={<PageGuard pageKey="maintenance"><MaintenancePage /></PageGuard>} />
+                                    <Route path="/users" element={<PageGuard pageKey="users"><UsersPage /></PageGuard>} />
+                                    <Route path="/stadiums" element={<PageGuard pageKey="stadiums"><StadiumsPage /></PageGuard>} />
+                                    <Route path="/departments" element={<PageGuard pageKey="departments"><DepartmentsPage /></PageGuard>} />
+                                    <Route path="/fleet-management" element={<PageGuard pageKey="fleet"><FleetManagementPage /></PageGuard>} />
+                                    <Route path="/reports" element={<PageGuard pageKey="reports"><ReportsPage /></PageGuard>} />
+                                    <Route path="/notifications" element={<PageGuard pageKey="notifications"><NotificationCenterPage /></PageGuard>} />
+                                    <Route path="/settings" element={<PageGuard pageKey="settings"><SettingsPage /></PageGuard>} />
+                                    <Route path="/requests" element={<PageGuard pageKey="requests"><RequestsManagementPage /></PageGuard>} />
                                     <Route path="/profile" element={<ProfilePage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>

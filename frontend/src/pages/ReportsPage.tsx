@@ -3,7 +3,6 @@ import { reportsApi, stadiumsApi, usersApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -79,6 +78,11 @@ export function ReportsPage() {
     const role = user?.role;
     const canViewReports = role === 'SuperAdmin' || role === 'Admin' || role === 'Observer';
     const defaultExportFormat = user?.exportFormat || 'xlsx';
+    // Locked to a specific venue when Admin, or Observer with 'assigned' venue access
+    const isStadiumLocked = !!(user?.stadiumId && (
+        role === 'Admin' ||
+        (role === 'Observer' && user.venueReportAccess === 'assigned')
+    ));
 
     const [utilization, setUtilization] = useState<UtilizationData | null>(null);
     const [stadiumReports, setStadiumReports] = useState<StadiumReport[]>([]);
@@ -92,7 +96,10 @@ export function ReportsPage() {
     const [exporting, setExporting] = useState<string | null>(null);
 
     const [selectedStadiumFilter, setSelectedStadiumFilter] = useState<string>(() => {
-        if (user?.role === 'Admin' && user?.stadiumId) return user.stadiumId;
+        if (user?.stadiumId && (
+            user.role === 'Admin' ||
+            (user.role === 'Observer' && user.venueReportAccess === 'assigned')
+        )) return user.stadiumId;
         return '';
     });
     const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('');
@@ -333,7 +340,7 @@ export function ReportsPage() {
                             <div className="flex items-center justify-between flex-wrap gap-2">
                                 <CardTitle>Stadium-wise Report</CardTitle>
                                 <div className="flex gap-2 flex-wrap items-center">
-                                    {role !== 'Admin' && (
+                                    {!isStadiumLocked && (
                                         <Select value={selectedStadiumFilter || '__all__'} onValueChange={v => setSelectedStadiumFilter(v === '__all__' ? '' : v)}>
                                             <SelectTrigger className="w-44"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
                                             <SelectContent>
@@ -440,7 +447,7 @@ export function ReportsPage() {
                             <div className="flex items-center justify-between">
                                 <CardTitle>Department-wise Report</CardTitle>
                                 <div className="flex gap-2 items-center">
-                                    {role !== 'Admin' && (
+                                    {!isStadiumLocked && (
                                         <Select value={selectedStadiumFilter || '__all__'} onValueChange={v => setSelectedStadiumFilter(v === '__all__' ? '' : v)}>
                                             <SelectTrigger className="w-48">
                                                 <SelectValue placeholder="All Stadiums" />
@@ -744,7 +751,7 @@ export function ReportsPage() {
                             <div className="space-y-4">
                                 {/* Filters */}
                                 <div className="flex gap-3 flex-wrap items-end">
-                                    {role !== 'Admin' && (
+                                    {!isStadiumLocked && (
                                         <div className="space-y-1 min-w-[180px]">
                                             <p className="text-xs font-medium text-muted-foreground">Stadium</p>
                                             <Select value={faTrailStadiumFilter || '__all__'} onValueChange={v => setFaTrailStadiumFilter(v === '__all__' ? '' : v)}>

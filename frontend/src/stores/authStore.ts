@@ -73,6 +73,8 @@ export interface AuthUser {
     isActive: boolean;
     exportFormat?: 'xlsx' | 'pdf' | 'docx';
     exportPreferences?: ExportPreferences;
+    grantedPages?: string[];
+    venueReportAccess?: string;
 }
 
 interface AuthState {
