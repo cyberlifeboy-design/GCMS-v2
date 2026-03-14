@@ -6,6 +6,38 @@ import PDFDocument from 'pdfkit';
 import { Document, Packer, Paragraph, TextRun, Header, Footer, PageOrientation, AlignmentType } from 'docx';
 import PptxGenJS from 'pptxgenjs';
 import { prisma } from '../../config/database';
+import { minioClient } from '../../config/storage';
+
+/**
+ * Fetch an image stored in MinIO (via /api/v1/storage/<bucket>/<file> URLs)
+ * or any reachable http/https URL. Returns a Buffer or null on failure.
+ */
+async function fetchImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
+    if (!url) return null;
+    try {
+        // Internal MinIO path: /api/v1/storage/<bucket>/<filename>
+        const minioMatch = url.match(/\/api\/v1\/storage\/([^/]+)\/(.+)$/);
+        if (minioMatch) {
+            const [, bucket, objectName] = minioMatch;
+            const stream = await minioClient.getObject(bucket, objectName);
+            return await new Promise<Buffer>((resolve, reject) => {
+                const chunks: Buffer[] = [];
+                stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+                stream.on('end', () => resolve(Buffer.concat(chunks)));
+                stream.on('error', reject);
+            });
+        }
+        // External URL (http/https)
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            return Buffer.from(await res.arrayBuffer());
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
 
 export class ReportsController {
     static async getFaAuditTrail(req: AuthRequest, res: Response) {
@@ -910,60 +942,128 @@ export class ReportsController {
                 prisma.systemSettings.findFirst(),
             ]);
 
-            // Create PDF in landscape
-            const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+            // Pre-fetch branding images as buffers (MinIO direct access)
+            const [logoBuffer, headerBuffer, footerBuffer] = await Promise.all([
+                fetchImageBuffer(settings?.logoUrl),
+                fetchImageBuffer(settings?.headerUrl),
+                fetchImageBuffer(settings?.footerUrl),
+            ]);
+
+            // A4 landscape in points: 841.89 × 595.28
+            const doc = new PDFDocument({ margin: 0, size: 'A4', layout: 'landscape' });
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'attachment; filename=labels.pdf');
             doc.pipe(res);
 
-            const pageWidth = doc.page.width;
-            const pageHeight = doc.page.height;
-            const margin = 40;
+            const pageW = doc.page.width;   // ~842
+            const pageH = doc.page.height;  // ~595
+            const margin = 36;
+
+            // Image sizing constants
+            const HEADER_IMG_H = 60;   // header banner max height
+            const LOGO_SIZE    = 52;   // logo square max dimension
+            const FOOTER_IMG_H = 44;   // footer banner max height
 
             labelsData.forEach((label, index) => {
                 if (index > 0) doc.addPage();
 
-                // Header logo (top-left)
-                if (settings?.logoUrl) {
-                    try {
-                        // Use tournament name as text header since image URLs may not be accessible server-side
-                        doc.fontSize(14).font('Helvetica-Bold').fillColor('#333333')
-                            .text(settings.tournamentName || 'GCMS', margin, 20, { width: pageWidth - margin * 2 });
-                    } catch (_) { /* ignore header errors */ }
-                } else if (settings?.tournamentName) {
-                    doc.fontSize(14).font('Helvetica-Bold').fillColor('#333333')
-                        .text(settings.tournamentName, margin, 20, { width: pageWidth - margin * 2 });
+                let contentTop = margin;
+
+                // ── Header banner image (full width) ──────────────────────
+                if (headerBuffer) {
+                    doc.image(headerBuffer, 0, 0, {
+                        width: pageW,
+                        height: HEADER_IMG_H,
+                        cover: [pageW, HEADER_IMG_H],
+                    });
+                    contentTop = HEADER_IMG_H + 8;
                 }
 
-                // Calculate car number font size (220 for ≤3 chars, scale down for more)
+                // ── Logo + Tournament name row ────────────────────────────
+                const hasLogo = !!logoBuffer;
+                const logoX = margin;
+                const logoY = contentTop;
+                const nameX = hasLogo ? margin + LOGO_SIZE + 10 : margin;
+
+                if (hasLogo) {
+                    doc.image(logoBuffer!, logoX, logoY, {
+                        fit: [LOGO_SIZE, LOGO_SIZE],
+                    });
+                }
+
+                if (settings?.tournamentName) {
+                    doc.fontSize(hasLogo ? 16 : 14)
+                        .font('Helvetica-Bold')
+                        .fillColor('#222222')
+                        .text(settings.tournamentName, nameX, logoY + (hasLogo ? (LOGO_SIZE - 20) / 2 : 0), {
+                            width: pageW - nameX - margin,
+                            align: hasLogo ? 'left' : 'center',
+                            lineBreak: false,
+                        });
+                }
+
+                contentTop = Math.max(contentTop, logoY + (hasLogo ? LOGO_SIZE : 20)) + 12;
+
+                // ── Footer area ───────────────────────────────────────────
+                const footerTextH = settings?.footerText ? 20 : 0;
+                const footerH = (footerBuffer ? FOOTER_IMG_H : 0) + footerTextH + (footerBuffer || settings?.footerText ? 8 : 0);
+                const footerTop = pageH - margin - footerH;
+
+                // ── Car number – fills the space between header and footer ─
                 const carNum = label.carNumber;
-                let carFontSize = 220;
-                if (carNum.length > 3) carFontSize = Math.max(80, Math.floor(220 * 3 / carNum.length));
+                const availH = footerTop - contentTop - 20;
+                const availW = pageW - margin * 2;
 
-                // Center the car number vertically
-                const centerY = pageHeight / 2 - 60;
+                // Scale font to fit both width and height
+                let carFontSize = Math.min(availH * 0.75, 240);
+                // Reduce for longer numbers (>3 chars)
+                if (carNum.length > 3) {
+                    carFontSize = Math.min(carFontSize, Math.floor(availW * 0.72 / carNum.length));
+                }
+                carFontSize = Math.max(carFontSize, 60);
 
-                doc.fontSize(carFontSize).font('Helvetica-Bold').fillColor('#000000')
-                    .text(carNum, margin, centerY, {
-                        width: pageWidth - margin * 2,
+                const deptCode = label.departmentCode || '';
+                const deptFontSize = Math.min(Math.floor(carFontSize * 0.28), 56);
+
+                const totalTextH = carFontSize * 0.85 + (deptCode ? deptFontSize + 8 : 0);
+                const textStartY = contentTop + (availH - totalTextH) / 2;
+
+                doc.fontSize(carFontSize)
+                    .font('Helvetica-Bold')
+                    .fillColor('#000000')
+                    .text(carNum, margin, textStartY, {
+                        width: availW,
                         align: 'center',
                         lineBreak: false,
                     });
 
-                // Department code below car number
-                const deptCode = label.departmentCode || '—';
-                doc.fontSize(48).font('Helvetica-Bold').fillColor('#333333')
-                    .text(deptCode, margin, centerY + carFontSize * 0.85, {
-                        width: pageWidth - margin * 2,
-                        align: 'center',
-                        lineBreak: false,
-                    });
+                if (deptCode) {
+                    doc.fontSize(deptFontSize)
+                        .font('Helvetica-Bold')
+                        .fillColor('#444444')
+                        .text(deptCode, margin, textStartY + carFontSize * 0.82, {
+                            width: availW,
+                            align: 'center',
+                            lineBreak: false,
+                        });
+                }
 
-                // Footer (bottom)
+                // ── Footer image ──────────────────────────────────────────
+                let currentFooterY = footerTop;
+                if (footerBuffer) {
+                    doc.image(footerBuffer, 0, currentFooterY, {
+                        width: pageW,
+                        height: FOOTER_IMG_H,
+                        cover: [pageW, FOOTER_IMG_H],
+                    });
+                    currentFooterY += FOOTER_IMG_H + 4;
+                }
                 if (settings?.footerText) {
-                    doc.fontSize(12).font('Helvetica').fillColor('#666666')
-                        .text(settings.footerText, margin, pageHeight - 40, {
-                            width: pageWidth - margin * 2,
+                    doc.fontSize(10)
+                        .font('Helvetica')
+                        .fillColor('#666666')
+                        .text(settings.footerText, margin, currentFooterY, {
+                            width: availW,
                             align: 'center',
                         });
                 }
@@ -971,7 +1071,7 @@ export class ReportsController {
 
             if (labelsData.length === 0) {
                 doc.fontSize(16).font('Helvetica').fillColor('#666666')
-                    .text('No assigned cars found for the selected criteria.', { align: 'center' });
+                    .text('No assigned cars found for the selected criteria.', margin, pageH / 2, { align: 'center', width: doc.page.width - margin * 2 });
             }
 
             doc.end();
