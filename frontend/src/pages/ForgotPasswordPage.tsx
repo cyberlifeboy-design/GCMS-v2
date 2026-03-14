@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { authApi, settingsApi } from '@/lib/api';
+import { authApi, publicSettingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,7 +43,7 @@ export function ForgotPasswordPage() {
     const [branding, setBranding] = useState<Branding>({});
 
     useEffect(() => {
-        settingsApi.get().then(res => setBranding(res.data.data || {})).catch(() => {});
+        publicSettingsApi.getBranding().then(res => setBranding(res.data || {})).catch(() => {});
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {

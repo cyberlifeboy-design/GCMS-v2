@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { settingsApi } from '@/lib/api';
+import { publicSettingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,8 +20,8 @@ export function LoginPage() {
     useEffect(() => {
         const loadBranding = async () => {
             try {
-                const res = await settingsApi.get();
-                setBranding(res.data.data || {});
+                const res = await publicSettingsApi.getBranding();
+                setBranding(res.data || {});
             } catch (e) {
                 console.error('Failed to load branding', e);
             }
