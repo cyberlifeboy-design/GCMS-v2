@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Stadium {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  location    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  fleet       Fleet[]
+  users       User[]
+  departments Department[]
+  carRequests CarRequest[]
+}
+
+model Department {
+  id           String   @id @default(cuid())
+  name         String
+  code         String?
+  stadiumId    String
+  stadium      Stadium  @relation(fields: [stadiumId], references: [id])
+  focalPointId String?
+  focalPoint   User?    @relation("DepartmentFocalPoint", fields: [focalPointId], references: [id])
+  users        User[]
+  fleet        Fleet[]
+  carRequests  CarRequest[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([name, stadiumId])
+  @@index([stadiumId])
+  @@index([focalPointId])
+}
+
+// Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
+// Cart statuses: Available, Assigned, Dispatched, Under Maintenance
+model Fleet {
+  id              String           @id @default(cuid())
+  carNumber       String           @unique
+  carType         String           // Cargo, Accessibility, 6-Seater, 4-Seater
+  status          String           @default("Available") // Available, Assigned, Dispatched, Under Maintenance
+  requiresVAP     Boolean          @default(false)
+  stadiumId       String
+  stadium         Stadium          @relation(fields: [stadiumId], references: [id])
+  departmentId    String?
+  department      Department?      @relation(fields: [departmentId], references: [id])
+  assignedUserId  String?          // FA user assigned to this cart
+  assignedUser    User?            @relation("FleetAssignedUser", fields: [assignedUserId], references: [id])
+  handoverLogs    HandoverLog[]
+  maintenanceLogs MaintenanceLog[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([stadiumId])
+  @@index([status])
+  @@index([assignedUserId])
+  @@index([departmentId])
+}
+
+// Roles: SuperAdmin, Admin, FA, Observer
+model User {
+  id                  String          @id @default(cuid())
+  name                String
+  email               String          @unique
+  passwordHash        String
+  role                String          // SuperAdmin, Admin, FA, Observer
+  phone               String?
+  accreditationNumber  String?        // Optional accreditation number for FA users
+  isActive            Boolean         @default(true)
+  isBlocked           Boolean         @default(false) // Block user from accessing system
+  resetPasswordToken   String?        @unique
+  resetPasswordExpires DateTime?
+  exportFormat        String          @default("xlsx") // xlsx, pdf, docx
+  exportPreferences   Json?           // Granular export preferences per report type
+  assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
+  grantedPages        String[]        @default([]) // SuperAdmin-granted page access overrides
+  venueReportAccess   String          @default("assigned") // "assigned" or "all" - controls which venue reports the user can see
+  stadiumId           String?
+  stadium             Stadium?        @relation(fields: [stadiumId], references: [id])
+  departmentId        String?
+  department          Department?     @relation(fields: [departmentId], references: [id])
+  focalPointOf        Department[]    @relation("DepartmentFocalPoint")
+  handoverLogs        HandoverLog[]
+  refreshTokens       RefreshToken[]
+  assignedCarts       Fleet[]         @relation("FleetAssignedUser")
+  maintenanceLogs     MaintenanceLog[] @relation("MaintenanceReporter")
+  reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([stadiumId])
+  @@index([role])
+  @@index([departmentId])
+  @@index([isBlocked])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Actions: CheckedIn, CheckedOut, IssueReported
+model HandoverLog {
+  id             String   @id @default(cuid())
+  fleetId        String
+  fleet          Fleet    @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  action         String   // CheckedIn, CheckedOut, IssueReported
+  timestamp      DateTime @default(now())
+  conditionNotes String?
+  photosUrls     String[] // Array of MinIO URLs (for issue reports)
+  createdAt      DateTime @default(now())
+
+  @@index([fleetId])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+// Statuses: Open, InProgress, Resolved
+model MaintenanceLog {
+  id               String    @id @default(cuid())
+  fleetId          String
+  fleet            Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  reportedById     String
+  reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
+  issueDescription String
+  photosUrls       String[]  @default([]) // Photos uploaded with issue report
+  reportedAt       DateTime  @default(now())
+  status           String    @default("Open") // Open, InProgress, Resolved
+  resolutionNotes  String?
+  resolvedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([fleetId])
+  @@index([status])
+  @@index([reportedById])
+}
+
+model SystemSettings {
+  id                            String    @id @default(cuid())
+  tournamentName                String    @default("Golf Cart Management System")
+  logoUrl                       String?
+  headerUrl                     String?
+  footerUrl                     String?
+  footerText                    String?
+  // Notification settings
+  maintenanceNotificationEmails  String?   // Comma-separated emails for maintenance alerts
+  // Handover settings
+  handoverTimeoutMinutes        Int       @default(120) // Timeout for handover status
+  defaultStadiumId              String?   // Default stadium for new users
+  // Feature toggles
+  enableMaintenanceReports      Boolean   @default(true)
+  enableHandoverPhotos          Boolean   @default(true)
+  enableFleetManagement         Boolean   @default(true)
+  enableCarRequests             Boolean   @default(true)
+  enableUserImport              Boolean   @default(true)
+  enableBulkOperations          Boolean   @default(true)
+  enableAdvancedReports         Boolean   @default(true)
+  enableAssignmentMatrix        Boolean   @default(true)
+  // System announcements (deprecated - use Announcement model)
+  systemAnnouncement            String?   // Optional system-wide announcement text
+  announcementExpiry            DateTime? // When announcement expires
+  
+  // Handover Duration Settings
+  handoverDefaultDurationDays   Int       @default(1) // Default max handover duration in days
+  handoverEventStartDate        DateTime? // Start date for event/tournament handover period
+  handoverEventEndDate          DateTime? // End date for event/tournament handover period
+  enableHandoverReminder        Boolean   @default(true) // Send reminder before timeout
+  handoverReminderHoursBefore   Int       @default(1) // Hours before timeout to send reminder
+  
+  // Timezone Settings
+  timezone                      String?   @default("UTC") // System timezone (IANA format, e.g., "America/New_York")
+  
+  updatedAt                     DateTime  @updatedAt
+  updatedById                   String?
+}
+
+// Scheduled/push announcements to users
+model Announcement {
+  id              String    @id @default(cuid())
+  title           String
+  message         String
+  type            String    @default("info") // info, warning, success, error
+  targetType      String    @default("all") // all, fas, users, selected
+  targetUserIds   String[]  @default([]) // For targeted announcements
+  targetRole      String?   // For role-based targeting (FA, Admin, etc.)
+  stadiumId       String?   // Optional stadium filter
+  createdBy       String?   // User ID who created the announcement
+  scheduledAt     DateTime? // For scheduled announcements
+  sentAt          DateTime? // When actually sent
+  expiresAt       DateTime? // When announcement expires
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([type])
+  @@index([targetType])
+  @@index([isActive])
+  @@index([scheduledAt])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String   // Fleet, User, Handover, etc.
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([timestamp])
+}
+
+// Public car request from department leads
+model CarRequest {
+  id               String    @id @default(cuid())
+  requesterName    String
+  requesterEmail   String
+  requesterPhone   String?
+  accreditationNumber String? // Optional accreditation/badge number
+  requestType      String    @default("one-time") // one-time | dedicated
+  departmentId     String
+  department       Department @relation(fields: [departmentId], references: [id])
+  stadiumId        String
+  stadium          Stadium    @relation(fields: [stadiumId], references: [id])
+  cargoCount       Int       @default(0)
+  fourSeaterCount  Int       @default(0)
+  sixSeaterCount   Int       @default(0)
+  accessibilityCount Int     @default(0)
+  notes            String?
+  requestToken     String    @unique  // Unique token for the public link
+  status           String    @default("Pending") // Pending, Approved, Rejected
+  reviewedById     String?
+  reviewedBy       User?     @relation("CarRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([stadiumId])
+  @@index([departmentId])
+  @@index([requestToken])
+}
+
+// Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
+model Notification {
+  id           String    @id @default(cuid())
+  type         String    // IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
+  title        String
+  message      String
+  entityType   String?   // Fleet, MaintenanceLog, CarRequest, User
+  entityId     String?   // ID of the related entity
+  isRead       Boolean   @default(false)
+  userId       String?   // null for broadcast notifications (all users)
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}

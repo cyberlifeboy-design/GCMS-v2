@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gcms-postgres
+    environment:
+      POSTGRES_DB: gcms
+      POSTGRES_USER: gcms_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gcms_password_2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gcms_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gcms_user -d gcms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: gcms-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    networks:
+      - gcms_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  backend:
+    build: ./backend
+    container_name: gcms-backend
+    environment:
+      - DATABASE_URL=postgresql://gcms_user:${DB_PASSWORD:-gcms_password_2024}@postgres:5432/gcms
+      - PORT=3005
+      - NODE_ENV=development
+      - CORS_ORIGIN=https://gcms.mehaisi.com
+      - MINIO_ENDPOINT=minio
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - FRONTEND_URL=https://gcms.mehaisi.com
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@gcms.local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gcms_network
+      - traefik_public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gcms-api.rule=Host(`api.gcms.mehaisi.com`) || (Host(`gcms.mehaisi.com`) && PathPrefix(`/api`))"
+      - "traefik.http.routers.gcms-api.entrypoints=web,websecure"
+      - "traefik.http.routers.gcms-api.priority=100"
+      - "traefik.http.services.gcms-api.loadbalancer.server.port=3005"
+    restart: unless-stopped
+
+  # MailHog - Development only email testing (not for production)
+  # Remove this service in production and set RESEND_API_KEY instead
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: gcms-mailhog
+    profiles:
+      - dev
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - gcms_network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: gcms-frontend
+    networks:
+      - gcms_network
+      - traefik_public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gcms.rule=Host(`gcms.mehaisi.com`)"
+      - "traefik.http.routers.gcms.entrypoints=web,websecure"
+      - "traefik.http.services.gcms.loadbalancer.server.port=4173"
+    restart: unless-stopped
+
+networks:
+  gcms_network:
+    driver: bridge
+  traefik_public:
+    external: true
+
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local

@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCMS - System Workflow Diagram</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        .header p {
+            opacity: 0.9;
+        }
+        .diagram-container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            overflow-x: auto;
+        }
+        .diagram-title {
+            font-size: 18px;
+            color: #1e3a5f;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e6ed;
+        }
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .flow-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        /* Visio-style boxes */
+        .box {
+            padding: 15px 25px;
+            border-radius: 5px;
+            text-align: center;
+            min-width: 140px;
+            font-size: 13px;
+            font-weight: 500;
+            position: relative;
+        }
+        .box-process {
+            background: #4a90d9;
+            color: white;
+            border: 2px solid #2d5a87;
+            box-shadow: 0 3px 0 #2d5a87;
+        }
+        .box-start {
+            background: #5cb85c;
+            color: white;
+            border: 2px solid #449d44;
+            border-radius: 25px;
+            box-shadow: 0 3px 0 #449d44;
+        }
+        .box-end {
+            background: #d9534f;
+            color: white;
+            border: 2px solid #c9302c;
+            border-radius: 25px;
+            box-shadow: 0 3px 0 #c9302c;
+        }
+        .box-decision {
+            background: #f0ad4e;
+            color: white;
+            border: 2px solid #ec971f;
+            transform: rotate(0deg);
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            width: 160px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .box-decision span {
+            transform: translateY(5px);
+        }
+        .box-data {
+            background: #d9edf7;
+            color: #31708f;
+            border: 2px solid #bce8f1;
+            transform: skewX(-10deg);
+        }
+        .box-data span {
+            display: inline-block;
+            transform: skewX(10deg);
+        }
+        .box-document {
+            background: #fcf8e3;
+            color: #8a6d3b;
+            border: 2px solid #faebcc;
+            position: relative;
+        }
+        .box-document::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 15px 15px 0;
+            border-color: transparent #faebcc transparent transparent;
+        }
+        /* Arrows */
+        .arrow-down {
+            width: 2px;
+            height: 30px;
+            background: #666;
+            position: relative;
+        }
+        .arrow-down::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid #666;
+        }
+        .arrow-right {
+            width: 30px;
+            height: 2px;
+            background: #666;
+            position: relative;
+        }
+        .arrow-right::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-left: 8px solid #666;
+        }
+        /* Swim lanes */
+        .swimlane-container {
+            display: flex;
+            flex-direction: column;
+            border: 2px solid #1e3a5f;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .swimlane {
+            display: flex;
+            min-height: 120px;
+            border-bottom: 1px solid #ddd;
+        }
+        .swimlane:last-child {
+            border-bottom: none;
+        }
+        .swimlane-label {
+            width: 120px;
+            background: #1e3a5f;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            text-align: center;
+            padding: 10px;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+        .swimlane-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 20px;
+            background: #fafbfc;
+        }
+        /* Entity Relationship */
+        .er-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+        }
+        .er-entity {
+            border: 2px solid #1e3a5f;
+            border-radius: 8px;
+            overflow: hidden;
+            min-width: 200px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .er-entity-header {
+            background: #1e3a5f;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .er-entity-body {
+            padding: 10px;
+            background: white;
+        }
+        .er-field {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 12px;
+        }
+        .er-field:last-child {
+            border-bottom: none;
+        }
+        .er-pk {
+            color: #d9534f;
+            font-weight: 600;
+        }
+        .er-fk {
+            color: #4a90d9;
+        }
+        /* Legend */
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .legend-box {
+            width: 30px;
+            height: 20px;
+            border-radius: 3px;
+        }
+        /* Grid layout for main workflow */
+        .workflow-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+        }
+        .workflow-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e0e6ed;
+        }
+        .workflow-section h4 {
+            color: #1e3a5f;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        /* Status badges */
+        .status-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            margin: 20px 0;
+        }
+        .status-badge {
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .status-available { background: #dff0d8; color: #3c763d; border: 2px solid #d6e9c6; }
+        .status-dispatched { background: #d9edf7; color: #31708f; border: 2px solid #bce8f1; }
+        .status-maintenance { background: #fcf8e3; color: #8a6d3b; border: 2px solid #faebcc; }
+        .status-retired { background: #f2dede; color: #a94442; border: 2px solid #ebccd1; }
+        /* Print styles */
+        @media print {
+            body { background: white; padding: 0; }
+            .diagram-container { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>GCMS - Golf Cart Management System</h1>
+        <p>System Workflow & Architecture Documentation</p>
+        <p style="font-size: 12px; margin-top: 5px;">Generated: March 21, 2026 | Repository: O96a/GCMS</p>
+    </div>
+
+    <!-- 1. System Overview -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">📊 1. System Overview</h3>
+        <div style="text-align: center;">
+            <svg width="800" height="400" viewBox="0 0 800 400">
+                <!-- Frontend Box -->
+                <rect x="50" y="50" width="180" height="120" rx="8" fill="#e8f4fd" stroke="#4a90d9" stroke-width="2"/>
+                <text x="140" y="85" text-anchor="middle" font-weight="bold" fill="#1e3a5f">FRONTEND</text>
+                <text x="140" y="105" text-anchor="middle" font-size="11" fill="#666">React + Vite</text>
+                <text x="140" y="125" text-anchor="middle" font-size="11" fill="#666">Tailwind + Zustand</text>
+                <text x="140" y="145" text-anchor="middle" font-size="11" fill="#666">Port: 5173</text>
+                
+                <!-- Arrow -->
+                <line x1="230" y1="110" x2="290" y2="110" stroke="#666" stroke-width="2"/>
+                <polygon points="290,110 280,105 280,115" fill="#666"/>
+                <text x="260" y="100" text-anchor="middle" font-size="10" fill="#666">HTTP/REST</text>
+                
+                <!-- Backend Box -->
+                <rect x="290" y="30" width="220" height="160" rx="8" fill="#fff3e0" stroke="#f0ad4e" stroke-width="2"/>
+                <text x="400" y="65" text-anchor="middle" font-weight="bold" fill="#1e3a5f">BACKEND</text>
+                <text x="400" y="85" text-anchor="middle" font-size="11" fill="#666">Node.js + Express</text>
+                <text x="400" y="105" text-anchor="middle" font-size="11" fill="#666">TypeScript + Prisma</text>
+                <text x="400" y="125" text-anchor="middle" font-size="11" fill="#666">JWT Auth</text>
+                <text x="400" y="145" text-anchor="middle" font-size="11" fill="#666">Port: 3005</text>
+                
+                <!-- Arrow to DB -->
+                <line x1="510" y1="110" x2="560" y2="110" stroke="#666" stroke-width="2"/>
+                <polygon points="560,110 550,105 550,115" fill="#666"/>
+                
+                <!-- Database Box -->
+                <rect x="560" y="50" width="180" height="120" rx="8" fill="#e8f5e9" stroke="#4caf50" stroke-width="2"/>
+                <text x="650" y="85" text-anchor="middle" font-weight="bold" fill="#1e3a5f">DATABASE</text>
+                <text x="650" y="105" text-anchor="middle" font-size="11" fill="#666">PostgreSQL</text>
+                <text x="650" y="125" text-anchor="middle" font-size="11" fill="#666">Prisma ORM</text>
+                <text x="650" y="145" text-anchor="middle" font-size="11" fill="#666">Port: 5432</text>
+                
+                <!-- MinIO Box -->
+                <rect x="560" y="200" width="180" height="80" rx="8" fill="#fce4ec" stroke="#e91e63" stroke-width="2"/>
+                <text x="650" y="235" text-anchor="middle" font-weight="bold" fill="#1e3a5f">STORAGE</text>
+                <text x="650" y="255" text-anchor="middle" font-size="11" fill="#666">MinIO (Photos)</text>
+                <text x="650" y="275" text-anchor="middle" font-size="11" fill="#666">Port: 9000</text>
+                
+                <!-- Arrow to MinIO -->
+                <line x1="400" y1="190" x2="400" y2="240" stroke="#666" stroke-width="2"/>
+                <line x1="400" y1="240" x2="560" y2="240" stroke="#666" stroke-width="2"/>
+                <polygon points="560,240 550,235 550,245" fill="#666"/>
+                
+                <!-- User icons at bottom -->
+                <rect x="50" y="300" width="700" height="80" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="1"/>
+                <text x="400" y="320" text-anchor="middle" font-weight="bold" fill="#1e3a5f">USERS</text>
+                
+                <!-- User types -->
+                <circle cx="120" cy="355" r="15" fill="#4a90d9"/>
+                <text x="120" y="360" text-anchor="middle" font-size="10" fill="white">SA</text>
+                <text x="120" y="380" text-anchor="middle" font-size="10" fill="#666">SuperAdmin</text>
+                
+                <circle cx="250" cy="355" r="15" fill="#5cb85c"/>
+                <text x="250" y="360" text-anchor="middle" font-size="10" fill="white">AD</text>
+                <text x="250" y="380" text-anchor="middle" font-size="10" fill="#666">Admin</text>
+                
+                <circle cx="380" cy="355" r="15" fill="#f0ad4e"/>
+                <text x="380" y="360" text-anchor="middle" font-size="10" fill="white">FA</text>
+                <text x="380" y="380" text-anchor="middle" font-size="10" fill="#666">Fleet Attendant</text>
+                
+                <circle cx="510" cy="355" r="15" fill="#9b59b6"/>
+                <text x="510" y="360" text-anchor="middle" font-size="10" fill="white">OB</text>
+                <text x="510" y="380" text-anchor="middle" font-size="10" fill="#666">Observer</text>
+                
+                <!-- External -->
+                <circle cx="640" cy="355" r="15" fill="#95a5a6"/>
+                <text x="640" y="360" text-anchor="middle" font-size="10" fill="white">EX</text>
+                <text x="640" y="380" text-anchor="middle" font-size="10" fill="#666">External (Public)</text>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 2. Fleet Status Flow -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">🚗 2. Fleet Status Lifecycle</h3>
+        <div style="text-align: center;">
+            <svg width="700" height="300" viewBox="0 0 700 300">
+                <!-- Available -->
+                <ellipse cx="100" cy="150" rx="70" ry="35" fill="#dff0d8" stroke="#3c763d" stroke-width="2"/>
+                <text x="100" y="145" text-anchor="middle" font-weight="bold" fill="#3c763d">Available</text>
+                <text x="100" y="160" text-anchor="middle" font-size="10" fill="#666">(Initial State)</text>
+                
+                <!-- Arrow to Dispatched -->
+                <path d="M 170 150 Q 210 150 240 120" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <text x="205" y="115" text-anchor="middle" font-size="10" fill="#4a90d9">Check-out</text>
+                
+                <!-- Dispatched -->
+                <rect x="240" y="85" width="120" height="50" rx="8" fill="#d9edf7" stroke="#31708f" stroke-width="2"/>
+                <text x="300" y="115" text-anchor="middle" font-weight="bold" fill="#31708f">Dispatched</text>
+                
+                <!-- Arrow to Check-in -->
+                <line x1="360" y1="110" x2="430" y2="110" stroke="#666" stroke-width="2"/>
+                <polygon points="430,110 420,105 420,115" fill="#666"/>
+                <text x="395" y="100" text-anchor="middle" font-size="10" fill="#5cb85c">Check-in</text>
+                
+                <!-- Check-in decision -->
+                <polygon points="500,110 540,150 500,190 460,150" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="2"/>
+                <text x="500" y="145" text-anchor="middle" font-size="10" fill="#8a6d3b">Issue?</text>
+                
+                <!-- No - back to Available -->
+                <path d="M 500 190 Q 500 230 350 230 Q 100 230 100 190" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <text x="300" y="245" text-anchor="middle" font-size="10" fill="#5cb85c">No Issue → Available</text>
+                
+                <!-- Yes - to Maintenance -->
+                <line x1="540" y1="150" x2="580" y2="150" stroke="#666" stroke-width="2"/>
+                <polygon points="580,150 570,145 570,155" fill="#666"/>
+                <text x="560" y="140" text-anchor="middle" font-size="10" fill="#d9534f">Yes</text>
+                
+                <!-- Under Maintenance -->
+                <rect x="580" y="125" width="100" height="50" rx="8" fill="#f2dede" stroke="#a94442" stroke-width="2"/>
+                <text x="630" y="145" text-anchor="middle" font-weight="bold" fill="#a94442">Under</text>
+                <text x="630" y="160" text-anchor="middle" font-weight="bold" fill="#a94442">Maint.</text>
+                
+                <!-- Resolved back to Available -->
+                <path d="M 630 175 Q 630 260 100 260 Q 50 260 50 190" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <text x="350" y="275" text-anchor="middle" font-size="10" fill="#5cb85c">Resolved → Available</text>
+                
+                <!-- Arrow marker definition -->
+                <defs>
+                    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L9,3 z" fill="#666"/>
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-box status-available"></div>
+                <span>Available - Ready for use</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-dispatched"></div>
+                <span>Dispatched - Checked out to FA</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-maintenance"></div>
+                <span>Maintenance - Issue reported</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box status-retired"></div>
+                <span>Retired - No longer in service</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Authentication Flow -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">🔐 3. Authentication Flow</h3>
+        <div class="swimlane-container">
+            <div class="swimlane">
+                <div class="swimlane-label">User</div>
+                <div class="swimlane-content">
+                    <div class="box box-start">Start</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-process">Enter Credentials</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-decision"><span>Valid?</span></div>
+                </div>
+            </div>
+            <div class="swimlane">
+                <div class="swimlane-label">Frontend</div>
+                <div class="swimlane-content">
+                    <div class="box box-process">POST /auth/login</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-process">Store JWT in Zustand</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-process">Set Auth Header</div>
+                </div>
+            </div>
+            <div class="swimlane">
+                <div class="swimlane-label">Backend</div>
+                <div class="swimlane-content">
+                    <div class="box box-process">Validate Credentials</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-process">Generate JWT</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-data"><span>Return Tokens</span></div>
+                </div>
+            </div>
+            <div class="swimlane">
+                <div class="swimlane-label">Database</div>
+                <div class="swimlane-content">
+                    <div class="box box-process">Find User</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-process">Verify Password</div>
+                    <div class="arrow-right"></div>
+                    <div class="box box-process">Store Refresh Token</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Handover Workflow -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">📋 4. Handover (Check-out/Check-in) Workflow</h3>
+        <div style="text-align: center;">
+            <svg width="900" height="450" viewBox="0 0 900 450">
+                <!-- Check-out section -->
+                <text x="200" y="30" text-anchor="middle" font-size="14" font-weight="bold" fill="#4a90d9">CHECK-OUT PROCESS</text>
+                
+                <!-- Start -->
+                <ellipse cx="100" cy="80" rx="50" ry="25" fill="#5cb85c" stroke="#449d44" stroke-width="2"/>
+                <text x="100" y="85" text-anchor="middle" fill="white" font-weight="bold">Start</text>
+                
+                <!-- Arrow -->
+                <line x1="150" y1="80" x2="200" y2="80" stroke="#666" stroke-width="2"/>
+                <polygon points="200,80 190,75 190,85" fill="#666"/>
+                
+                <!-- FA selects cart -->
+                <rect x="200" y="55" width="140" height="50" rx="5" fill="#4a90d9" stroke="#2d5a87" stroke-width="2"/>
+                <text x="270" y="78" text-anchor="middle" fill="white" font-size="11">FA Selects</text>
+                <text x="270" y="92" text-anchor="middle" fill="white" font-size="11">Available Cart</text>
+                
+                <!-- Arrow -->
+                <line x1="340" y1="80" x2="390" y2="80" stroke="#666" stroke-width="2"/>
+                <polygon points="390,80 380,75 380,85" fill="#666"/>
+                
+                <!-- Enter notes -->
+                <rect x="390" y="55" width="140" height="50" rx="5" fill="#4a90d9" stroke="#2d5a87" stroke-width="2"/>
+                <text x="460" y="78" text-anchor="middle" fill="white" font-size="11">Enter Condition</text>
+                <text x="460" y="92" text-anchor="middle" fill="white" font-size="11">Notes (optional)</text>
+                
+                <!-- Arrow down -->
+                <line x1="460" y1="105" x2="460" y2="145" stroke="#666" stroke-width="2"/>
+                <polygon points="460,145 455,135 465,135" fill="#666"/>
+                
+                <!-- POST API -->
+                <rect x="390" y="145" width="140" height="40" rx="5" fill="#f0ad4e" stroke="#ec971f" stroke-width="2"/>
+                <text x="460" y="170" text-anchor="middle" fill="white" font-size="11" font-weight="bold">POST /handover/checkout</text>
+                
+                <!-- Arrow down -->
+                <line x1="460" y1="185" x2="460" y2="225" stroke="#666" stroke-width="2"/>
+                <polygon points="460,225 455,215 465,215" fill="#666"/>
+                
+                <!-- System actions -->
+                <rect x="380" y="225" width="160" height="60" rx="5" fill="#dff0d8" stroke="#3c763d" stroke-width="2"/>
+                <text x="460" y="248" text-anchor="middle" fill="#3c763d" font-size="10">Create HandoverLog</text>
+                <text x="460" y="262" text-anchor="middle" fill="#3c763d" font-size="10">Fleet.status → Dispatched</text>
+                <text x="460" y="276" text-anchor="middle" fill="#3c763d" font-size="10">Log: CheckedOut</text>
+                
+                <!-- Arrow -->
+                <line x1="540" y1="255" x2="590" y2="255" stroke="#666" stroke-width="2"/>
+                <polygon points="590,255 580,250 580,260" fill="#666"/>
+                
+                <!-- End check-out -->
+                <ellipse cx="660" cy="255" rx="60" ry="25" fill="#5cb85c" stroke="#449d44" stroke-width="2"/>
+                <text x="660" y="260" text-anchor="middle" fill="white" font-weight="bold">Cart Assigned</text>
+                
+                <!-- Check-in section -->
+                <text x="700" y="30" text-anchor="middle" font-size="14" font-weight="bold" fill="#d9534f">CHECK-IN PROCESS</text>
+                
+                <!-- Start check-in -->
+                <ellipse cx="660" cy="340" rx="60" ry="25" fill="#5cb85c" stroke="#449d44" stroke-width="2"/>
+                <text x="660" y="345" text-anchor="middle" fill="white" font-weight="bold">Start Check-in</text>
+                
+                <!-- Arrow up -->
+                <line x1="600" y1="340" x2="550" y2="340" stroke="#666" stroke-width="2"/>
+                <polygon points="550,340 560,335 560,345" fill="#666"/>
+                
+                <!-- Report condition -->
+                <rect x="400" y="315" width="140" height="50" rx="5" fill="#4a90d9" stroke="#2d5a87" stroke-width="2"/>
+                <text x="470" y="338" text-anchor="middle" fill="white" font-size="11">Report Return</text>
+                <text x="470" y="352" text-anchor="middle" fill="white" font-size="11">+ Issue?</text>
+                
+                <!-- Arrow up -->
+                <line x1="470" y1="315" x2="470" y2="275" stroke="#666" stroke-width="2"/>
+                <polygon points="470,275 465,285 475,285" fill="#666"/>
+                <text x="485" y="295" font-size="10" fill="#666">Issue?</text>
+                
+                <!-- Decision -->
+                <polygon points="340,340 380,380 340,420 300,380" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="2"/>
+                <text x="340" y="383" text-anchor="middle" font-size="10" fill="#8a6d3b">Issue?</text>
+                
+                <!-- Yes path -->
+                <line x1="300" y1="380" x2="220" y2="380" stroke="#666" stroke-width="2"/>
+                <polygon points="220,380 230,375 230,385" fill="#666"/>
+                <text x="260" y="370" text-anchor="middle" font-size="10" fill="#d9534f">Yes</text>
+                
+                <!-- Create maintenance -->
+                <rect x="80" y="355" width="140" height="50" rx="5" fill="#f2dede" stroke="#a94442" stroke-width="2"/>
+                <text x="150" y="375" text-anchor="middle" fill="#a94442" font-size="10">Create MaintenanceLog</text>
+                <text x="150" y="390" text-anchor="middle" fill="#a94442" font-size="10">Fleet → Maintenance</text>
+                
+                <!-- No path -->
+                <line x1="340" y1="420" x2="340" y2="430" stroke="#666" stroke-width="2"/>
+                <text x="355" y="428" font-size="10" fill="#5cb85c">No</text>
+                
+                <!-- End -->
+                <ellipse cx="150" cy="430" rx="60" ry="20" fill="#d9534f" stroke="#c9302c" stroke-width="2"/>
+                <text x="150" y="435" text-anchor="middle" fill="white" font-weight="bold" font-size="11">Available</text>
+                
+                <!-- Arrow from maintenance -->
+                <line x1="80" y1="380" x2="60" y2="380" stroke="#666" stroke-width="2"/>
+                <line x1="60" y1="380" x2="60" y2="430" stroke="#666" stroke-width="2"/>
+                <line x1="60" y1="430" x2="90" y2="430" stroke="#666" stroke-width="2"/>
+                <polygon points="90,430 80,425 80,435" fill="#666"/>
+                
+                <!-- Arrow from no issue -->
+                <line x1="380" y1="430" x2="210" y2="430" stroke="#666" stroke-width="2"/>
+                <polygon points="210,430 220,425 220,435" fill="#666"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 5. RBAC Matrix -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">👤 5. Role-Based Access Control (RBAC) Matrix</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+                <tr style="background: #1e3a5f; color: white;">
+                    <th style="padding: 12px; text-align: left; border: 1px solid #2d5a87;">Permission</th>
+                    <th style="padding: 12px; text-align: center; border: 1px solid #2d5a87;">SuperAdmin</th>
+                    <th style="padding: 12px; text-align: center; border: 1px solid #2d5a87;">Admin</th>
+                    <th style="padding: 12px; text-align: center; border: 1px solid #2d5a87;">FA</th>
+                    <th style="padding: 12px; text-align: center; border: 1px solid #2d5a87;">Observer</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>FLEET</strong></td>
+                    <td colspan="4" style="border: 1px solid #ddd;"></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Create Cart</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">View All Carts</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ All Venues</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ Own Venue</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ Assigned Only</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ Read Only</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Delete Cart</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>HANDOVER</strong></td>
+                    <td colspan="4" style="border: 1px solid #ddd;"></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Check-out Cart</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ Assigned</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Check-in Cart</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ Assigned</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>MAINTENANCE</strong></td>
+                    <td colspan="4" style="border: 1px solid #ddd;"></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Report Issue</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Resolve Issue</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>ADMIN</strong></td>
+                    <td colspan="4" style="border: 1px solid #ddd;"></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Create Stadium</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌ <span style="font-size:9px;color:#a94442;">(bug #46)</span></td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">Manage Users</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ All</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅ FA Only</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd; padding-left: 25px;">System Settings</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #dff0d8;">✅</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd; background: #f2dede;">❌</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 6. Database Entity Relationship -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">🗄️ 6. Database Entity Relationship Diagram</h3>
+        <div style="text-align: center; overflow-x: auto;">
+            <svg width="1000" height="500" viewBox="0 0 1000 500">
+                <!-- Stadium Entity -->
+                <rect x="50" y="50" width="150" height="100" rx="5" fill="#e8f4fd" stroke="#4a90d9" stroke-width="2"/>
+                <rect x="50" y="50" width="150" height="25" rx="5" fill="#4a90d9"/>
+                <text x="125" y="68" text-anchor="middle" fill="white" font-weight="bold" font-size="12">Stadium</text>
+                <text x="60" y="95" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="60" y="110" font-size="10" fill="#333">name</text>
+                <text x="60" y="125" font-size="10" fill="#333">code (unique)</text>
+                <text x="60" y="140" font-size="10" fill="#333">isActive</text>
+                
+                <!-- Department Entity -->
+                <rect x="250" y="50" width="150" height="110" rx="5" fill="#e8f4fd" stroke="#4a90d9" stroke-width="2"/>
+                <rect x="250" y="50" width="150" height="25" rx="5" fill="#4a90d9"/>
+                <text x="325" y="68" text-anchor="middle" fill="white" font-weight="bold" font-size="12">Department</text>
+                <text x="260" y="95" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="260" y="110" font-size="10" fill="#333">name</text>
+                <text x="260" y="125" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> stadiumId</text>
+                <text x="260" y="140" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> focalPointId</text>
+                
+                <!-- Fleet Entity -->
+                <rect x="100" y="220" width="150" height="130" rx="5" fill="#fff3e0" stroke="#f0ad4e" stroke-width="2"/>
+                <rect x="100" y="220" width="150" height="25" rx="5" fill="#f0ad4e"/>
+                <text x="175" y="238" text-anchor="middle" fill="white" font-weight="bold" font-size="12">Fleet</text>
+                <text x="110" y="265" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="110" y="280" font-size="10" fill="#333">carNumber (unique)</text>
+                <text x="110" y="295" font-size="10" fill="#333">carType</text>
+                <text x="110" y="310" font-size="10" fill="#333">status</text>
+                <text x="110" y="325" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> stadiumId</text>
+                <text x="110" y="340" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> assignedUserId</text>
+                
+                <!-- User Entity -->
+                <rect x="350" y="200" width="150" height="150" rx="5" fill="#dff0d8" stroke="#3c763d" stroke-width="2"/>
+                <rect x="350" y="200" width="150" height="25" rx="5" fill="#3c763d"/>
+                <text x="425" y="218" text-anchor="middle" fill="white" font-weight="bold" font-size="12">User</text>
+                <text x="360" y="245" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="360" y="260" font-size="10" fill="#333">name</text>
+                <text x="360" y="275" font-size="10" fill="#333">email (unique)</text>
+                <text x="360" y="290" font-size="10" fill="#333">role</text>
+                <text x="360" y="305" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> stadiumId</text>
+                <text x="360" y="320" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> departmentId</text>
+                <text x="360" y="335" font-size="10" fill="#333">isActive</text>
+                
+                <!-- HandoverLog Entity -->
+                <rect x="550" y="200" width="150" height="120" rx="5" fill="#f8f9fa" stroke="#666" stroke-width="2"/>
+                <rect x="550" y="200" width="150" height="25" rx="5" fill="#666"/>
+                <text x="625" y="218" text-anchor="middle" fill="white" font-weight="bold" font-size="12">HandoverLog</text>
+                <text x="560" y="245" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="560" y="260" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> fleetId</text>
+                <text x="560" y="275" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> userId</text>
+                <text x="560" y="290" font-size="10" fill="#333">action</text>
+                <text x="560" y="305" font-size="10" fill="#333">conditionNotes</text>
+                
+                <!-- MaintenanceLog Entity -->
+                <rect x="750" y="200" width="150" height="120" rx="5" fill="#f2dede" stroke="#a94442" stroke-width="2"/>
+                <rect x="750" y="200" width="150" height="25" rx="5" fill="#a94442"/>
+                <text x="825" y="218" text-anchor="middle" fill="white" font-weight="bold" font-size="12">MaintenanceLog</text>
+                <text x="760" y="245" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="760" y="260" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> fleetId</text>
+                <text x="760" y="275" font-size="10" fill="#333"><tspan fill="#4a90d9" font-weight="bold">FK</tspan> reportedById</text>
+                <text x="760" y="290" font-size="10" fill="#333">issueDescription</text>
+                <text x="760" y="305" font-size="10" fill="#333">status</text>
+                
+                <!-- SystemSettings Entity -->
+                <rect x="550" y="380" width="180" height="80" rx="5" fill="#e1bee7" stroke="#7b1fa2" stroke-width="2"/>
+                <rect x="550" y="380" width="180" height="25" rx="5" fill="#7b1fa2"/>
+                <text x="640" y="398" text-anchor="middle" fill="white" font-weight="bold" font-size="12">SystemSettings</text>
+                <text x="560" y="425" font-size="10" fill="#333"><tspan fill="#d9534f" font-weight="bold">PK</tspan> id</text>
+                <text x="560" y="440" font-size="10" fill="#333">tournamentName, featureFlags...</text>
+                
+                <!-- Relationships -->
+                <!-- Stadium to Fleet -->
+                <line x1="125" y1="150" x2="125" y2="220" stroke="#666" stroke-width="1.5"/>
+                <circle cx="125" cy="150" r="3" fill="#666"/>
+                <text x="80" y="185" font-size="9" fill="#666">1:N</text>
+                
+                <!-- Stadium to User -->
+                <path d="M 200 100 Q 275 100 350 275" stroke="#666" stroke-width="1.5" fill="none"/>
+                <text x="270" y="180" font-size="9" fill="#666">1:N</text>
+                
+                <!-- Department to Fleet -->
+                <line x1="325" y1="160" x2="200" y2="285" stroke="#666" stroke-width="1.5"/>
+                <text x="250" y="220" font-size="9" fill="#666">1:N</text>
+                
+                <!-- User to HandoverLog -->
+                <line x1="500" y1="275" x2="550" y2="275" stroke="#666" stroke-width="1.5"/>
+                <text x="520" y="265" font-size="9" fill="#666">1:N</text>
+                
+                <!-- Fleet to HandoverLog -->
+                <path d="M 250 285 Q 400 350 550 285" stroke="#666" stroke-width="1.5" fill="none"/>
+                <text x="400" y="340" font-size="9" fill="#666">1:N</text>
+                
+                <!-- Fleet to MaintenanceLog -->
+                <path d="M 250 300 Q 500 450 750 300" stroke="#666" stroke-width="1.5" fill="none"/>
+                <text x="500" y="400" font-size="9" fill="#666">1:N</text>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 7. API Endpoints -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">🔌 7. API Endpoints Overview</h3>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+            <div class="workflow-section">
+                <h4>🔐 Authentication</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /auth/login</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /auth/logout</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /auth/refresh</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /auth/register</li>
+                </ul>
+            </div>
+            <div class="workflow-section">
+                <h4>🚗 Fleet</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /fleet</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /fleet</li>
+                    <li><code style="background:#fff3e0;padding:2px 5px;border-radius:3px;">PUT</code> /fleet/:id</li>
+                    <li><code style="background:#f2dede;padding:2px 5px;border-radius:3px;">DELETE</code> /fleet/:id</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /fleet/bulk</li>
+                </ul>
+            </div>
+            <div class="workflow-section">
+                <h4>📋 Handover</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /handover</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /handover/checkout</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /handover/checkin</li>
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /handover/active</li>
+                </ul>
+            </div>
+            <div class="workflow-section">
+                <h4>🔧 Maintenance</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /maintenance</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /maintenance</li>
+                    <li><code style="background:#fff3e0;padding:2px 5px;border-radius:3px;">PUT</code> /maintenance/:id</li>
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /maintenance/export</li>
+                </ul>
+            </div>
+            <div class="workflow-section">
+                <h4>👤 Users</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /users</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /users</li>
+                    <li><code style="background:#fff3e0;padding:2px 5px;border-radius:3px;">PUT</code> /users/:id</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /users/bulk</li>
+                </ul>
+            </div>
+            <div class="workflow-section">
+                <h4>🏛️ Stadiums</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><code style="background:#dff0d8;padding:2px 5px;border-radius:3px;">GET</code> /stadiums</li>
+                    <li><code style="background:#e8f4fd;padding:2px 5px;border-radius:3px;">POST</code> /stadiums <span style="font-size:9px;color:#999">(SA)</span></li>
+                    <li><code style="background:#fff3e0;padding:2px 5px;border-radius:3px;">PUT</code> /stadiums/:id</li>
+                </ul>
+            </div>
+        </div>
+        <p style="font-size: 10px; color: #999; margin-top: 10px;">SA = SuperAdmin only | All endpoints require JWT authentication</p>
+    </div>
+
+    <!-- 8. Known Issues -->
+    <div class="diagram-container">
+        <h3 class="diagram-title">⚠️ 8. Known Issues (from QA Report)</h3>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+            <div style="background: #f2dede; border-left: 4px solid #a94442; padding: 15px; border-radius: 5px;">
+                <h4 style="color: #a94442; margin-bottom: 10px;">🔴 Critical Issues</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><strong>#31</strong> Password reset routes return 404</li>
+                    <li><strong>#40</strong> Handover check-in returns null fields</li>
+                    <li><strong>#42</strong> Backend not deployed - code mismatch</li>
+                    <li><strong>#46</strong> Admin can create stadiums (RBAC bypass)</li>
+                </ul>
+            </div>
+            <div style="background: #fcf8e3; border-left: 4px solid #8a6d3b; padding: 15px; border-radius: 5px;">
+                <h4 style="color: #8a6d3b; margin-bottom: 10px;">🟡 High Priority</h4>
+                <ul style="font-size: 11px; padding-left: 15px;">
+                    <li><strong>#32</strong> Weak default password 'changeme123'</li>
+                    <li><strong>#41</strong> Delete cart fails (FK constraint)</li>
+                    <li><strong>#43</strong> Departments module returns 404</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align: center; margin-top: 30px; padding: 20px; background: #1e3a5f; color: white; border-radius: 10px;">
+        <p style="font-size: 14px; margin-bottom: 5px;"><strong>GCMS Workflow Documentation</strong></p>
+        <p style="font-size: 11px; opacity: 0.8;">Generated by Cyberboy 🤖 | Repository: O96a/GCMS | March 21, 2026</p>
+        <p style="font-size: 10px; opacity: 0.6; margin-top: 10px;">This document can be opened in any web browser. Print to PDF for sharing.</p>
+    </div>
+</body>
+</html>

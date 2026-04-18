@@ -1,0 +1,435 @@
+import { Response } from 'express';
+import { usersService } from './users.service';
+import { z } from 'zod';
+import { AuthRequest } from '../../middleware/auth.middleware';
+
+const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer'] as const;
+
+const createUserSchema = z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+    password: z.string().min(6).optional(),
+    role: z.enum(ROLES),
+    phone: z.string().optional(),
+    accreditationNumber: z.string().optional(),
+    stadiumId: z.string().optional(),
+    departmentId: z.string().optional(),
+    assignAllStadiums: z.boolean().optional(),
+});
+
+const updateUserSchema = z.object({
+    name: z.string().optional(),
+    email: z.string().email().optional(),
+    role: z.enum(ROLES).optional(),
+    phone: z.string().optional(),
+    accreditationNumber: z.string().optional(),
+    stadiumId: z.string().optional(),
+    departmentId: z.string().optional(),
+    isActive: z.boolean().optional(),
+    isBlocked: z.boolean().optional(),
+    assignAllStadiums: z.boolean().optional(),
+    grantedPages: z.array(z.string()).optional(),
+    venueReportAccess: z.enum(['assigned', 'all']).optional(),
+    password: z.string().min(6).optional(),
+});
+
+const updatePreferencesSchema = z.object({
+    exportFormat: z.enum(['xlsx', 'pdf', 'docx']).optional(),
+    exportPreferences: z.object({
+        fleet: z.object({
+            enabled: z.boolean().optional(),
+            includeCarNumber: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+            includeAssignment: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeDepartment: z.boolean().optional(),
+        }).optional(),
+        handover: z.object({
+            enabled: z.boolean().optional(),
+            includeCarNumber: z.boolean().optional(),
+            includeUser: z.boolean().optional(),
+            includeAction: z.boolean().optional(),
+            includeTimestamp: z.boolean().optional(),
+            includeNotes: z.boolean().optional(),
+        }).optional(),
+        maintenance: z.object({
+            enabled: z.boolean().optional(),
+            includeCarNumber: z.boolean().optional(),
+            includeIssue: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+            includeReporter: z.boolean().optional(),
+            includeDates: z.boolean().optional(),
+        }).optional(),
+        request: z.object({
+            enabled: z.boolean().optional(),
+            includeRequester: z.boolean().optional(),
+            includeDepartment: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeQuantities: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+            includeNotes: z.boolean().optional(),
+        }).optional(),
+        users: z.object({
+            enabled: z.boolean().optional(),
+            includeName: z.boolean().optional(),
+            includeEmail: z.boolean().optional(),
+            includeRole: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeDepartment: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+        }).optional(),
+        department: z.object({
+            enabled: z.boolean().optional(),
+            includeName: z.boolean().optional(),
+            includeCode: z.boolean().optional(),
+            includeStadium: z.boolean().optional(),
+            includeFocalPoint: z.boolean().optional(),
+        }).optional(),
+        stadium: z.object({
+            enabled: z.boolean().optional(),
+            includeName: z.boolean().optional(),
+            includeCode: z.boolean().optional(),
+            includeLocation: z.boolean().optional(),
+            includeStatus: z.boolean().optional(),
+        }).optional(),
+    }).optional(),
+    emailNotifications: z.object({
+        maintenance: z.boolean().optional(),
+        handover: z.boolean().optional(),
+        requests: z.boolean().optional(),
+        assignments: z.boolean().optional(),
+    }).optional(),
+});
+
+export class UsersController {
+    static async getAll(req: AuthRequest, res: Response) {
+        try {
+            const { role, isActive, page, limit } = req.query as any;
+
+            let filterStadiumId: string | undefined;
+
+            // Admin only sees users at their own venue
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const users = await usersService.getAll({
+                role,
+                stadiumId: filterStadiumId,
+                isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+            }, {
+                page: page ? parseInt(page) : undefined,
+                limit: limit ? parseInt(limit) : undefined,
+            });
+
+            // Admin sees only FA users and themselves
+            if (req.user?.role === 'Admin') {
+                users.data = users.data.filter((u: any) =>
+                    u.role === 'FA' || u.id === req.user!.userId
+                );
+            }
+
+            res.status(200).json(users);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch users' });
+        }
+    }
+
+    static async getById(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            const user = await usersService.getById(id);
+            if (!user) {
+                res.status(404).json({ error: 'User not found' });
+                return;
+            }
+            res.status(200).json(user);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch user' });
+        }
+    }
+
+    static async create(req: AuthRequest, res: Response) {
+        try {
+            const validatedData = createUserSchema.parse(req.body);
+
+            // Admin can only create FA users at their own venue
+            if (req.user?.role === 'Admin') {
+                if (validatedData.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only create FA users' });
+                    return;
+                }
+                validatedData.stadiumId = req.user.stadiumId;
+            }
+
+            const user = await usersService.create(validatedData as any);
+            res.status(201).json(user);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: 'Failed to create user' });
+            }
+        }
+    }
+
+    static async update(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            const validatedData = updateUserSchema.parse(req.body);
+
+            // Admin can only update FA at own venue
+            if (req.user?.role === 'Admin') {
+                const target = await usersService.getById(id);
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only edit FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'You can only edit FA users at your venue' });
+                    return;
+                }
+                // Admin cannot change role away from FA
+                if (validatedData.role && validatedData.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin cannot change role' });
+                    return;
+                }
+            }
+
+            // Only SuperAdmin can update passwords
+            if (validatedData.password && req.user?.role !== 'SuperAdmin') {
+                res.status(403).json({ error: 'Only SuperAdmin can update passwords' });
+                return;
+            }
+
+            const user = await usersService.update(id, validatedData);
+            res.status(200).json(user);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to update user' });
+            }
+        }
+    }
+
+    static async setActive(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
+
+            // Admin can only deactivate FA at own venue
+            if (req.user?.role === 'Admin') {
+                const target = await usersService.getById(id);
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only manage FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'You can only manage FA users at your venue' });
+                    return;
+                }
+            }
+
+            const user = await usersService.setActive(id, isActive);
+            res.status(200).json(user);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to update user status' });
+        }
+    }
+
+    static async delete(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            if (req.user?.userId === id) {
+                res.status(400).json({ error: 'Cannot delete your own account' });
+                return;
+            }
+
+            // Admin can only delete FA at own venue
+            if (req.user?.role === 'Admin') {
+                const target = await usersService.getById(id);
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only delete FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'You can only delete FA users at your venue' });
+                    return;
+                }
+            }
+
+            await usersService.delete(id);
+            res.status(204).send();
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to delete user' });
+        }
+    }
+
+    static async bulkCreate(req: AuthRequest, res: Response) {
+        try {
+            const schema = z.array(z.object({
+                name: z.string(),
+                email: z.string().email(),
+                password: z.string().optional(),
+                role: z.enum(ROLES),
+                phone: z.string().optional(),
+                accreditationNumber: z.string().optional(),
+                stadiumId: z.string().optional(),
+                departmentId: z.string().optional(),
+                assignAllStadiums: z.boolean().optional(),
+            }));
+            const users = schema.parse(req.body);
+
+            const result = await usersService.bulkCreate(users as any);
+            res.status(201).json({
+                message: `Created: ${result.created}, Skipped: ${result.skipped}`,
+                ...result,
+            });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to bulk create users' });
+            }
+        }
+    }
+
+    static async setBlocked(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            const { isBlocked } = z.object({ isBlocked: z.boolean() }).parse(req.body);
+
+            // Admin can only block FA at own venue
+            if (req.user?.role === 'Admin') {
+                const target = await usersService.getById(id);
+                if (!target) {
+                    res.status(404).json({ error: 'User not found' });
+                    return;
+                }
+                if (target.role !== 'FA') {
+                    res.status(403).json({ error: 'Admin can only block FA users' });
+                    return;
+                }
+                if (!req.user.stadiumId || target.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'You can only block FA users at your venue' });
+                    return;
+                }
+            }
+
+            const user = await usersService.setBlocked(id, isBlocked);
+            res.status(200).json(user);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to update block status' });
+        }
+    }
+
+    static async importFromRequests(req: AuthRequest, res: Response) {
+        try {
+            const { requestIds } = z.object({ requestIds: z.array(z.string()) }).parse(req.body);
+
+            const result = await usersService.importFromRequests(requestIds);
+            res.status(201).json({
+                message: `Imported: ${result.created}, Skipped: ${result.skipped}`,
+                ...result,
+            });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to import users from requests' });
+            }
+        }
+    }
+
+    static async updatePreferences(req: AuthRequest, res: Response) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ error: 'Unauthorized' });
+                return;
+            }
+            const validatedData = updatePreferencesSchema.parse(req.body);
+
+            // If emailNotifications is provided, merge it into exportPreferences
+            const updateData: any = { ...validatedData };
+            if (validatedData.emailNotifications) {
+                updateData.exportPreferences = {
+                    ...validatedData.exportPreferences,
+                    emailNotifications: validatedData.emailNotifications,
+                };
+                delete updateData.emailNotifications;
+            }
+
+            const user = await usersService.update(userId, updateData);
+            res.status(200).json(user);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to update preferences' });
+            }
+        }
+    }
+
+    static async exportCsv(req: AuthRequest, res: Response) {
+        try {
+            let filterStadiumId: string | undefined;
+            if (req.user?.role === 'Admin') {
+                filterStadiumId = req.user.stadiumId;
+            }
+
+            const users = await usersService.getAll({
+                stadiumId: filterStadiumId,
+            }, { limit: 10000 });
+
+            let userData = users.data;
+            // Admin sees only FA users and themselves
+            if (req.user?.role === 'Admin') {
+                userData = userData.filter((u: any) =>
+                    u.role === 'FA' || u.id === req.user!.userId
+                );
+            }
+
+            const headers = ['Name', 'Email', 'Phone', 'Role', 'Accreditation Number', 'Status', 'Blocked', 'Stadium', 'Department', 'Assign All Stadiums', 'Created At'];
+            const rows = userData.map((u: any) => [
+                u.name,
+                u.email,
+                u.phone || '',
+                u.role,
+                u.accreditationNumber || '',
+                u.isActive ? 'Active' : 'Inactive',
+                u.isBlocked ? 'Yes' : 'No',
+                u.stadium?.name || '',
+                u.department?.name || '',
+                u.assignAllStadiums ? 'Yes' : 'No',
+                new Date(u.createdAt).toLocaleDateString(),
+            ]);
+
+            const csvContent = [
+                headers.join(','),
+                ...rows.map((row: string[]) => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="users_export_${new Date().toISOString().split('T')[0]}.csv"`);
+            res.status(200).send(csvContent);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to export users' });
+        }
+    }
+}

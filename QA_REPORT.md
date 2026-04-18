@@ -1,0 +1,167 @@
+# GCMS QA Report - March 9, 2026
+
+## Summary
+
+Comprehensive QA scan of the Golf Cart Management System (GCMS) covering authentication, fleet management, handover workflows, user management, stadium management, departments, settings, maintenance, and RBAC.
+
+---
+
+## Test Credentials
+
+| Role | Email | Password |
+|------|-------|----------|
+| SuperAdmin | `superadmin@gcms.com` | `Admin@2024!` |
+| Admin | `admin@gcms.com` | `Admin@2024!` |
+| FA (Fleet Attendant) | `fa@gcms.com` | `FA@2024!` |
+| Observer | `observer@gcms.com` | `Observer@2024!` |
+
+---
+
+## Issues Found (17 total)
+
+### Critical (4)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#31](https://github.com/O96a/GCMS/issues/31) | Password reset routes return 404 | Open |
+| [#40](https://github.com/O96a/GCMS/issues/40) | Handover check-in returns null fields | Open |
+| [#42](https://github.com/O96a/GCMS/issues/42) | Backend not deployed - code mismatch | Open |
+| [#46](https://github.com/O96a/GCMS/issues/46) | Admin can create stadiums - RBAC bypass | Open |
+
+### High (3)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#32](https://github.com/O96a/GCMS/issues/32) | Default password 'changeme123' is weak | Open |
+| [#41](https://github.com/O96a/GCMS/issues/41) | Delete cart fails (FK constraint) | Open |
+| [#43](https://github.com/O96a/GCMS/issues/43) | Departments module returns 404 | Open |
+
+### Medium (4)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#33](https://github.com/O96a/GCMS/issues/33) | ProtectedRoute shows blank screen | Open |
+| [#34](https://github.com/O96a/GCMS/issues/34) | No rate limit UI feedback | Open |
+| [#35](https://github.com/O96a/GCMS/issues/35) | Dev mode exposes test credentials | Open |
+| [#36](https://github.com/O96a/GCMS/issues/36) | Validation errors not user-friendly | Open |
+
+### Low (3)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#37](https://github.com/O96a/GCMS/issues/37) | Settings hidden from Admin nav | Open |
+| [#38](https://github.com/O96a/GCMS/issues/38) | Dashboard export buttons placeholder | Open |
+| [#44](https://github.com/O96a/GCMS/issues/44) | Handover status flow confusing | Open |
+
+### Cleanup (1)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#47](https://github.com/O96a/GCMS/issues/47) | Remove test stadiums from QA | Open |
+
+### Investigation (1)
+
+| # | Issue | Status |
+|---|-------|--------|
+| [#45](https://github.com/O96a/GCMS/issues/45) | Admin cannot delete FA users | Open |
+
+---
+
+## Flow Test Results
+
+### ✅ Passing Flows
+
+| Flow | Notes |
+|------|-------|
+| Authentication (login/logout) | Works correctly |
+| Fleet CRUD (create/update) | Delete fails if has logs (#41) |
+| User Management (CRUD) | Full CRUD works |
+| Handover Check-out | Returns correct data |
+| Maintenance Reports | Create/update works |
+| Settings (SuperAdmin) | Full access works |
+| Reports Export | CSV/Excel downloads work |
+| RBAC (FA restrictions) | FA cannot create carts, can report issues |
+| RBAC (Observer restrictions) | Read-only access enforced |
+
+### ❌ Failing Flows
+
+| Flow | Issue |
+|------|-------|
+| Password Reset | Routes return 404 (#31) |
+| Handover Check-in | Returns null fields (#40) |
+| Stadiums (SuperAdmin) | Blocked due to code mismatch (#42) |
+| Departments | Module not deployed (#43) |
+| Fleet Delete | Fails with FK constraint (#41) |
+
+---
+
+## Critical Finding: Backend Not Deployed
+
+The Docker container is running **old code** that differs from the source files:
+
+| File | Source Code | Deployed Code |
+|------|-------------|---------------|
+| `stadiums.routes.ts` | `requireRole('SuperAdmin')` | `requireRole('Admin')` |
+| `departments/*` | Module exists | Not loaded (404) |
+
+**Impact:**
+- RBAC permissions are wrong in production
+- New features don't exist in running container
+- Security: Admin can create stadiums (should be SuperAdmin only)
+
+**Solution:**
+```bash
+docker-compose build --no-cache backend
+docker-compose up -d
+```
+
+---
+
+## RBAC Test Matrix
+
+| Action | SuperAdmin | Admin | FA | Observer |
+|--------|:----------:|:-----:|:--:|:--------:|
+| Create Stadium | ✅ | ❌ (blocked) | ❌ | ❌ |
+| Create Cart | ✅ | ✅ | ❌ | ❌ |
+| Delete Cart | ✅ | ✅ | ❌ | ❌ |
+| Check-in/out | ✅ | ✅ | ✅ | ❌ |
+| Report Maintenance | ✅ | ✅ | ✅ | ❌ |
+| Update Settings | ✅ | ❌ | ❌ | ❌ |
+| View Reports | ✅ | ✅ | ✅ | ✅ |
+| Create User | ✅ | ✅ | ❌ | ❌ |
+
+---
+
+## Recommendations
+
+### Immediate Actions
+
+1. **Rebuild and redeploy backend** to fix code mismatch (#42)
+2. **Fix password reset** routes (#31)
+3. **Fix handover check-in** null fields (#40)
+
+### Short-term
+
+4. **Add cascade delete** for fleet relationships (#41)
+5. **Deploy departments** module (#43)
+6. **Strengthen default passwords** (#32)
+
+### Long-term
+
+7. **Implement CI/CD** to prevent deployment mismatches
+8. **Add deployment documentation** to README
+9. **Add integration tests** for critical flows
+
+---
+
+## Test Environment
+
+- **Backend:** Docker container (Node.js 20, tsx)
+- **Database:** PostgreSQL 16
+- **Frontend:** React + Vite
+- **Date:** March 9, 2026
+- **Tester:** Mehaisi (AI Assistant)
+
+---
+
+*Report generated by automated QA scan.*
