@@ -92,6 +92,7 @@ model User {
   refreshTokens       RefreshToken[]
   assignedCarts       Fleet[]         @relation("FleetAssignedUser")
   maintenanceLogs     MaintenanceLog[] @relation("MaintenanceReporter")
+  approvedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceApprover")
   reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -131,7 +132,7 @@ model HandoverLog {
   @@index([timestamp])
 }
 
-// Statuses: Open, InProgress, Resolved
+// Statuses: Open, InProgress, Resolved, PendingQuotation, PendingApproval
 model MaintenanceLog {
   id               String    @id @default(cuid())
   fleetId          String
@@ -141,9 +142,23 @@ model MaintenanceLog {
   issueDescription String
   photosUrls       String?   @default("[]") // SQLite fallback: Store as JSON string
   reportedAt       DateTime  @default(now())
-  status           String    @default("Open") // Open, InProgress, Resolved
+  status           String    @default("Open") // Open, InProgress, Resolved, PendingQuotation, PendingApproval
   resolutionNotes  String?
   resolvedAt       DateTime?
+  
+  // New fields for workflow
+  quotationStatus  String?   // Requested, Submitted, Approved, Rejected
+  fixCost          Float?    // The submitted cost for the fix
+  
+  // Auditing timestamps
+  quotationRequestedAt DateTime?
+  costSubmittedAt      DateTime?
+  costApprovedAt       DateTime?
+  
+  // Relations
+  approvedById         String?
+  approvedBy           User?     @relation("MaintenanceApprover", fields: [approvedById], references: [id])
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

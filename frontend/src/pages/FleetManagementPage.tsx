@@ -55,6 +55,9 @@ export function FleetManagementPage() {
     const { user } = useAuthStore();
     const isSuperAdmin = user?.role === 'SuperAdmin';
     const isAdmin = user?.role === 'Admin';
+    const isMaintenance = user?.role === 'MaintenanceTeam';
+    const isContracts = user?.role === 'Contracts';
+    const canManage = isSuperAdmin || isAdmin;
 
     // Data state
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
@@ -509,21 +512,23 @@ export function FleetManagementPage() {
                                                         {cart.requiresVAP && <Badge variant="outline" className="text-orange-600 border-orange-400">VAP</Badge>}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        {cart.assignedUser ? (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="text-red-600 border-red-300 hover:bg-red-50"
-                                                                onClick={() => openUnassignConfirm(cart)}
-                                                            >
-                                                                <X className="w-4 h-4 mr-1" />
-                                                                Un-assign
-                                                            </Button>
-                                                        ) : (
-                                                            <Button variant="outline" size="sm" onClick={() => openAssignModal(cart)}>
-                                                                <ArrowRightLeft className="w-4 h-4 mr-1" />
-                                                                Assign
-                                                            </Button>
+                                                        {canManage && (
+                                                            cart.assignedUser ? (
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="text-red-600 border-red-300 hover:bg-red-50"
+                                                                    onClick={() => openUnassignConfirm(cart)}
+                                                                >
+                                                                    <X className="w-4 h-4 mr-1" />
+                                                                    Un-assign
+                                                                </Button>
+                                                            ) : (
+                                                                <Button variant="outline" size="sm" onClick={() => openAssignModal(cart)}>
+                                                                    <ArrowRightLeft className="w-4 h-4 mr-1" />
+                                                                    Assign
+                                                                </Button>
+                                                            )
                                                         )}
                                                     </TableCell>
                                                 </TableRow>

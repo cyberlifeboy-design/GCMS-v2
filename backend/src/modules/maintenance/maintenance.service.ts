@@ -29,6 +29,9 @@ export class MaintenanceService {
                     reportedBy: {
                         select: { id: true, name: true, phone: true, email: true, role: true },
                     },
+                    approvedBy: {
+                        select: { id: true, name: true, role: true },
+                    },
                 },
                 orderBy: { reportedAt: 'desc' },
                 skip,
@@ -41,6 +44,65 @@ export class MaintenanceService {
             data,
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
+    }
+
+    async getById(id: string) {
+        return prisma.maintenanceLog.findUnique({
+            where: { id },
+            include: {
+                reportedBy: { select: { id: true, name: true, phone: true, email: true, role: true } },
+                approvedBy: { select: { id: true, name: true, role: true } },
+                fleet: { include: { stadium: true } },
+            },
+        });
+    }
+
+    async requestQuotation(id: string) {
+        return prisma.maintenanceLog.update({
+            where: { id },
+            data: {
+                status: 'PendingQuotation',
+                quotationStatus: 'Requested',
+                quotationRequestedAt: new Date(),
+            },
+            include: {
+                reportedBy: { select: { id: true, name: true, role: true } },
+                fleet: { include: { stadium: true } },
+            },
+        });
+    }
+
+    async submitCost(id: string, fixCost: number) {
+        return prisma.maintenanceLog.update({
+            where: { id },
+            data: {
+                status: 'PendingApproval',
+                quotationStatus: 'Submitted',
+                fixCost,
+                costSubmittedAt: new Date(),
+            },
+            include: {
+                reportedBy: { select: { id: true, name: true, role: true } },
+                fleet: { include: { stadium: true } },
+            },
+        });
+    }
+
+    async approveCost(id: string, approvedById: string) {
+        return prisma.maintenanceLog.update({
+            where: { id },
+            data: {
+                status: 'InProgress',
+                quotationStatus: 'Approved',
+                costApprovedAt: new Date(),
+                approvedById,
+            },
+            include: {
+                reportedBy: { select: { id: true, name: true, role: true } },
+                approvedBy: { select: { id: true, name: true, role: true } },
+                fleet: { include: { stadium: true } },
+            },
+        });
     }
 
     async getByFleet(fleetId: string) {

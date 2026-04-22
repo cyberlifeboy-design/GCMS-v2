@@ -127,16 +127,18 @@ export const handoverApi = {
         apiClient.get(`/handover/in-use/${stadiumId}`),
 };
 
-// Maintenance  (statuses: Open / InProgress / Resolved)
+// Maintenance  (statuses: Open / PendingQuotation / PendingApproval / InProgress / Resolved)
 export const maintenanceApi = {
-    getAll: (params?: Record<string, unknown>) =>
-        apiClient.get('/maintenance', { params }),
-    getByFleet: (fleetId: string) =>
-        apiClient.get(`/maintenance/fleet/${fleetId}`),
+    getAll: (params?: any) => apiClient.get('/maintenance', { params }),
+    getById: (id: string) => apiClient.get(`/maintenance/${id}`),
+    getByFleet: (fleetId: string) => apiClient.get(`/maintenance/fleet/${fleetId}`),
     report: (data: FormData) =>
         apiClient.post('/maintenance', data, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
+    requestQuotation: (id: string) => apiClient.post(`/maintenance/${id}/request-quotation`),
+    submitCost: (id: string, fixCost: number) => apiClient.post(`/maintenance/${id}/submit-cost`, { fixCost }),
+    approveCost: (id: string) => apiClient.post(`/maintenance/${id}/approve-cost`),
     updateStatus: (id: string, data: { status: string; resolutionNotes?: string }) =>
         apiClient.patch(`/maintenance/${id}/status`, data),
     exportCsv: () =>
@@ -175,7 +177,7 @@ export const departmentsApi = {
         apiClient.delete(`/departments/${id}`),
 };
 
-// Users  (roles: SuperAdmin / Admin / FA / Observer)
+// Users  (roles: SuperAdmin / Admin / FA / Observer / Contracts / MaintenanceTeam)
 export const usersApi = {
     getAll: (params?: Record<string, unknown>) =>
         apiClient.get('/users', { params }),

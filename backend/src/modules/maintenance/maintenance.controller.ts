@@ -12,8 +12,12 @@ const reportIssueSchema = z.object({
 });
 
 const updateStatusSchema = z.object({
-    status: z.enum(['Open', 'InProgress', 'Resolved']),
+    status: z.enum(['Open', 'InProgress', 'Resolved', 'PendingQuotation', 'PendingApproval']),
     resolutionNotes: z.string().optional(),
+});
+
+const submitCostSchema = z.object({
+    fixCost: z.number().min(0),
 });
 
 export class MaintenanceController {
@@ -24,7 +28,7 @@ export class MaintenanceController {
             const { status, fleetId, page, limit } = req.query as any;
 
             // RBAC scoping: Admin sees only their assigned stadium
-            // SuperAdmin and Observer have full access to all stadiums
+            // SuperAdmin, Observer, Contracts, and MaintenanceTeam have full access to all stadiums
             let stadiumId: string | undefined;
             if (req.user?.role === 'Admin' && req.user.stadiumId) {
                 stadiumId = req.user.stadiumId;
@@ -37,6 +41,56 @@ export class MaintenanceController {
             res.status(200).json(logs);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch maintenance logs' });
+        }
+    }
+
+    static async getById(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const log = await maintenanceService.getById(id);
+            if (!log) {
+                res.status(404).json({ error: 'Maintenance log not found' });
+                return;
+            }
+            res.status(200).json(log);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch maintenance log' });
+        }
+    }
+
+    static async requestQuotation(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const log = await maintenanceService.requestQuotation(id);
+            res.status(200).json(log);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to request quotation' });
+        }
+    }
+
+    static async submitCost(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const validatedData = submitCostSchema.parse(req.body);
+            const log = await maintenanceService.submitCost(id, validatedData.fixCost);
+            res.status(200).json(log);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to submit cost' });
+            }
+        }
+    }
+
+    static async approveCost(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const userId = req.user!.userId;
+            const log = await maintenanceService.approveCost(id, userId);
+            res.status(200).json(log);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to approve cost' });
         }
     }
 
