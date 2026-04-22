@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Search, Edit2, Loader2, User, UserCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from 'sonner';
 
 interface Department {
     id: string;
@@ -132,7 +133,7 @@ export function DepartmentsPage() {
                     });
                 } else if (createMode === 'select') {
                     if (selectedStadiumIds.length === 0) {
-                        alert('Please select at least one stadium');
+                        toast.error('Please select at least one stadium');
                         setSubmitting(false);
                         return;
                     }
@@ -144,9 +145,10 @@ export function DepartmentsPage() {
                 } else {
                     await departmentsApi.create({ ...formData, stadiumId: formData.stadiumId });
                 }
+                toast.success('Department(s) created');
             } else if (modal.mode === 'edit' && isSuperAdmin && modal.department) {                // SuperAdmin edit: handle multi-stadium association changes
                 if (editStadiumIds.length === 0) {
-                    alert('Please select at least one stadium');
+                    toast.error('Please select at least one stadium');
                     setSubmitting(false);
                     return;
                 }
@@ -177,6 +179,7 @@ export function DepartmentsPage() {
                         });
                     }
                 }
+                toast.success('Department updated');
             } else {
                 // Admin create or Admin edit (single stadium)
                 const stadiumId = isSuperAdmin ? formData.stadiumId : (user?.stadiumId || '');
@@ -188,14 +191,16 @@ export function DepartmentsPage() {
                 };
                 if (modal.mode === 'create') {
                     await departmentsApi.create(data);
+                    toast.success('Department created');
                 } else {
                     await departmentsApi.update(modal.department!.id, data);
+                    toast.success('Department updated');
                 }
             }
             setModal({ open: false, mode: 'create' });
             loadDepartments(stadiumFilter === 'all' ? undefined : stadiumFilter);
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to save department');
+            toast.error(err.response?.data?.error || 'Failed to save department');
         } finally {
             setSubmitting(false);
         }

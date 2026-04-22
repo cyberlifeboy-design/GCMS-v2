@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility, PowerOff, Power, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from 'sonner';
 
 interface FleetStats {
     total: number;
@@ -66,13 +67,15 @@ export function StadiumsPage() {
         try {
             if (modal.mode === 'create') {
                 await stadiumsApi.create(formData);
+                toast.success('Venue created');
             } else {
                 await stadiumsApi.update(modal.stadium!.id, formData);
+                toast.success('Venue updated');
             }
             setModal({ open: false, mode: 'create' });
             loadStadiums();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to save stadium');
+            toast.error(err.response?.data?.error || 'Failed to save stadium');
         } finally {
             setSubmitting(false);
         }
@@ -81,9 +84,10 @@ export function StadiumsPage() {
     const handleToggleActive = async (stadium: Stadium) => {
         try {
             await stadiumsApi.toggleActive(stadium.id, !stadium.isActive);
+            toast.success(`Venue ${stadium.isActive ? 'deactivated' : 'activated'}`);
             loadStadiums();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update stadium status');
+            toast.error(err.response?.data?.error || 'Failed to update stadium status');
         }
     };
 
@@ -92,10 +96,11 @@ export function StadiumsPage() {
         setSubmitting(true);
         try {
             await stadiumsApi.delete(deleteConfirm.id);
+            toast.success('Venue deleted');
             setDeleteConfirm(null);
             loadStadiums();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete stadium');
+            toast.error(err.response?.data?.error || 'Failed to delete stadium');
         } finally {
             setSubmitting(false);
         }

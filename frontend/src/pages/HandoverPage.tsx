@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
 import { formatDateTime } from '@/lib/dateUtils';
+import { toast } from 'sonner';
 
 interface HandoverLog {
     id: string;
@@ -230,16 +231,17 @@ export function HandoverPage() {
 
     const handleCheckin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!checkinForm.fleetId) { alert('Select a cart'); return; }
+        if (!checkinForm.fleetId) { toast.error('Select a cart'); return; }
         setSubmitting(true);
         try {
             await handoverApi.checkIn({ fleetId: checkinForm.fleetId, conditionNotes: checkinForm.conditionNotes, ...(checkinForm.assignToUserId && { assignToUserId: checkinForm.assignToUserId }) });
             setCheckinOpen(false);
             setCheckinForm({ fleetId: '', conditionNotes: '', assignToUserId: '' });
+            toast.success('Cart checked out successfully');
             loadData();
             loadPoolDashboard();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Check-in failed');
+            toast.error(err.response?.data?.error || 'Check-in failed');
         } finally {
             setSubmitting(false);
         }
@@ -247,7 +249,7 @@ export function HandoverPage() {
 
     const handleCheckout = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!checkoutForm.fleetId) { alert('Select a cart'); return; }
+        if (!checkoutForm.fleetId) { toast.error('Select a cart'); return; }
         setSubmitting(true);
         try {
             const fd = new FormData();
@@ -262,10 +264,11 @@ export function HandoverPage() {
             await handoverApi.checkOut(fd);
             setCheckoutOpen(false);
             setCheckoutForm({ fleetId: '', conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] });
+            toast.success('Cart returned successfully');
             loadData();
             loadPoolDashboard();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Check-out failed');
+            toast.error(err.response?.data?.error || 'Check-out failed');
         } finally {
             setSubmitting(false);
         }
@@ -291,15 +294,15 @@ export function HandoverPage() {
 
     const handleBulkCheckin = async () => {
         if (selectedAvailable.length === 0) return;
-        if (!confirm(`Check out ${selectedAvailable.length} selected cart(s)?`)) return;
         setSubmitting(true);
         try {
             await handoverApi.bulkCheckIn({ fleetIds: selectedAvailable });
             setSelectedAvailable([]);
+            toast.success('Carts checked out successfully');
             loadData();
             loadPoolDashboard();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Bulk check-out failed');
+            toast.error(err.response?.data?.error || 'Bulk check-out failed');
         } finally {
             setSubmitting(false);
         }
@@ -307,15 +310,15 @@ export function HandoverPage() {
 
     const handleBulkCheckout = async () => {
         if (selectedDispatched.length === 0) return;
-        if (!confirm(`Return ${selectedDispatched.length} selected cart(s)?`)) return;
         setSubmitting(true);
         try {
             await handoverApi.bulkCheckOut({ fleetIds: selectedDispatched });
             setSelectedDispatched([]);
+            toast.success('Carts returned successfully');
             loadData();
             loadPoolDashboard();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Bulk return failed');
+            toast.error(err.response?.data?.error || 'Bulk return failed');
         } finally {
             setSubmitting(false);
         }
@@ -335,10 +338,11 @@ export function HandoverPage() {
             fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
             fd.append('handoverTargetDeptIds', JSON.stringify(handoverTargetDeptIds));
             await settingsApi.update(fd);
+            toast.success('Handover settings saved');
             setSettingsSaved(true);
             setTimeout(() => setSettingsSaved(false), 2000);
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to save settings');
+            toast.error(err.response?.data?.error || 'Failed to save settings');
         } finally {
             setSettingsSaving(false);
         }

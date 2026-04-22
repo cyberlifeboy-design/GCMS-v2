@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
+import { toast } from 'sonner';
 
 interface User {
     id: string;
@@ -213,8 +214,9 @@ export function UsersPage() {
             setFormData(EMPTY_FORM);
             loadSystemUsers();
             loadFaUsers();
+            toast.success('User created successfully');
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to create user');
+            toast.error(err.response?.data?.error || 'Failed to create user');
         } finally {
             setSubmitting(false);
         }
@@ -227,10 +229,11 @@ export function UsersPage() {
             await usersApi.delete(deleteUser.id);
             setDeleteConfirmOpen(false);
             setDeleteUser(null);
+            toast.success('User deleted successfully');
             loadSystemUsers();
             loadFaUsers();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete user');
+            toast.error(err.response?.data?.error || 'Failed to delete user');
         } finally {
             setDeleting(false);
         }
@@ -240,13 +243,15 @@ export function UsersPage() {
         try {
             if (type === 'active') {
                 await usersApi.setStatus(u.id, !u.isActive);
+                toast.success(`User ${u.isActive ? 'deactivated' : 'activated'}`);
             } else {
                 await usersApi.setBlocked(u.id, !u.isBlocked);
+                toast.success(`User ${u.isBlocked ? 'unblocked' : 'blocked'}`);
             }
             loadSystemUsers();
             loadFaUsers();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update user status');
+            toast.error(err.response?.data?.error || 'Failed to update user status');
         }
     };
 
@@ -273,10 +278,11 @@ export function UsersPage() {
             await usersApi.update(editUser.id, payload);
             setEditOpen(false);
             setEditUser(null);
+            toast.success('User updated successfully');
             loadSystemUsers();
             loadFaUsers();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update user');
+            toast.error(err.response?.data?.error || 'Failed to update user');
         } finally {
             setSubmitting(false);
         }
@@ -307,7 +313,7 @@ export function UsersPage() {
             setBulkData('');
             loadSystemUsers();
             loadFaUsers();
-            alert(`Created ${parsed.length} users`);
+            toast.success(`Created ${parsed.length} users`);
         } catch (e: any) {
             setBulkError(e.message || 'Failed — check format (JSON array or CSV with headers: name,email,role,password)');
         }
@@ -335,19 +341,19 @@ export function UsersPage() {
 
     const handleImportFromRequests = async () => {
         if (selectedRequests.size === 0) {
-            alert('Please select at least one request to import');
+            toast.error('Please select at least one request to import');
             return;
         }
         setSubmitting(true);
         try {
             const result = await usersApi.importFromRequests(Array.from(selectedRequests));
-            alert(result.data.message);
+            toast.success(result.data.message);
             setImportOpen(false);
             setSelectedRequests(new Set());
             loadSystemUsers();
             loadFaUsers();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to import users');
+            toast.error(err.response?.data?.error || 'Failed to import users');
         } finally {
             setSubmitting(false);
         }

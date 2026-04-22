@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { formatDate } from '@/lib/dateUtils';
+import { toast } from 'sonner';
 
 interface CarRequest {
     id: string;
@@ -184,9 +185,10 @@ export function RequestsManagementPage() {
 
             setReviewDialogOpen(false);
             setReviewNotes('');
+            toast.success(reviewAction === 'approve' ? 'Request approved' : 'Request rejected');
             loadRequests();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to process request');
+            toast.error(err.response?.data?.error || 'Failed to process request');
         } finally {
             setActionLoading(false);
         }
@@ -199,9 +201,10 @@ export function RequestsManagementPage() {
         try {
             await requestsApi.updateQuantities(selectedRequest.id, editQuantities);
             setEditQuantitiesOpen(false);
+            toast.success('Quantities updated');
             loadRequests();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update quantities');
+            toast.error(err.response?.data?.error || 'Failed to update quantities');
         } finally {
             setActionLoading(false);
         }
@@ -224,9 +227,9 @@ export function RequestsManagementPage() {
             setCreateUserOpen(false);
             setCreateUserPassword('');
             setCreateUserRole('FA');
-            alert('User created successfully!');
+            toast.success('User created successfully!');
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to create user');
+            toast.error(err.response?.data?.error || 'Failed to create user');
         } finally {
             setCreateUserLoading(false);
         }
@@ -234,7 +237,7 @@ export function RequestsManagementPage() {
 
     const handleGenerateLink = () => {
         if (!linkStadiumId) {
-            alert('Please select a stadium');
+            toast.error('Please select a stadium');
             return;
         }
 
@@ -253,6 +256,7 @@ export function RequestsManagementPage() {
             }
         }
         setGeneratedLink(link);
+        toast.success('Link generated');
     };
 
     const handleEmailLink = () => {
@@ -265,6 +269,7 @@ export function RequestsManagementPage() {
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(generatedLink);
+        toast.success('Link copied to clipboard');
     };
 
     const openReviewDialog = (request: CarRequest, action: 'approve' | 'reject') => {

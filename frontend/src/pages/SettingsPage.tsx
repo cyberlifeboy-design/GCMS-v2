@@ -9,7 +9,7 @@ import {
     File, Link as LinkIcon, Copy, Check, Bell, Clock, ToggleLeft, 
     ToggleRight, Megaphone, Mail, Sun, Moon, Monitor, 
     ChevronDown, ChevronUp, Users, User, Settings as SettingsIcon,
-    Palette, ShieldCheck, Wrench, Globe, HelpCircle
+    Palette, ShieldCheck, Wrench, Globe, HelpCircle, Calendar
 } from 'lucide-react';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';

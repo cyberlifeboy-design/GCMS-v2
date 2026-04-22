@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
+import { toast } from 'sonner';
 
 interface FleetCart {
     id: string;
@@ -369,7 +370,7 @@ export function FleetPage() {
             window.URL.revokeObjectURL(url);
         } catch (e) {
             console.error(e);
-            alert('Failed to export fleet');
+            toast.error('Failed to export fleet');
         } finally {
             setSubmitting(false);
         }
@@ -432,19 +433,21 @@ export function FleetPage() {
         };
 
         if (!submitData.stadiumId) {
-            alert('Please select a stadium');
+            toast.error('Please select a stadium');
             return;
         }
         if (!submitData.carNumber) {
-            alert('Please enter a car number');
+            toast.error('Please enter a car number');
             return;
         }
         setSubmitting(true);
         try {
             if (cartModal.mode === 'create') {
                 await fleetApi.create(submitData);
+                toast.success('Cart created successfully');
             } else {
                 await fleetApi.update(cartModal.cart!.id, submitData);
+                toast.success('Cart updated successfully');
             }
             setCartModal({ open: false, mode: 'create' });
             loadFleet(true);
@@ -455,9 +458,9 @@ export function FleetPage() {
                     const field = d.path?.join('.') || 'Field';
                     return `${field}: ${d.message}`;
                 }).join('\n');
-                alert(messages);
+                toast.error(messages);
             } else {
-                alert(errorData?.error || 'Failed to save cart');
+                toast.error(errorData?.error || 'Failed to save cart');
             }
         } finally {
             setSubmitting(false);
@@ -470,6 +473,7 @@ export function FleetPage() {
         try {
             await fleetApi.delete(deleteModal.cart.id);
             setDeleteModal({ open: false });
+            toast.success('Cart deleted successfully');
             loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
@@ -478,9 +482,9 @@ export function FleetPage() {
                     const field = d.path?.join('.') || 'Field';
                     return `${field}: ${d.message}`;
                 }).join('\n');
-                alert(messages);
+                toast.error(messages);
             } else {
-                alert(errorData?.error || 'Failed to delete cart');
+                toast.error(errorData?.error || 'Failed to delete cart');
             }
         } finally {
             setSubmitting(false);
@@ -494,6 +498,7 @@ export function FleetPage() {
         try {
             await fleetApi.assignUser(assignModal.cart.id, assignUserId || null);
             setAssignModal({ open: false });
+            toast.success('FA assignment updated');
             loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
@@ -502,9 +507,9 @@ export function FleetPage() {
                     const field = d.path?.join('.') || 'Field';
                     return `${field}: ${d.message}`;
                 }).join('\n');
-                alert(messages);
+                toast.error(messages);
             } else {
-                alert(errorData?.error || 'Failed to assign user');
+                toast.error(errorData?.error || 'Failed to assign user');
             }
         } finally {
             setSubmitting(false);
@@ -516,7 +521,7 @@ export function FleetPage() {
         if (!file) return;
         const stadiumId = isSuperAdmin ? bulkStadiumId : (user?.stadiumId || '');
         if (!stadiumId) {
-            alert('Stadium selection is required for bulk import.');
+            toast.error('Stadium selection is required for bulk import.');
             if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
@@ -524,11 +529,15 @@ export function FleetPage() {
             setSubmitting(true);
             const res = await fleetApi.bulkImport(file, stadiumId);
             const { created, errors } = res.data;
-            setImportResult(`Imported ${created} carts. ${errors?.length ? `Errors: ${errors.length}` : ''}`);
+            const message = `Imported ${created} carts. ${errors?.length ? `Errors: ${errors.length}` : ''}`;
+            setImportResult(message);
+            toast.success(message);
             loadFleet(true);
             setBulkModal(false);
         } catch (err: any) {
-            setImportResult(err.response?.data?.error || 'Import failed');
+            const errorMsg = err.response?.data?.error || 'Import failed';
+            setImportResult(errorMsg);
+            toast.error(errorMsg);
         } finally {
             setSubmitting(false);
         }
@@ -548,6 +557,7 @@ export function FleetPage() {
             setMaintModal({ open: false });
             setMaintForm({ issueDescription: '' });
             setMaintPhotos([]);
+            toast.success('Maintenance issue reported');
             loadFleet(true);
         } catch (err: any) {
             const errorData = err.response?.data;
@@ -556,9 +566,9 @@ export function FleetPage() {
                     const field = d.path?.join('.') || 'Field';
                     return `${field}: ${d.message}`;
                 }).join('\n');
-                alert(messages);
+                toast.error(messages);
             } else {
-                alert(errorData?.error || 'Failed to report maintenance');
+                toast.error(errorData?.error || 'Failed to report maintenance');
             }
         } finally {
             setSubmitting(false);
