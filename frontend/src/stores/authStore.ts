@@ -59,6 +59,12 @@ export interface ExportPreferences {
         includeLocation?: boolean;
         includeStatus?: boolean;
     };
+    emailNotifications?: {
+        maintenance?: boolean;
+        handover?: boolean;
+        requests?: boolean;
+        assignments?: boolean;
+    };
     theme?: 'light' | 'dark' | 'system';
 }
 
