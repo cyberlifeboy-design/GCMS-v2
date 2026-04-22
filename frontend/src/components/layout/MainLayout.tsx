@@ -42,13 +42,10 @@ const navItems = [
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'maintenance' },
     { name: 'Requests', href: '/requests', icon: Inbox, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'requests' },
-    { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'], pageKey: 'users' },
-    { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'], pageKey: 'departments' },
-    { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'], pageKey: 'stadiums' },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'reports' },
     { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'notifications' },
+    { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'], pageKey: 'users' },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'], pageKey: 'settings' },
-    { name: 'Account Settings', href: '/profile', icon: UserCircle, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'], pageKey: null },
 ];
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
@@ -170,6 +167,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                 )}
                             </div>
                         </div>
+                        <Link
+                            to="/profile"
+                            onClick={handleNavClick}
+                            className={`flex items-center gap-3 px-4 py-2 mb-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === '/profile' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
+                        >
+                            <UserCircle className="w-5 h-5 flex-shrink-0" />
+                            Account Settings
+                        </Link>
                         <Button onClick={logout} variant="outline" className="w-full">
                             Logout
                         </Button>
