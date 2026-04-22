@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth.middleware';
 
-export type Role = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
+export type Role = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer' | 'Contracts' | 'MaintenanceTeam';
 
 /**
  * Middleware to check if user has required role(s)

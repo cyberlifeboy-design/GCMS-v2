@@ -36,16 +36,16 @@ function DateTimeDisplay() {
 }
 
 const navItems = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA'], pageKey: null },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA', 'Contracts', 'MaintenanceTeam'], pageKey: null },
     { name: 'Fleet', href: '/fleet', icon: Car, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'fleet' },
-    { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin'], pageKey: 'fleet' },
+    { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin', 'Contracts', 'MaintenanceTeam'], pageKey: 'fleet' },
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
-    { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'maintenance' },
+    { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'maintenance' },
     { name: 'Requests', href: '/requests', icon: Inbox, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'requests' },
     { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'], pageKey: 'departments' },
     { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'], pageKey: 'stadiums' },
-    { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'reports' },
-    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'notifications' },
+    { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'reports' },
+    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'notifications' },
     { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'], pageKey: 'users' },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'], pageKey: 'settings' },
 ];
@@ -77,8 +77,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
     const filteredNavItems = navItems.filter(item => {
         if (!user || !item.roles.includes(user.role)) return false;
-        // SuperAdmin and FA are never page-restricted
-        if (user.role === 'SuperAdmin' || user.role === 'FA') return true;
+        // SuperAdmin, FA, Contracts, and MaintenanceTeam are never page-restricted
+        if (user.role === 'SuperAdmin' || user.role === 'FA' || user.role === 'Contracts' || user.role === 'MaintenanceTeam') return true;
         // Dashboard and Account Settings are always accessible
         if (item.pageKey === null) return true;
         // If grantedPages is non-empty, restrict Admin/Observer to those pages only

@@ -25,7 +25,7 @@ interface User {
     name: string;
     email: string;
     phone?: string;
-    role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
+    role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer' | 'Contracts' | 'MaintenanceTeam';
     accreditationNumber?: string;
     isActive: boolean;
     isBlocked?: boolean;
@@ -46,7 +46,7 @@ interface CarRequest {
     createdAt: string;
 }
 
-const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer'] as const;
+const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer', 'Contracts', 'MaintenanceTeam'] as const;
 
 type UserFormData = {
     name: string;
@@ -116,15 +116,21 @@ export function UsersPage() {
             const params: Record<string, unknown> = { 
                 page, 
                 limit: pagination.limit,
-                excludeRole: 'FA' // Always exclude FA from system users list
+                // Include all roles except FA in the system users tab
+                role: roleFilter !== 'all' ? roleFilter : undefined
             };
             
-            if (roleFilter !== 'all' && roleFilter !== 'FA') {
-                params.role = roleFilter;
-            }
+            // If filter is 'all', the backend will return all users.
+            // We want to filter out FA users on the frontend for this specific tab if filter is 'all'
             
             const res = await usersApi.getAll(params);
-            setSystemUsers(res.data.data || []);
+            let data = res.data.data || [];
+            
+            if (roleFilter === 'all') {
+                data = data.filter((u: User) => u.role !== 'FA');
+            }
+
+            setSystemUsers(data);
             if (res.data.pagination) {
                 setPagination(prev => ({ ...prev, ...res.data.pagination }));
             }

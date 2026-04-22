@@ -3,7 +3,7 @@ import { usersService } from './users.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 
-const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer'] as const;
+const ROLES = ['SuperAdmin', 'Admin', 'FA', 'Observer', 'Contracts', 'MaintenanceTeam'] as const;
 
 const createUserSchema = z.object({
     name: z.string().min(1),
