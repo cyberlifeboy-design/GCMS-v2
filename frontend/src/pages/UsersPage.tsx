@@ -254,6 +254,77 @@ export function UsersPage() {
         }
     };
 
+    const handleBulkCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setBulkError('');
+        try {
+            let parsed: any[];
+            try {
+                parsed = JSON.parse(bulkData);
+                if (!Array.isArray(parsed)) throw new Error('Must be array');
+            } catch {
+                const lines = bulkData.trim().split('\n');
+                if (lines.length < 2) throw new Error('Invalid CSV');
+                const headers = lines[0].split(',').map(h => h.trim());
+                parsed = lines.slice(1).map(line => {
+                    const vals = line.split(',').map(v => v.trim());
+                    const obj: any = {};
+                    headers.forEach((h, i) => { obj[h] = vals[i]; });
+                    return obj;
+                });
+            }
+            if (parsed.length === 0) { setBulkError('No users found'); return; }
+            await usersApi.bulkCreate(parsed);
+            setBulkOpen(false);
+            setBulkData('');
+            loadSystemUsers();
+            loadFaUsers();
+            alert(`Created ${parsed.length} users`);
+        } catch (e: any) {
+            setBulkError(e.message || 'Failed — check format (JSON array or CSV with headers: name,email,role,password)');
+        }
+    };
+
+    const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = ev => setBulkData(ev.target?.result as string);
+        reader.readAsText(f);
+    };
+
+    const loadPendingRequests = async () => {
+        setLoadingRequests(true);
+        try {
+            const res = await requestsApi.getAll({ status: 'Approved' });
+            setPendingRequests(res.data.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingRequests(false);
+        }
+    };
+
+    const handleImportFromRequests = async () => {
+        if (selectedRequests.size === 0) {
+            alert('Please select at least one request to import');
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const result = await usersApi.importFromRequests(Array.from(selectedRequests));
+            alert(result.data.message);
+            setImportOpen(false);
+            setSelectedRequests(new Set());
+            loadSystemUsers();
+            loadFaUsers();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to import users');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handleExport = () => {
         const targetUsers = activeTab === 'system' ? filteredSystemUsers : filteredFaUsers;
         const headers = ['Name', 'Email', 'Role', 'Phone', 'Accreditation', 'Stadium', 'Department', 'Status'];
@@ -415,9 +486,15 @@ export function UsersPage() {
                         </Button>
                     )}
                     {canManage && (
-                        <Button onClick={() => { setFormData(EMPTY_FORM); setCreateOpen(true); }} className="h-9 bg-primary hover:bg-primary/90 shadow-sm">
-                            <Plus className="w-4 h-4 mr-2" /> Add User
-                        </Button>
+                        <>
+                            <input type="file" accept=".csv,.json" ref={fileInputRef} onChange={handleFileRead} className="hidden" />
+                            <Button variant="outline" onClick={() => { setBulkData(''); setBulkError(''); setBulkOpen(true); }} className="h-9">
+                                <Upload className="w-4 h-4 mr-2" /> Bulk Upload
+                            </Button>
+                            <Button onClick={() => { setFormData(EMPTY_FORM); setCreateOpen(true); }} className="h-9 bg-primary hover:bg-primary/90 shadow-sm">
+                                <Plus className="w-4 h-4 mr-2" /> Add User
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>
@@ -517,10 +594,6 @@ export function UsersPage() {
                 </TabsContent>
             </Tabs>
 
-            {/* Modals remain similarly structured but with styling updates */}
-            {/* [Create User Modal, Edit User Modal, Bulk Upload Modal, Import Modal, Delete Confirmation Modal] */}
-            {/* These would follow the same pattern, keeping the functional logic but enhancing the UI consistency */}
-            
             {/* Create User Modal */}
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogContent className="max-w-md rounded-2xl">
@@ -564,7 +637,10 @@ export function UsersPage() {
                             {isSuperAdmin && (
                                 <div className="space-y-2">
                                     <Label className="text-sm font-semibold">Stadium / Venue</Label>
-                                    <Select value={formData.stadiumId || '__none__'} onValueChange={v => setFormData(f => ({ ...f, stadiumId: v === '__none__' ? '' : v }))}>
+                                    <Select value={formData.stadiumId || '__none__'} onValueChange={v => {
+                                        const val = v === '__none__' ? '' : v;
+                                        setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
+                                    }}>
                                         <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="__none__">No Stadium</SelectItem>
@@ -573,6 +649,25 @@ export function UsersPage() {
                                     </Select>
                                 </div>
                             )}
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">Department</Label>
+                                <Select
+                                    value={formData.departmentId || '__none__'}
+                                    onValueChange={v => setFormData(f => ({ ...f, departmentId: v === '__none__' ? '' : v }))}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__none__">No Department</SelectItem>
+                                        {departments.filter(d => !formData.stadiumId || d.stadiumId === formData.stadiumId).map(d => (
+                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">Password (default: Admin@2024!)</Label>
+                                <Input type="password" value={formData.password} onChange={e => setFormData(f => ({ ...f, password: e.target.value }))} placeholder="Leave blank for default" />
+                            </div>
                         </div>
                         <DialogFooter className="pt-4">
                             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -582,6 +677,86 @@ export function UsersPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Upload Modal */}
+            <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+                <DialogContent className="max-w-lg rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Bulk Upload Users</DialogTitle>
+                        <DialogDescription>Upload a CSV or paste a JSON array.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleBulkCreate} className="space-y-4">
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                            <Upload className="w-4 h-4 mr-2" /> Choose File (.csv or .json)
+                        </Button>
+                        <textarea
+                            className="w-full h-44 p-3 border rounded-md font-mono text-sm"
+                            placeholder={`JSON example:\n[\n  {"name":"Jane","email":"jane@gcms.com","role":"FA","password":"pass123"}\n]`}
+                            value={bulkData}
+                            onChange={e => setBulkData(e.target.value)}
+                        />
+                        {bulkError && <p className="text-sm text-red-500">{bulkError}</p>}
+                        <DialogFooter>
+                            <Button type="button" variant="ghost" onClick={() => { setBulkOpen(false); setBulkData(''); setBulkError(''); }}>Cancel</Button>
+                            <Button type="submit">Upload</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Import from Requests Modal */}
+            <Dialog open={importOpen} onOpenChange={setImportOpen}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Import from Car Requests</DialogTitle>
+                        <DialogDescription>Select approved car requests to create FA Focal Point users.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        {loadingRequests ? (
+                            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                        ) : pendingRequests.length === 0 ? (
+                            <p className="text-muted-foreground text-center py-8">No approved requests available to import.</p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-10"></TableHead>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Stadium</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {pendingRequests.map(r => (
+                                        <TableRow key={r.id}>
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedRequests.has(r.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        const newSet = new Set(selectedRequests);
+                                                        if (checked) newSet.add(r.id);
+                                                        else newSet.delete(r.id);
+                                                        setSelectedRequests(newSet);
+                                                    }}
+                                                />
+                                            </TableCell>
+                                            <TableCell>{r.requesterName}</TableCell>
+                                            <TableCell>{r.requesterEmail}</TableCell>
+                                            <TableCell>{r.stadium?.name}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setImportOpen(false)}>Cancel</Button>
+                        <Button onClick={handleImportFromRequests} disabled={submitting || selectedRequests.size === 0}>
+                            Import Selected ({selectedRequests.size})
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
@@ -620,6 +795,10 @@ export function UsersPage() {
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold">Accreditation Number</Label>
                                 <Input value={editData.accreditationNumber} onChange={e => setEditData(d => ({ ...d, accreditationNumber: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">New Password (leave blank to keep unchanged)</Label>
+                                <Input type="password" value={editData.newPassword} onChange={e => setEditData(d => ({ ...d, newPassword: e.target.value }))} autoComplete="new-password" />
                             </div>
                         </div>
                         <DialogFooter className="pt-4">

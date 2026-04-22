@@ -37,6 +37,7 @@ export class UsersService {
         role?: string;
         stadiumId?: string;
         isActive?: boolean;
+        excludeRole?: string;
     }, pagination?: PaginationParams) {
         const page = pagination?.page || 1;
         const limit = pagination?.limit || 100;
@@ -46,6 +47,7 @@ export class UsersService {
             ...(filters.role && { role: filters.role }),
             ...(filters.stadiumId && { stadiumId: filters.stadiumId }),
             ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+            ...(filters.excludeRole && { role: { not: filters.excludeRole } }),
         };
 
         const [data, total] = await Promise.all([

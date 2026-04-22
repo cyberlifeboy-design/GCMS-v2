@@ -42,6 +42,8 @@ const navItems = [
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'maintenance' },
     { name: 'Requests', href: '/requests', icon: Inbox, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'requests' },
+    { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'], pageKey: 'departments' },
+    { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'], pageKey: 'stadiums' },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'reports' },
     { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'notifications' },
     { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'], pageKey: 'users' },
@@ -81,8 +83,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         if (item.pageKey === null) return true;
         // If grantedPages is non-empty, restrict Admin/Observer to those pages only
         const granted = user.grantedPages;
-        if (granted && granted.length > 0) {
-            return granted.includes(item.pageKey);
+        if (granted && (typeof granted === 'string' ? JSON.parse(granted).length > 0 : granted.length > 0)) {
+            const grantedArray = typeof granted === 'string' ? JSON.parse(granted) : granted;
+            return grantedArray.includes(item.pageKey);
         }
         return true;
     });
