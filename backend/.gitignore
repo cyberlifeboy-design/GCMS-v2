@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+prisma/*.db*
 uploads/*
 !uploads/.gitkeep
 *.log

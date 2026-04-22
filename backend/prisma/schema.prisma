@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -36,8 +36,6 @@ model Department {
   updatedAt    DateTime @updatedAt
 
   @@unique([name, stadiumId])
-  @@index([stadiumId])
-  @@index([focalPointId])
 }
 
 // Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
@@ -58,11 +56,6 @@ model Fleet {
   maintenanceLogs MaintenanceLog[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-
-  @@index([stadiumId])
-  @@index([status])
-  @@index([assignedUserId])
-  @@index([departmentId])
 }
 
 // Roles: SuperAdmin, Admin, FA, Observer
@@ -79,9 +72,9 @@ model User {
   resetPasswordToken   String?        @unique
   resetPasswordExpires DateTime?
   exportFormat        String          @default("xlsx") // xlsx, pdf, docx
-  exportPreferences   Json?           // Granular export preferences per report type
+  exportPreferences   String?         // SQLite fallback: Store as JSON string
   assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
-  grantedPages        String[]        @default([]) // SuperAdmin-granted page access overrides
+  grantedPages        String?         @default("[]") // SQLite fallback: Store as JSON string
   venueReportAccess   String          @default("assigned") // "assigned" or "all" - controls which venue reports the user can see
   stadiumId           String?
   stadium             Stadium?        @relation(fields: [stadiumId], references: [id])
@@ -95,11 +88,6 @@ model User {
   reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
-
-  @@index([stadiumId])
-  @@index([role])
-  @@index([departmentId])
-  @@index([isBlocked])
 }
 
 model RefreshToken {
@@ -109,8 +97,6 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
-
-  @@index([userId])
 }
 
 // Actions: CheckedIn, CheckedOut, IssueReported
@@ -123,12 +109,8 @@ model HandoverLog {
   action         String   // CheckedIn, CheckedOut, IssueReported
   timestamp      DateTime @default(now())
   conditionNotes String?
-  photosUrls     String[] // Array of MinIO URLs (for issue reports)
+  photosUrls     String?  @default("[]") // SQLite fallback: Store as JSON string
   createdAt      DateTime @default(now())
-
-  @@index([fleetId])
-  @@index([userId])
-  @@index([timestamp])
 }
 
 // Statuses: Open, InProgress, Resolved
@@ -139,17 +121,13 @@ model MaintenanceLog {
   reportedById     String
   reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
   issueDescription String
-  photosUrls       String[]  @default([]) // Photos uploaded with issue report
+  photosUrls       String?   @default("[]") // SQLite fallback: Store as JSON string
   reportedAt       DateTime  @default(now())
   status           String    @default("Open") // Open, InProgress, Resolved
   resolutionNotes  String?
   resolvedAt       DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-
-  @@index([fleetId])
-  @@index([status])
-  @@index([reportedById])
 }
 
 model SystemSettings {
@@ -198,7 +176,7 @@ model Announcement {
   message         String
   type            String    @default("info") // info, warning, success, error
   targetType      String    @default("all") // all, fas, users, selected
-  targetUserIds   String[]  @default([]) // For targeted announcements
+  targetUserIds   String?   @default("[]") // SQLite fallback: Store as JSON string
   targetRole      String?   // For role-based targeting (FA, Admin, etc.)
   stadiumId       String?   // Optional stadium filter
   createdBy       String?   // User ID who created the announcement
@@ -208,12 +186,6 @@ model Announcement {
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  @@index([type])
-  @@index([targetType])
-  @@index([isActive])
-  @@index([scheduledAt])
-  @@index([expiresAt])
 }
 
 model AuditLog {
@@ -222,15 +194,11 @@ model AuditLog {
   action     String
   entityType String   // Fleet, User, Handover, etc.
   entityId   String
-  oldValue   Json?
-  newValue   Json?
+  oldValue   String?  // SQLite fallback: Store as JSON string
+  newValue   String?  // SQLite fallback: Store as JSON string
   ipAddress  String?
   userAgent  String?
   timestamp  DateTime @default(now())
-
-  @@index([userId])
-  @@index([entityType])
-  @@index([timestamp])
 }
 
 // Public car request from department leads
@@ -258,11 +226,6 @@ model CarRequest {
   reviewNotes      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-
-  @@index([status])
-  @@index([stadiumId])
-  @@index([departmentId])
-  @@index([requestToken])
 }
 
 // Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
@@ -276,9 +239,4 @@ model Notification {
   isRead       Boolean   @default(false)
   userId       String?   // null for broadcast notifications (all users)
   createdAt    DateTime  @default(now())
-
-  @@index([userId])
-  @@index([isRead])
-  @@index([type])
-  @@index([createdAt])
 }
