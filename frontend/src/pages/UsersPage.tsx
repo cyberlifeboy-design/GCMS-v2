@@ -194,11 +194,22 @@ export function UsersPage() {
         e.preventDefault();
         setSubmitting(true);
         try {
-            await usersApi.create({
-                ...formData,
+            const isFixed = formData.role === 'Contracts' || formData.role === 'MaintenanceTeam';
+            const logisticsDept = departments.find(d => d.name.toLowerCase() === 'logistics');
+
+            const payload = {
+                name: formData.name,
+                email: formData.email,
                 password: formData.password || 'Admin@2024!',
-                stadiumId: isSuperAdmin ? formData.stadiumId || undefined : currentUser?.stadiumId,
-            });
+                role: formData.role,
+                phone: formData.phone || undefined,
+                accreditationNumber: formData.accreditationNumber || undefined,
+                stadiumId: isFixed ? undefined : (isSuperAdmin ? (formData.stadiumId || undefined) : currentUser?.stadiumId),
+                departmentId: isFixed ? (logisticsDept?.id || undefined) : (formData.departmentId || undefined),
+                assignAllStadiums: isFixed ? true : formData.assignAllStadiums,
+            };
+
+            await usersApi.create(payload);
             setCreateOpen(false);
             setFormData(EMPTY_FORM);
             loadSystemUsers();
@@ -643,11 +654,19 @@ export function UsersPage() {
                             {isSuperAdmin && (
                                 <div className="space-y-2">
                                     <Label className="text-sm font-semibold">Stadium / Venue</Label>
-                                    <Select value={formData.stadiumId || '__none__'} onValueChange={v => {
-                                        const val = v === '__none__' ? '' : v;
-                                        setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
-                                    }}>
-                                        <SelectTrigger><SelectValue placeholder="Select stadium" /></SelectTrigger>
+                                    <Select 
+                                        value={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' ? '__none__' : (formData.stadiumId || '__none__')} 
+                                        onValueChange={v => {
+                                            const val = v === '__none__' ? '' : v;
+                                            setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
+                                        }}
+                                        disabled={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam'}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select stadium">
+                                                {(formData.role === 'Contracts' || formData.role === 'MaintenanceTeam') ? 'All Stadiums' : undefined}
+                                            </SelectValue>
+                                        </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="__none__">No Stadium</SelectItem>
                                             {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -658,10 +677,15 @@ export function UsersPage() {
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold">Department</Label>
                                 <Select
-                                    value={formData.departmentId || '__none__'}
+                                    value={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' ? '__none__' : (formData.departmentId || '__none__')}
                                     onValueChange={v => setFormData(f => ({ ...f, departmentId: v === '__none__' ? '' : v }))}
+                                    disabled={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam'}
                                 >
-                                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select department">
+                                            {(formData.role === 'Contracts' || formData.role === 'MaintenanceTeam') ? 'Logistics' : undefined}
+                                        </SelectValue>
+                                    </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="__none__">No Department</SelectItem>
                                         {departments.filter(d => !formData.stadiumId || d.stadiumId === formData.stadiumId).map(d => (
