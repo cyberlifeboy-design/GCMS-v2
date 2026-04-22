@@ -63,6 +63,7 @@ export class UsersService {
                     exportFormat: true,
                     exportPreferences: true,
                     assignAllStadiums: true,
+                    grantedPages: true,
                     stadiumId: true,
                     stadium: { select: { id: true, name: true } },
                     departmentId: true,
@@ -76,14 +77,21 @@ export class UsersService {
             prisma.user.count({ where }),
         ]);
 
+        // Parse stringified JSON fields
+        const parsedData = data.map(u => ({
+            ...u,
+            exportPreferences: u.exportPreferences ? JSON.parse(u.exportPreferences as string) : null,
+            grantedPages: u.grantedPages ? JSON.parse(u.grantedPages as string) : [],
+        }));
+
         return {
-            data,
+            data: parsedData,
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
     }
 
     async getById(id: string) {
-        return prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id },
             select: {
                 id: true,
@@ -92,13 +100,23 @@ export class UsersService {
                 role: true,
                 phone: true,
                 isActive: true,
+                isBlocked: true,
                 exportFormat: true,
                 exportPreferences: true,
+                grantedPages: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 createdAt: true,
             },
         });
+
+        if (!user) return null;
+
+        return {
+            ...user,
+            exportPreferences: user.exportPreferences ? JSON.parse(user.exportPreferences as string) : null,
+            grantedPages: user.grantedPages ? JSON.parse(user.grantedPages as string) : [],
+        };
     }
 
     async create(data: {
@@ -118,7 +136,7 @@ export class UsersService {
         // Use provided password or generate a secure random one
         const password = data.password || generateSecurePassword();
         const passwordHash = await bcrypt.hash(password, 10);
-        return prisma.user.create({
+        const user = await prisma.user.create({
             data: {
                 name: data.name,
                 email: data.email,
@@ -129,6 +147,8 @@ export class UsersService {
                 stadiumId: data.stadiumId,
                 departmentId: data.departmentId,
                 assignAllStadiums: data.assignAllStadiums || false,
+                exportPreferences: JSON.stringify({}),
+                grantedPages: JSON.stringify([]),
             },
             select: {
                 id: true,
@@ -147,6 +167,8 @@ export class UsersService {
                 createdAt: true,
             },
         });
+
+        return user;
     }
 
     async update(id: string, data: Partial<{
@@ -166,12 +188,22 @@ export class UsersService {
         venueReportAccess: string;
         password: string;
     }>) {
-        const { password, ...rest } = data;
+        const { password, exportPreferences, grantedPages, ...rest } = data;
         const updatePayload: any = { ...rest };
+        
         if (password) {
             updatePayload.passwordHash = await bcrypt.hash(password, 10);
         }
-        return prisma.user.update({
+        
+        if (exportPreferences) {
+            updatePayload.exportPreferences = JSON.stringify(exportPreferences);
+        }
+        
+        if (grantedPages) {
+            updatePayload.grantedPages = JSON.stringify(grantedPages);
+        }
+
+        const user = await prisma.user.update({
             where: { id },
             data: updatePayload,
             select: {
@@ -195,6 +227,12 @@ export class UsersService {
                 updatedAt: true,
             },
         });
+
+        return {
+            ...user,
+            exportPreferences: user.exportPreferences ? JSON.parse(user.exportPreferences as string) : null,
+            grantedPages: user.grantedPages ? JSON.parse(user.grantedPages as string) : [],
+        };
     }
 
     async setActive(id: string, isActive: boolean) {
