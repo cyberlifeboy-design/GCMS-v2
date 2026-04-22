@@ -3,7 +3,7 @@ import { usersApi, stadiumsApi, departmentsApi, requestsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
-import { formatDate } from '@/lib/dateUtils';
 
 interface User {
     id: string;
@@ -256,10 +255,22 @@ export function UsersPage() {
         if (!editUser) return;
         setSubmitting(true);
         try {
-            await usersApi.update(editUser.id, {
-                ...editData,
+            const isFixed = editData.role === 'Contracts' || editData.role === 'MaintenanceTeam';
+            const logisticsDept = departments.find(d => d.name.toLowerCase() === 'logistics');
+
+            const payload = {
+                name: editData.name,
+                email: editData.email,
+                role: editData.role,
+                phone: editData.phone || undefined,
+                accreditationNumber: editData.accreditationNumber || undefined,
+                stadiumId: isFixed ? undefined : (editData.stadiumId || undefined),
+                departmentId: isFixed ? (logisticsDept?.id || undefined) : (editData.departmentId || undefined),
+                assignAllStadiums: isFixed ? true : editData.assignAllStadiums,
                 password: editData.newPassword || undefined,
-            });
+            };
+
+            await usersApi.update(editUser.id, payload);
             setEditOpen(false);
             setEditUser(null);
             loadSystemUsers();
@@ -826,6 +837,51 @@ export function UsersPage() {
                                 <Label className="text-sm font-semibold">Accreditation Number</Label>
                                 <Input value={editData.accreditationNumber} onChange={e => setEditData(d => ({ ...d, accreditationNumber: e.target.value }))} />
                             </div>
+                            {isSuperAdmin && (
+                                <>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-semibold">Stadium / Venue</Label>
+                                        <Select 
+                                            value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' ? '__none__' : (editData.stadiumId || '__none__')} 
+                                            onValueChange={v => {
+                                                const val = v === '__none__' ? '' : v;
+                                                setEditData(d => ({ ...d, stadiumId: val, departmentId: '' }));
+                                            }}
+                                            disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam'}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select stadium">
+                                                    {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam') ? 'All Stadiums' : undefined}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__">No Stadium</SelectItem>
+                                                {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-semibold">Department</Label>
+                                        <Select
+                                            value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' ? '__none__' : (editData.departmentId || '__none__')}
+                                            onValueChange={v => setEditData(d => ({ ...d, departmentId: v === '__none__' ? '' : v }))}
+                                            disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam'}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select department">
+                                                    {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam') ? 'Logistics' : undefined}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__">No Department</SelectItem>
+                                                {departments.filter(d => !editData.stadiumId || d.stadiumId === editData.stadiumId).map(d => (
+                                                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </>
+                            )}
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold">New Password (leave blank to keep unchanged)</Label>
                                 <Input type="password" value={editData.newPassword} onChange={e => setEditData(d => ({ ...d, newPassword: e.target.value }))} autoComplete="new-password" />

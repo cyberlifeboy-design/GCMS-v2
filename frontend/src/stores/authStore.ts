@@ -66,7 +66,7 @@ export interface AuthUser {
     id: string;
     name: string;
     email: string;
-    role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
+    role: 'SuperAdmin' | 'Admin' | 'FA' | 'Observer' | 'Contracts' | 'MaintenanceTeam';
     phone?: string;
     stadiumId?: string;
     stadium?: { id: string; name: string };
