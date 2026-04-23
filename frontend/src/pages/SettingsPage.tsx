@@ -8,8 +8,8 @@ import {
     Loader2, Save, Upload, Image, FileSpreadsheet, FileText, 
     File, Link as LinkIcon, Copy, Check, Bell, Clock,
     Megaphone, Sun, Moon, Monitor, 
-    ChevronDown, ChevronUp, User, Settings as SettingsIcon,
-    Palette, ShieldCheck, Wrench, Globe, HelpCircle
+    ChevronDown, ChevronUp, User,
+    Palette, ShieldCheck, Wrench, Globe, Users
 } from 'lucide-react';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { Separator } from '@/components/ui/separator';
 
 interface Settings {
     tournamentName?: string;
@@ -65,11 +66,18 @@ interface Department {
 export function SettingsPage() {
     const { user, updateExportFormat } = useAuthStore();
     const isSuperAdmin = user?.role === 'SuperAdmin';
+
     const [activeTab, setActiveTab] = useState('profile');
+
+    // User preferences
     const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf' | 'docx'>(user?.exportFormat || 'xlsx');
     const [savingPreferences, setSavingPreferences] = useState(false);
     const [preferencesSaved, setPreferencesSaved] = useState(false);
+
+    // Theme
     const { theme, setTheme } = useThemeStore();
+
+    // Notification preferences
     const [emailNotifications, setEmailNotifications] = useState({
         maintenance: true,
         handover: true,
@@ -77,6 +85,7 @@ export function SettingsPage() {
         assignments: true,
     });
 
+    // Granular export preferences
     const defaultExportPrefs: ExportPreferences = {
         fleet: { enabled: true, includeCarNumber: true, includeStatus: true, includeAssignment: true, includeStadium: true, includeDepartment: true },
         handover: { enabled: true, includeCarNumber: true, includeUser: true, includeAction: true, includeTimestamp: true, includeNotes: true },
@@ -90,9 +99,13 @@ export function SettingsPage() {
     const [exportPrefs, setExportPrefs] = useState<ExportPreferences>(() => {
         if (user?.exportPreferences) {
             try {
-                const prefs = typeof user.exportPreferences === 'string' ? JSON.parse(user.exportPreferences) : user.exportPreferences;
+                const prefs = typeof user.exportPreferences === 'string'
+                    ? JSON.parse(user.exportPreferences)
+                    : user.exportPreferences;
                 return { ...defaultExportPrefs, ...prefs };
-            } catch { return defaultExportPrefs; }
+            } catch {
+                return defaultExportPrefs;
+            }
         }
         return defaultExportPrefs;
     });
@@ -101,17 +114,23 @@ export function SettingsPage() {
         fleet: false, handover: false, maintenance: false, request: false, users: false, department: false, stadium: false,
     });
 
+    // System settings
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+
     const [tournamentName, setTournamentName] = useState('');
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [headerFile, setHeaderFile] = useState<File | null>(null);
     const [footerFile, setFooterFile] = useState<File | null>(null);
+
     const [logoPrev, setLogoPrev] = useState('');
     const [headerPrev, setHeaderPrev] = useState('');
     const [footerPrev, setFooterPrev] = useState('');
     const [footerText, setFooterText] = useState('');
+
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
+
+    // SuperAdmin only settings
     const [maintenanceNotificationEmails, setMaintenanceNotificationEmails] = useState('');
     const [handoverTimeoutDays, setHandoverTimeoutDays] = useState(0);
     const [handoverTimeoutHoursField, setHandoverTimeoutHoursField] = useState(2);
@@ -148,7 +167,10 @@ export function SettingsPage() {
     useEffect(() => {
         const load = async () => {
             try {
-                const [settingsRes, stadiumsRes] = await Promise.all([settingsApi.get(), stadiumsApi.getAll()]);
+                const [settingsRes, stadiumsRes] = await Promise.all([
+                    settingsApi.get(),
+                    stadiumsApi.getAll(),
+                ]);
                 const d: Settings = settingsRes.data.data || {};
                 setTournamentName(d.tournamentName || '');
                 setLogoPrev(d.logoUrl || '');
@@ -181,12 +203,16 @@ export function SettingsPage() {
         };
         load();
     }, []);
+
     const handleSavePreferences = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         setSavingPreferences(true);
         setPreferencesSaved(false);
         try {
-            await usersApi.updatePreferences({ exportFormat, exportPreferences: { ...exportPrefs, emailNotifications } as any });
+            await usersApi.updatePreferences({
+                exportFormat,
+                exportPreferences: { ...exportPrefs, emailNotifications } as any,
+            });
             updateExportFormat(exportFormat);
             useAuthStore.getState().updateExportPreferences({ ...exportPrefs, emailNotifications });
             setPreferencesSaved(true);
@@ -230,7 +256,7 @@ export function SettingsPage() {
             const emails = maintenanceNotificationEmails.split(',').map(e => e.trim());
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (emails.some(e => e && !emailRegex.test(e))) {
-                toast.error('Invalid email format');
+                toast.error('Invalid email format detected');
                 return;
             }
         }
@@ -264,13 +290,13 @@ export function SettingsPage() {
             await settingsApi.update(fd);
             toast.success('System settings saved');
         } catch (err: any) {
-            toast.error('Failed to save settings');
+            toast.error(err.response?.data?.error || 'Failed to save system settings');
         } finally {
             setSaving(false);
         }
     };
 
-    const ImageField = ({ label, currentUrl, onPreview, onFileChange }: any) => (
+    const ImageField = ({ label, currentUrl, onPreview, onFileChange }: { label: string; currentUrl: string; onPreview: (url: string) => void; onFileChange: (file: File | null) => void }) => (
         <div className="space-y-2">
             <Label className="text-sm font-semibold">{label}</Label>
             {currentUrl ? (
@@ -278,7 +304,9 @@ export function SettingsPage() {
                     <img src={currentUrl} alt={label} className="max-h-full max-w-full object-contain p-2" />
                     {isSuperAdmin && (
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                             <Button type="button" variant="secondary" size="sm" onClick={() => document.getElementById(`file-${label.replace(/\s+/g, '-')}`)?.click()}>Change</Button>
+                             <Button type="button" variant="secondary" size="sm" onClick={() => document.getElementById(`file-${label.replace(/\s+/g, '-')}`)?.click()}>
+                                <Upload className="w-4 h-4 mr-2" /> Change
+                             </Button>
                         </div>
                     )}
                 </div>
@@ -302,62 +330,110 @@ export function SettingsPage() {
         </div>
     );
 
-    if (loading) return <div className="flex flex-col items-center justify-center h-[60vh] gap-4"><Loader2 className="w-10 h-10 animate-spin text-primary" /><p className="text-sm text-muted-foreground">Loading...</p></div>;
+    if (loading) return <div className="flex flex-col items-center justify-center h-[60vh] gap-4"><Loader2 className="w-10 h-10 animate-spin text-primary" /><p className="text-sm text-muted-foreground">Loading settings...</p></div>;
 
     return (
-        <div className="container mx-auto py-6 max-w-5xl animate-in fade-in duration-500">
+        <div className="container mx-auto py-6 max-w-6xl animate-in fade-in duration-500">
             <div className="mb-8">
                 <h1 className="text-4xl font-extrabold tracking-tight">Settings</h1>
-                <p className="text-muted-foreground text-lg mt-1">Configure GCMS parameters.</p>
+                <p className="text-muted-foreground text-lg mt-1">Configure GCMS parameters and your personal preferences.</p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:flex-row gap-8">
-                <TabsList className="md:flex-col h-auto md:w-64 bg-transparent gap-2 p-0">
-                    <TabsTrigger value="profile" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col lg:flex-row gap-10">
+                <TabsList className="lg:flex-col h-auto lg:w-72 bg-transparent gap-2 p-0">
+                    <TabsTrigger value="profile" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
                         <User className="w-5 h-5 mr-3" /> My Profile
                     </TabsTrigger>
-                    <TabsTrigger value="appearance" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20">
+                    <TabsTrigger value="appearance" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
                         <Palette className="w-5 h-5 mr-3" /> Appearance
                     </TabsTrigger>
                     {isSuperAdmin && (
-                        <div className="flex flex-col gap-2 w-full">
-                            <div className="my-2 h-px bg-border w-full" />
-                            <TabsTrigger value="system" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"><Globe className="w-5 h-5 mr-3" /> System Info</TabsTrigger>
-                            <TabsTrigger value="branding" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"><Image className="w-5 h-5 mr-3" /> Branding</TabsTrigger>
-                            <TabsTrigger value="workflow" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"><Clock className="w-5 h-5 mr-3" /> Workflow</TabsTrigger>
-                            <TabsTrigger value="access" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"><ShieldCheck className="w-5 h-5 mr-3" /> Access Control</TabsTrigger>
-                            <TabsTrigger value="tools" className="w-full justify-start rounded-lg px-4 py-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20"><Wrench className="w-5 h-5 mr-3" /> Tools</TabsTrigger>
+                        <div className="flex flex-col gap-2 w-full mt-4">
+                            <div className="px-5 py-2">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">System Administration</span>
+                            </div>
+                            <TabsTrigger value="system" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <Globe className="w-5 h-5 mr-3" /> System Info
+                            </TabsTrigger>
+                            <TabsTrigger value="branding" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <Image className="w-5 h-5 mr-3" /> Branding
+                            </TabsTrigger>
+                            <TabsTrigger value="workflow" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <Clock className="w-5 h-5 mr-3" /> Workflow
+                            </TabsTrigger>
+                            <TabsTrigger value="access" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <ShieldCheck className="w-5 h-5 mr-3" /> Access Control
+                            </TabsTrigger>
+                            <TabsTrigger value="tools" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <Wrench className="w-5 h-5 mr-3" /> Tools
+                            </TabsTrigger>
                         </div>
                     )}
                 </TabsList>
 
-                <div className="flex-1 min-w-0 space-y-6">
-                    <TabsContent value="profile" className="mt-0 space-y-6">
-                        <Card className="border-none shadow-sm">
-                            <CardHeader><CardTitle className="text-xl">Export Preferences</CardTitle></CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="space-y-3">
-                                    <Label className="font-semibold">Default File Format</Label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                        {[{ id: 'xlsx', icon: FileSpreadsheet, color: 'text-green-600' }, { id: 'pdf', icon: FileText, color: 'text-red-600' }, { id: 'docx', icon: File, color: 'text-blue-600' }].map(format => (
-                                            <div key={format.id} onClick={() => setExportFormat(format.id as any)} className={`cursor-pointer flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${exportFormat === format.id ? 'border-primary bg-primary/5' : 'border-muted hover:border-muted-foreground/30'}`}><format.icon className={`w-5 h-5 ${format.color}`} /><span className="font-medium text-sm">{format.id.toUpperCase()}</span></div>
+                <div className="flex-1 min-w-0 space-y-8">
+                    <TabsContent value="profile" className="mt-0 space-y-8">
+                        <Card className="border-none shadow-md overflow-hidden">
+                            <CardHeader className="bg-muted/10">
+                                <CardTitle className="text-2xl">Export Preferences</CardTitle>
+                                <CardDescription>Customize how your reports are generated and formatted.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-8 space-y-8">
+                                <div className="space-y-4">
+                                    <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Default File Format</Label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        {[
+                                            { id: 'xlsx', icon: FileSpreadsheet, color: 'text-green-600', label: 'Excel Spreadsheet' },
+                                            { id: 'pdf', icon: FileText, color: 'text-red-600', label: 'PDF Document' },
+                                            { id: 'docx', icon: File, color: 'text-blue-600', label: 'Word Document' }
+                                        ].map(format => (
+                                            <div 
+                                                key={format.id} 
+                                                onClick={() => setExportFormat(format.id as any)} 
+                                                className={`cursor-pointer flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all duration-200 ${exportFormat === format.id ? 'border-primary bg-primary/5 shadow-inner' : 'border-muted hover:border-muted-foreground/20 hover:bg-muted/5'}`}
+                                            >
+                                                <format.icon className={`w-8 h-8 ${format.color}`} />
+                                                <div className="text-center">
+                                                    <span className="font-bold text-sm block">{format.id.toUpperCase()}</span>
+                                                    <span className="text-[10px] text-muted-foreground">{format.label}</span>
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
-                                <div className="space-y-4">
-                                    <Label className="font-semibold">Granular Report Fields</Label>
-                                    <div className="space-y-3">
+
+                                <Separator />
+
+                                <div className="space-y-5">
+                                    <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Granular Report Fields</Label>
+                                    <div className="grid grid-cols-1 gap-4">
                                         {reportTypes.map((report) => (
-                                            <div key={report.key} className="border rounded-xl bg-muted/5 overflow-hidden">
-                                                <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/10" onClick={() => toggleSection(report.key)}>
-                                                    <div className="flex items-center gap-3"><Checkbox checked={(exportPrefs[report.key] as any)?.enabled ?? true} onCheckedChange={(checked) => selectAllInReport(report.key as any, !!checked)} onClick={(e) => e.stopPropagation()} /><span className="font-semibold text-sm">{report.label}</span></div>
-                                                    {expandedSections[report.key] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                            <div key={report.key} className="border rounded-2xl bg-muted/5 overflow-hidden transition-all border-muted/50">
+                                                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/10" onClick={() => toggleSection(report.key)}>
+                                                    <div className="flex items-center gap-4">
+                                                        <Checkbox 
+                                                            checked={(exportPrefs[report.key] as any)?.enabled ?? true} 
+                                                            onCheckedChange={(checked) => selectAllInReport(report.key as any, !!checked)} 
+                                                            onClick={(e) => e.stopPropagation()} 
+                                                        />
+                                                        <span className="font-bold text-base">{report.label}</span>
+                                                    </div>
+                                                    {expandedSections[report.key] ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                                                 </div>
                                                 {expandedSections[report.key] && (
-                                                    <div className="p-3 pt-0 border-t bg-background/50 grid grid-cols-2 gap-2 pt-3">
-                                                        {report.fields.map((field) => (
-                                                            <div key={field.key} className="flex items-center gap-2 hover:bg-muted/50 p-1 rounded transition-colors"><Checkbox checked={(exportPrefs[report.key] as any)?.[field.key] ?? true} onCheckedChange={(checked) => updateExportPref(report.key as any, field.key, !!checked)} /><span className="text-[10px]">{field.label}</span></div>
-                                                        ))}
+                                                    <div className="p-6 pt-0 border-t border-muted/30 bg-background/50 animate-in slide-in-from-top-2 duration-300">
+                                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 pt-5">
+                                                            {report.fields.map((field) => (
+                                                                <div key={field.key} className="flex items-center gap-3 p-1 rounded-lg hover:bg-muted/20 transition-colors">
+                                                                    <Checkbox 
+                                                                        id={`${report.key}-${field.key}`}
+                                                                        checked={(exportPrefs[report.key] as any)?.[field.key] ?? true} 
+                                                                        onCheckedChange={(checked) => updateExportPref(report.key as any, field.key, !!checked)} 
+                                                                    />
+                                                                    <Label htmlFor={`${report.key}-${field.key}`} className="text-sm font-medium cursor-pointer leading-tight">{field.label}</Label>
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -365,29 +441,74 @@ export function SettingsPage() {
                                     </div>
                                 </div>
                             </CardContent>
-                            <CardFooter className="justify-end border-t p-4 bg-muted/10">
-                                {preferencesSaved && <Badge variant="outline" className="mr-3 bg-green-50 text-green-700 border-green-200">Saved</Badge>}
-                                <Button onClick={() => handleSavePreferences()} disabled={savingPreferences} size="sm">{savingPreferences ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}Save Preferences</Button>
+                            <CardFooter className="justify-end border-t p-5 bg-muted/5 gap-4">
+                                {preferencesSaved && <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 animate-in fade-in zoom-in-95">Settings Saved</Badge>}
+                                <Button onClick={() => handleSavePreferences()} disabled={savingPreferences} className="rounded-xl px-6">
+                                    {savingPreferences ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                    Save Profile Preferences
+                                </Button>
                             </CardFooter>
                         </Card>
-                        <Card className="border-none shadow-sm">
-                            <CardHeader><CardTitle className="text-xl">Email Notifications</CardTitle></CardHeader>
-                            <CardContent className="space-y-3">
-                                {[{ id: 'maint', label: 'Maintenance Alerts', val: emailNotifications.maintenance, k: 'maintenance' }, { id: 'hand', label: 'Handover Updates', val: emailNotifications.handover, k: 'handover' }, { id: 'req', label: 'Request Status', val: emailNotifications.requests, k: 'requests' }, { id: 'assign', label: 'Assignment Changes', val: emailNotifications.assignments, k: 'assignments' }].map(item => (
-                                    <div key={item.id} className="flex items-center justify-between p-2 rounded-lg border border-muted/50"><Label htmlFor={item.id} className="text-sm font-medium">{item.label}</Label><Switch id={item.id} checked={item.val} onCheckedChange={(checked) => setEmailNotifications(prev => ({ ...prev, [item.k]: checked }))} /></div>
+
+                        <Card className="border-none shadow-md overflow-hidden">
+                            <CardHeader className="bg-muted/10">
+                                <CardTitle className="text-2xl">Email Notifications</CardTitle>
+                                <CardDescription>Manage which events trigger an email alert to your registered address.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {[
+                                    { id: 'maint', label: 'Maintenance Alerts', val: emailNotifications.maintenance, k: 'maintenance', icon: Wrench },
+                                    { id: 'hand', label: 'Handover Updates', val: emailNotifications.handover, k: 'handover', icon: Clock },
+                                    { id: 'req', label: 'Request Status', val: emailNotifications.requests, k: 'requests', icon: FileText },
+                                    { id: 'assign', label: 'Assignment Changes', val: emailNotifications.assignments, k: 'assignments', icon: ShieldCheck }
+                                ].map(item => (
+                                    <div key={item.id} className="flex items-center justify-between p-4 rounded-2xl border border-muted/50 hover:border-primary/30 transition-all bg-card shadow-sm">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                                <item.icon className="w-4 h-4" />
+                                            </div>
+                                            <Label htmlFor={item.id} className="text-sm font-bold cursor-pointer">{item.label}</Label>
+                                        </div>
+                                        <Switch 
+                                            id={item.id} 
+                                            checked={item.val} 
+                                            onCheckedChange={(checked) => setEmailNotifications(prev => ({ ...prev, [item.k]: checked }))} 
+                                        />
+                                    </div>
                                 ))}
                             </CardContent>
-                            <CardFooter className="justify-end border-t p-4 bg-muted/10"><Button variant="outline" size="sm" onClick={() => handleSavePreferences()}>Update Notifications</Button></CardFooter>
+                            <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                <Button variant="outline" onClick={() => handleSavePreferences()} className="rounded-xl">Update Notification Settings</Button>
+                            </CardFooter>
                         </Card>
                     </TabsContent>
 
                     <TabsContent value="appearance" className="mt-0">
-                        <Card className="border-none shadow-sm">
-                            <CardHeader><CardTitle>Theme</CardTitle></CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-3 gap-4">
-                                    {[{ id: 'light', label: 'Light', icon: Sun }, { id: 'dark', label: 'Dark', icon: Moon }, { id: 'system', label: 'System', icon: Monitor }].map(t => (
-                                        <div key={t.id} onClick={() => setTheme(t.id as any)} className={`cursor-pointer flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${theme === t.id ? 'border-primary bg-primary/5 shadow-sm' : 'border-muted hover:border-muted-foreground/30'}`}><t.icon className={`w-6 h-6 ${theme === t.id ? 'text-primary' : 'text-muted-foreground'}`} /><span className="font-bold text-xs">{t.label}</span></div>
+                        <Card className="border-none shadow-md overflow-hidden">
+                            <CardHeader className="bg-muted/10">
+                                <CardTitle className="text-2xl">Visual Theme</CardTitle>
+                                <CardDescription>Select your preferred appearance for the application.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-8">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    {[
+                                        { id: 'light', label: 'Light', icon: Sun, desc: 'Clean, high-contrast look' },
+                                        { id: 'dark', label: 'Dark', icon: Moon, desc: 'Easier on the eyes at night' },
+                                        { id: 'system', label: 'System', icon: Monitor, desc: 'Matches your OS settings' }
+                                    ].map(t => (
+                                        <div 
+                                            key={t.id} 
+                                            onClick={() => setTheme(t.id as any)} 
+                                            className={`cursor-pointer flex flex-col items-center gap-4 p-8 rounded-3xl border-2 transition-all duration-300 ${theme === t.id ? 'border-primary bg-primary/5 shadow-lg' : 'border-muted hover:border-muted-foreground/20 hover:bg-muted/5'}`}
+                                        >
+                                            <div className={`p-4 rounded-2xl ${theme === t.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                                                <t.icon className="w-8 h-8" />
+                                            </div>
+                                            <div className="text-center">
+                                                <span className="font-bold text-lg block">{t.label}</span>
+                                                <span className="text-xs text-muted-foreground">{t.desc}</span>
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             </CardContent>
@@ -396,76 +517,211 @@ export function SettingsPage() {
 
                     {isSuperAdmin && (
                         <>
-                            <TabsContent value="system" className="mt-0 space-y-6">
-                                <form onSubmit={handleSaveSystem} className="space-y-6">
-                                    <Card className="border-none shadow-sm">
-                                        <CardHeader><CardTitle>System Identity</CardTitle></CardHeader>
-                                        <CardContent className="space-y-4">
-                                            <div className="space-y-2"><Label className="text-xs font-bold">Tournament Name</Label><Input value={tournamentName} onChange={e => setTournamentName(e.target.value)} className="h-10" /></div>
+                            <TabsContent value="system" className="mt-0 space-y-8">
+                                <form onSubmit={handleSaveSystem} className="space-y-8">
+                                    <Card className="border-none shadow-md">
+                                        <CardHeader><CardTitle className="text-2xl">System Identity</CardTitle></CardHeader>
+                                        <CardContent className="p-8 space-y-6">
                                             <div className="space-y-2">
-                                                <Label className="text-xs font-bold">Timezone</Label>
-                                                <Select value={timezone} onValueChange={setTimezone}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="UTC">UTC</SelectItem><SelectItem value="Asia/Qatar">Asia/Qatar</SelectItem></SelectContent></Select>
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Tournament Name</Label>
+                                                <Input value={tournamentName} onChange={e => setTournamentName(e.target.value)} className="h-12 rounded-xl text-lg font-medium" placeholder="Enter tournament name" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Global Timezone</Label>
+                                                <Select value={timezone} onValueChange={setTimezone}>
+                                                    <SelectTrigger className="h-12 rounded-xl">
+                                                        <SelectValue placeholder="Select timezone" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="UTC">UTC (Universal Time Coordinated)</SelectItem>
+                                                        <SelectItem value="Asia/Qatar">Asia/Qatar (UTC+3)</SelectItem>
+                                                        <SelectItem value="Asia/Dubai">Asia/Dubai (UTC+4)</SelectItem>
+                                                        <SelectItem value="Europe/London">Europe/London (GMT/BST)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                         </CardContent>
                                     </Card>
-                                    <Card className="border-none shadow-sm">
-                                        <CardHeader><CardTitle>Module Control</CardTitle></CardHeader>
-                                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {[{ label: 'Fleet Management', val: enableFleetManagement, set: setEnableFleetManagement }, { label: 'Car Requests', val: enableCarRequests, set: setEnableCarRequests }, { label: 'Handover Photos', val: enableHandoverPhotos, set: setEnableHandoverPhotos }, { label: 'Maintenance Reports', val: enableMaintenanceReports, set: setEnableMaintenanceReports }, { label: 'User Import', val: enableUserImport, set: setEnableUserImport }, { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations }, { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports }, { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix }].map((f, i) => (
-                                                <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-muted/10"><Label className="text-sm font-medium">{f.label}</Label><Switch checked={f.val} onCheckedChange={f.set} /></div>
-                                            ))}
+
+                                    <Card className="border-none shadow-md overflow-hidden">
+                                        <CardHeader className="bg-muted/10">
+                                            <CardTitle className="text-2xl">Module Configuration</CardTitle>
+                                            <CardDescription>Enable or disable major features across the platform.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="p-8">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {[
+                                                    { label: 'Fleet Management', val: enableFleetManagement, set: setEnableFleetManagement, icon: Wrench },
+                                                    { label: 'Car Requests', val: enableCarRequests, set: setEnableCarRequests, icon: FileText },
+                                                    { label: 'Handover Photos', val: enableHandoverPhotos, set: setEnableHandoverPhotos, icon: Image },
+                                                    { label: 'Maintenance Reports', val: enableMaintenanceReports, set: setEnableMaintenanceReports, icon: Bell },
+                                                    { label: 'User Import', val: enableUserImport, set: setEnableUserImport, icon: User },
+                                                    { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations, icon: Check },
+                                                    { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports, icon: FileSpreadsheet },
+                                                    { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix, icon: ShieldCheck },
+                                                ].map((f, i) => (
+                                                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-background text-muted-foreground">
+                                                                <f.icon className="w-4 h-4" />
+                                                            </div>
+                                                            <Label className="text-sm font-bold">{f.label}</Label>
+                                                        </div>
+                                                        <Switch checked={f.val} onCheckedChange={f.set} />
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </CardContent>
-                                        <CardFooter className="justify-end border-t p-4 bg-muted/10"><Button type="submit" disabled={saving}>{saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}Save System</Button></CardFooter>
+                                        <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                            <Button type="submit" disabled={saving} className="rounded-xl px-8 h-12">
+                                                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                                Update Global Settings
+                                            </Button>
+                                        </CardFooter>
                                     </Card>
                                 </form>
                             </TabsContent>
-                            <TabsContent value="branding" className="mt-0 space-y-6">
-                                <Card className="border-none shadow-sm">
-                                    <CardHeader><CardTitle>Visual Assets</CardTitle></CardHeader>
-                                    <CardContent className="space-y-6">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <ImageField label="Logo" currentUrl={logoPrev} onPreview={setLogoPrev} onFileChange={setLogoFile} />
-                                            <ImageField label="Header Image" currentUrl={headerPrev} onPreview={setHeaderPrev} onFileChange={setHeaderFile} />
-                                            <ImageField label="Footer Image" currentUrl={footerPrev} onPreview={setFooterPrev} onFileChange={setFooterFile} />
-                                            <div className="space-y-2"><Label className="text-xs font-bold">Footer Text</Label><Textarea value={footerText} onChange={e => setFooterText(e.target.value)} rows={5} /><Button className="w-full mt-2" onClick={handleSaveSystem} disabled={saving}>Apply Branding</Button></div>
+
+                            <TabsContent value="branding" className="mt-0">
+                                <Card className="border-none shadow-md">
+                                    <CardHeader><CardTitle className="text-2xl">Branding Assets</CardTitle></CardHeader>
+                                    <CardContent className="p-8 space-y-8">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                            <div className="space-y-8">
+                                                <ImageField label="Logo" currentUrl={logoPrev} onPreview={setLogoPrev} onFileChange={setLogoFile} />
+                                                <ImageField label="Header Background" currentUrl={headerPrev} onPreview={setHeaderPrev} onFileChange={setHeaderFile} />
+                                                <ImageField label="Footer Background" currentUrl={footerPrev} onPreview={setFooterPrev} onFileChange={setFooterFile} />
+                                            </div>
+                                            <div className="space-y-6">
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Footer Copyright Text</Label>
+                                                    <Textarea value={footerText} onChange={e => setFooterText(e.target.value)} rows={8} className="rounded-2xl p-4 bg-muted/5" placeholder="Enter copyright notice or footer notes..." />
+                                                </div>
+                                                <Button className="w-full h-12 rounded-xl text-lg font-bold" onClick={handleSaveSystem} disabled={saving}>
+                                                    <Upload className="w-5 h-5 mr-2" /> Apply All Branding
+                                                </Button>
+                                            </div>
                                         </div>
                                     </CardContent>
                                 </Card>
                             </TabsContent>
-                            <TabsContent value="workflow" className="mt-0 space-y-6">
-                                <Card className="border-none shadow-sm">
-                                    <CardHeader><CardTitle>Handover Logic</CardTitle></CardHeader>
-                                    <CardContent className="space-y-6">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Timeout Days</Label><Input type="number" value={handoverTimeoutDays} onChange={e => setHandoverTimeoutDays(parseInt(e.target.value) || 0)} /></div>
-                                            <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Timeout Hours</Label><Input type="number" value={handoverTimeoutHoursField} onChange={e => setHandoverTimeoutHoursField(parseInt(e.target.value) || 0)} /></div>
+
+                            <TabsContent value="workflow" className="mt-0 space-y-8">
+                                <Card className="border-none shadow-md overflow-hidden">
+                                    <CardHeader className="bg-muted/10">
+                                        <CardTitle className="text-2xl">Workflow Parameters</CardTitle>
+                                        <CardDescription>Configure the underlying logic for handovers and maintenance escalation.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 space-y-8">
+                                        <div className="space-y-4">
+                                            <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Handover Timeout Duration</Label>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-medium">Days</Label>
+                                                    <Input type="number" value={handoverTimeoutDays} onChange={e => setHandoverTimeoutDays(parseInt(e.target.value) || 0)} className="h-12 rounded-xl" />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-medium">Hours</Label>
+                                                    <Input type="number" value={handoverTimeoutHoursField} onChange={e => setHandoverTimeoutHoursField(parseInt(e.target.value) || 0)} className="h-12 rounded-xl" />
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Carts not returned within this timeframe will be marked as 'Timed Out'.</p>
                                         </div>
-                                        <div className="space-y-2"><Label className="text-xs font-bold">Escalation Emails</Label><Textarea value={maintenanceNotificationEmails} onChange={e => setMaintenanceNotificationEmails(e.target.value)} placeholder="email@test.com" /><p className="text-[9px] text-muted-foreground">Comma-separated email addresses.</p></div>
+
+                                        <Separator />
+
+                                        <div className="space-y-4">
+                                            <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Maintenance Escalation</Label>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">Distribution Emails (Comma-separated)</Label>
+                                                <Textarea value={maintenanceNotificationEmails} onChange={e => setMaintenanceNotificationEmails(e.target.value)} placeholder="maint@tournament.com, support@gcms.com" className="rounded-2xl p-4 bg-muted/5 min-h-[120px]" />
+                                                <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Bell className="w-3 h-3" /> High-priority maintenance reports will be sent to these addresses.</p>
+                                            </div>
+                                        </div>
                                     </CardContent>
-                                    <CardFooter className="justify-end border-t p-4 bg-muted/10"><Button onClick={handleSaveSystem} size="sm">Save Workflow</Button></CardFooter>
+                                    <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                        <Button onClick={handleSaveSystem} className="rounded-xl px-8 h-11">Save Workflow Configuration</Button>
+                                    </CardFooter>
                                 </Card>
                             </TabsContent>
+
                             <TabsContent value="access" className="mt-0">
                                 <UserAccessControl />
                             </TabsContent>
-                            <TabsContent value="tools" className="mt-0 space-y-6">
+
+                            <TabsContent value="tools" className="mt-0 space-y-8">
                                 <RequestLinkGenerator stadiums={stadiums} />
-                                <Card className="border-none shadow-sm bg-indigo-50/30 dark:bg-indigo-950/10">
-                                    <CardHeader><CardTitle className="text-indigo-700">Push Announcement</CardTitle></CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <Textarea value={systemAnnouncement} onChange={e => setSystemAnnouncement(e.target.value)} placeholder="Type message..." />
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold uppercase">Target</Label>
-                                                <Select value={announcementTarget} onValueChange={v => setAnnouncementTarget(v as any)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Everyone</SelectItem><SelectItem value="system">Admins</SelectItem><SelectItem value="fa">FA Team</SelectItem></SelectContent></Select>
+                                
+                                <Card className="border-none shadow-md overflow-hidden bg-gradient-to-br from-indigo-50/50 to-blue-50/50 dark:from-indigo-950/10 dark:to-blue-950/10">
+                                    <CardHeader className="bg-indigo-500/10 border-b border-indigo-500/10">
+                                        <CardTitle className="text-2xl text-indigo-700 dark:text-indigo-300 flex items-center gap-3">
+                                            <Megaphone className="w-6 h-6" /> System Push Announcement
+                                        </CardTitle>
+                                        <CardDescription className="text-indigo-600/70 dark:text-indigo-400/70 font-medium">Send an urgent broadcast to all users or specific groups.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 space-y-6">
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-bold uppercase tracking-wider text-indigo-700/80 dark:text-indigo-300/80">Announcement Message</Label>
+                                            <Textarea 
+                                                value={systemAnnouncement} 
+                                                onChange={e => setSystemAnnouncement(e.target.value)} 
+                                                placeholder="Enter the alert message here..." 
+                                                className="rounded-2xl p-4 bg-background/80 min-h-[120px] text-lg border-indigo-200 dark:border-indigo-800 focus:ring-indigo-500" 
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target Audience</Label>
+                                                <Select value={announcementTarget} onValueChange={v => setAnnouncementTarget(v as any)}>
+                                                    <SelectTrigger className="h-12 rounded-xl bg-background/80 border-indigo-200 dark:border-indigo-800">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Global (All Users)</SelectItem>
+                                                        <SelectItem value="system">Administrative (Admins Only)</SelectItem>
+                                                        <SelectItem value="fa">Operational (FA Team)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-[10px] font-bold uppercase">Expiry</Label>
-                                                <Input type="datetime-local" value={announcementExpiry} onChange={e => setAnnouncementExpiry(e.target.value)} />
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Auto-Expiry Date & Time</Label>
+                                                <Input 
+                                                    type="datetime-local" 
+                                                    value={announcementExpiry} 
+                                                    onChange={e => setAnnouncementExpiry(e.target.value)} 
+                                                    className="h-12 rounded-xl bg-background/80 border-indigo-200 dark:border-indigo-800" 
+                                                />
                                             </div>
                                         </div>
                                     </CardContent>
-                                    <CardFooter className="justify-end border-t p-4"><Button className="bg-indigo-600 hover:bg-indigo-700" disabled={!systemAnnouncement.trim() || pushingAnnouncement} onClick={async () => { setPushingAnnouncement(true); try { const res = await announcementsApi.create({ title: 'Alert', message: systemAnnouncement, type: 'warning', targetType: announcementTarget === 'system' ? 'users' : announcementTarget === 'fa' ? 'fas' : 'all', expiresAt: announcementExpiry ? new Date(announcementExpiry).toISOString() : undefined }); await announcementsApi.sendNow(res.data.data.id); setSystemAnnouncement(''); toast.success('Broadcast sent'); } catch (err: any) { toast.error('Broadcast failed'); } finally { setPushingAnnouncement(false); } }}>Broadcast Now</Button></CardFooter>
+                                    <CardFooter className="justify-end border-t border-indigo-500/10 p-6 bg-indigo-500/5">
+                                        <Button 
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-10 h-12 font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95" 
+                                            disabled={!systemAnnouncement.trim() || pushingAnnouncement}
+                                            onClick={async () => {
+                                                setPushingAnnouncement(true);
+                                                try {
+                                                    const res = await announcementsApi.create({
+                                                        title: 'System Alert',
+                                                        message: systemAnnouncement,
+                                                        type: 'warning',
+                                                        targetType: announcementTarget === 'system' ? 'users' : announcementTarget === 'fa' ? 'fas' : 'all',
+                                                        expiresAt: announcementExpiry ? new Date(announcementExpiry).toISOString() : undefined,
+                                                    });
+                                                    await announcementsApi.sendNow(res.data.data.id);
+                                                    setSystemAnnouncement('');
+                                                    toast.success('Announcement broadcasted successfully!');
+                                                } catch (err: any) {
+                                                    toast.error('Failed to send broadcast');
+                                                } finally {
+                                                    setPushingAnnouncement(false);
+                                                }
+                                            }}
+                                        >
+                                            {pushingAnnouncement ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <Megaphone className="w-5 h-5 mr-2" />}
+                                            Broadcast Urgent Message
+                                        </Button>
+                                    </CardFooter>
                                 </Card>
                             </TabsContent>
                         </>
@@ -492,19 +748,74 @@ function RequestLinkGenerator({ stadiums }: { stadiums: Stadium[] }) {
 
     const copyLink = async () => {
         if (!link) return;
-        try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success('Copied'); } catch (err) {}
+        try {
+            await navigator.clipboard.writeText(link);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            toast.success('Link copied to clipboard!');
+        } catch (err) {
+            toast.error('Failed to copy link');
+        }
     };
 
     return (
-        <Card className="border-none shadow-sm border-l-4 border-l-blue-500">
-            <CardHeader><CardTitle className="text-blue-700">Public Request Link</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Venue</Label><Select value={stadiumId} onValueChange={v => { setStadiumId(v); setDeptId(''); setLink(''); }}><SelectTrigger><SelectValue placeholder="Select venue" /></SelectTrigger><SelectContent>{stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Department</Label><Select value={deptId || '__all__'} onValueChange={v => { setDeptId(v === '__all__' ? '' : v); setLink(''); }} disabled={!stadiumId}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="__all__">General (All)</SelectItem>{departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
+        <Card className="border-none shadow-md overflow-hidden border-l-4 border-l-blue-600">
+            <CardHeader className="bg-blue-50/50 dark:bg-blue-950/10">
+                <CardTitle className="text-2xl text-blue-700 dark:text-blue-400 flex items-center gap-3">
+                    <LinkIcon className="w-6 h-6" /> Public Request Link Generator
+                </CardTitle>
+                <CardDescription className="text-blue-600/70 dark:text-blue-400/70 font-medium">Create and share direct links for car requests by venue and department.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Target Venue</Label>
+                        <Select value={stadiumId} onValueChange={v => { setStadiumId(v); setDeptId(''); setLink(''); }}>
+                            <SelectTrigger className="h-12 rounded-xl border-blue-100 dark:border-blue-900 bg-background/50">
+                                <SelectValue placeholder="Choose a venue..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Target Department</Label>
+                        <Select value={deptId || '__all__'} onValueChange={v => { setDeptId(v === '__all__' ? '' : v); setLink(''); }} disabled={!stadiumId}>
+                            <SelectTrigger className="h-12 rounded-xl border-blue-100 dark:border-blue-900 bg-background/50">
+                                <SelectValue placeholder="All Departments" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">General Request (No pre-selected Dept)</SelectItem>
+                                {loading ? <SelectItem value="l" disabled>Loading departments...</SelectItem> : depts.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
-                <Button onClick={() => setLink(`${window.location.origin}/request?stadium=${stadiumId}${deptId && deptId !== '__all__' ? `&department=${deptId}` : ''}`)} disabled={!stadiumId} variant="outline" className="w-full">Generate</Button>
-                {link && <div className="flex gap-2 animate-in slide-in-from-top-2 pt-2"><Input value={link} readOnly className="text-[10px] font-mono" /><Button onClick={copyLink}>{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}</Button></div>}
+
+                <Button 
+                    onClick={() => setLink(`${window.location.origin}/request?stadium=${stadiumId}${deptId ? `&department=${deptId}` : ''}`)} 
+                    disabled={!stadiumId} 
+                    variant="outline" 
+                    className="w-full h-11 rounded-xl border-2 hover:bg-blue-50 dark:hover:bg-blue-950 font-bold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 transition-all"
+                >
+                    <Globe className="w-4 h-4 mr-2" /> Generate Request Link
+                </Button>
+
+                {link && (
+                    <div className="p-6 rounded-2xl bg-muted/30 border border-muted/50 space-y-3 animate-in slide-in-from-top-4 duration-500">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">Generated URL</Label>
+                        <div className="flex gap-3">
+                            <Input value={link} readOnly className="h-12 rounded-xl font-mono text-xs bg-background border-muted/50" />
+                            <Button 
+                                onClick={copyLink} 
+                                className={`h-12 rounded-xl px-6 transition-all duration-300 ${copied ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                                {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );
@@ -516,31 +827,79 @@ function UserAccessControl() {
     const [saving, setSaving] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
-        usersApi.getAll({ role: 'Admin,Observer', limit: 100 }).then(res => { setUsers(res.data.data || []); }).catch(() => {}).finally(() => setLoading(false));
+        usersApi.getAll({ role: 'Admin,Observer', limit: 100 }).then(res => {
+            setUsers(res.data.data || []);
+        }).catch(() => {}).finally(() => setLoading(false));
     }, []);
 
     const handleToggle = async (userId: string, page: string, current: string[]) => {
         const next = current.includes(page) ? current.filter(p => p !== page) : [...current, page];
         setSaving(prev => ({ ...prev, [userId]: true }));
-        try { await usersApi.update(userId, { grantedPages: next }); setUsers(prev => prev.map(u => u.id === userId ? { ...u, grantedPages: next } : u)); } catch (e) { toast.error('Update failed'); } finally { setSaving(prev => ({ ...prev, [userId]: false })); }
+        try {
+            await usersApi.update(userId, { grantedPages: next });
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, grantedPages: next } : u));
+            toast.success('Access updated');
+        } catch (e) {
+            toast.error('Failed to update access');
+        } finally {
+            setSaving(prev => ({ ...prev, [userId]: false }));
+        }
     };
 
-    if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+    if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-10 h-10 animate-spin text-primary/40" /></div>;
 
     return (
-        <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Access Matrix</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-                {users.map(u => (
-                    <div key={u.id} className="border rounded-lg p-4 space-y-3 bg-muted/5">
-                        <div className="flex justify-between items-center"><span className="font-bold text-sm">{u.name} ({u.role})</span>{saving[u.id] && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div>
-                        <div className="grid grid-cols-3 gap-2">
-                            {['fleet', 'handover', 'maintenance', 'reports', 'requests', 'users', 'departments', 'stadiums', 'notifications'].map(page => (
-                                <label key={page} className="flex items-center gap-1 text-[10px] cursor-pointer"><Checkbox checked={(u.grantedPages || []).includes(page)} onCheckedChange={() => handleToggle(u.id, page, u.grantedPages || [])} />{page.charAt(0).toUpperCase() + page.slice(1)}</label>
-                            ))}
-                        </div>
+        <Card className="border-none shadow-md overflow-hidden">
+            <CardHeader className="bg-muted/10">
+                <CardTitle className="text-2xl flex items-center gap-3">
+                    <ShieldCheck className="w-6 h-6 text-primary" /> Permission Access Matrix
+                </CardTitle>
+                <CardDescription>Grant or revoke module-level access for Venue Admins and Observers.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-8 space-y-6">
+                {users.length === 0 ? (
+                    <div className="text-center py-10 bg-muted/5 rounded-3xl border border-dashed border-muted/50">
+                        <Users className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
+                        <p className="text-muted-foreground font-medium">No restricted role users found.</p>
                     </div>
-                ))}
+                ) : (
+                    <div className="space-y-6">
+                        {users.map(u => (
+                            <div key={u.id} className="border rounded-2xl p-6 space-y-6 bg-card shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center font-bold text-primary text-xl">
+                                            {u.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-extrabold text-lg leading-tight">{u.name}</h4>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Badge variant="secondary" className="px-2 py-0 h-5 text-[9px] uppercase tracking-tighter font-bold">{u.role}</Badge>
+                                                <span className="text-xs text-muted-foreground">{u.email}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {saving[u.id] && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-5 rounded-2xl bg-muted/5 border border-muted/30">
+                                    {['fleet', 'handover', 'maintenance', 'reports', 'requests', 'users', 'departments', 'stadiums', 'notifications'].map(page => {
+                                        const isGranted = (u.grantedPages || []).includes(page);
+                                        return (
+                                            <div key={page} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-muted/10 transition-colors">
+                                                <Checkbox 
+                                                    id={`access-${u.id}-${page}`}
+                                                    checked={isGranted} 
+                                                    onCheckedChange={() => handleToggle(u.id, page, u.grantedPages || [])} 
+                                                />
+                                                <Label htmlFor={`access-${u.id}-${page}`} className="text-xs font-bold cursor-pointer capitalize">{page}</Label>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </CardContent>
         </Card>
     );
