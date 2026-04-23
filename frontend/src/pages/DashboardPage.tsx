@@ -74,7 +74,16 @@ function FADashboard({ user }: { user: { name?: string; email?: string; stadium?
                                                         <p className="text-xs text-muted-foreground">{cart.carType}</p>
                                                     </div>
                                                 </div>
-                                                <Badge variant={cart.status === 'Dispatched' ? 'default' : cart.status === 'Available' ? 'outline' : 'secondary'}>
+                                                <Badge variant={
+                                                    cart.status === 'Dispatched' ? 'default' : 
+                                                    cart.status === 'Active' ? 'secondary' : 
+                                                    cart.status === 'Returned' ? 'outline' : 
+                                                    'outline'
+                                                } className={
+                                                    cart.status === 'Active' ? 'bg-purple-100 text-purple-800' :
+                                                    cart.status === 'Returned' ? 'bg-indigo-100 text-indigo-800' :
+                                                    ''
+                                                }>
                                                     {cart.status}
                                                 </Badge>
                                             </div>
@@ -215,7 +224,10 @@ export function DashboardPage() {
         switch (status) {
             case 'Available': return 'bg-green-100 text-green-800';
             case 'Assigned': return 'bg-blue-100 text-blue-800';
-            case 'Dispatched': return 'bg-yellow-100 text-yellow-800';
+            case 'Active': return 'bg-purple-100 text-purple-800';
+            case 'Dispatched': return 'bg-amber-100 text-amber-800';
+            case 'Returned': return 'bg-indigo-100 text-indigo-800';
+            case 'HandbackPending': return 'bg-slate-100 text-slate-800';
             case 'Under Maintenance': return 'bg-red-100 text-red-800';
             default: return 'bg-gray-100 text-gray-800';
         }

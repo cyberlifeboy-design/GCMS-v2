@@ -24,8 +24,50 @@ const bulkIdsSchema = z.object({
     conditionNotes: z.string().optional(),
 });
 
+const fleetIdOnlySchema = z.object({
+    fleetId: z.string().min(1),
+});
+
 export class HandoverController {
     static uploadMiddleware = upload.array('photos', 5);
+
+    static async signHandover(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId } = fleetIdOnlySchema.parse(req.body);
+            const userId = req.user!.userId;
+            const log = await handoverService.signHandover({ fleetId, userId });
+            res.status(200).json(log);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async requestHandback(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId } = fleetIdOnlySchema.parse(req.body);
+            const userId = req.user!.userId;
+            const log = await handoverService.requestHandback({ fleetId, userId });
+            res.status(200).json(log);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async acceptHandback(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId } = fleetIdOnlySchema.parse(req.body);
+            const adminId = req.user!.userId;
+            
+            if (req.user?.role !== 'Admin' && req.user?.role !== 'SuperAdmin') {
+                return res.status(403).json({ error: 'Only admins can accept handbacks' });
+            }
+
+            const log = await handoverService.acceptHandback({ fleetId, adminId });
+            res.status(200).json(log);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
 
     static async checkIn(req: AuthRequest, res: Response) {
         try {

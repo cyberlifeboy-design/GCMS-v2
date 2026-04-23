@@ -18,8 +18,8 @@ import { toast } from 'sonner';
 interface FleetCart {
     id: string;
     carNumber: string;
-    carType: 'Cargo' | 'Accessibility' | '6-Seater' | '4-Seater';
-    status: 'Available' | 'Assigned' | 'Dispatched' | 'Under Maintenance';
+    carType: string;
+    status: string;
     requiresVAP: boolean;
     stadium?: { id: string; name: string; code: string };
     department?: { id: string; name: string; code?: string };
@@ -27,14 +27,18 @@ interface FleetCart {
 }
 
 const statusColors: Record<string, string> = {
-    'Available': 'text-green-600 font-semibold',
-    'Assigned': 'text-purple-600 font-semibold',
-    'Dispatched': 'text-blue-600 font-semibold',
-    'Under Maintenance': 'text-red-600 font-semibold',
+    'Available': 'bg-green-100 text-green-800 border-green-200',
+    'Assigned': 'bg-blue-100 text-blue-800 border-blue-200',
+    'Active': 'bg-purple-100 text-purple-800 border-purple-200',
+    'Dispatched': 'bg-amber-100 text-amber-800 border-amber-200',
+    'Returned': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    'HandbackPending': 'bg-slate-100 text-slate-800 border-slate-200',
+    'Under Maintenance': 'bg-red-100 text-red-800 border-red-200',
+    'Retired': 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
 const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
-const STATUSES = ['Available', 'Assigned', 'Dispatched', 'Under Maintenance'] as const;
+const STATUSES = ['Available', 'Assigned', 'Active', 'Dispatched', 'Returned', 'HandbackPending', 'Under Maintenance', 'Retired'] as const;
 
 type CartFormData = {
     carNumber: string;
@@ -575,6 +579,19 @@ export function FleetPage() {
         }
     };
 
+    const handleAcceptHandback = async (fleetId: string) => {
+        setSubmitting(true);
+        try {
+            await handoverApi.acceptHandback(fleetId);
+            toast.success('Cart released to available pool');
+            loadFleet(true);
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Action failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const CartTable = ({ data }: { data: FleetCart[] }) => (
         <div className="flex flex-col">
             <div className="max-h-[600px] overflow-y-auto">
@@ -620,6 +637,11 @@ export function FleetPage() {
                                         <div className="flex justify-end gap-1">
                                             {isAdmin && (
                                                 <>
+                                                    {(cart.status === 'Returned' || cart.status === 'HandbackPending') && (
+                                                        <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleAcceptHandback(cart.id)} title="Accept Handback">
+                                                            <CheckCircle2 className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
                                                     <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
                                                         <UserCheck className="w-4 h-4" />
                                                     </Button>

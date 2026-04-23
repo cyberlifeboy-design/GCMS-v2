@@ -41,12 +41,12 @@ model Department {
 }
 
 // Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
-// Cart statuses: Available, Assigned, Dispatched, Under Maintenance
+// Cart statuses: Available, Assigned, Active, Dispatched, Returned, HandbackPending, Under Maintenance
 model Fleet {
   id              String           @id @default(cuid())
   carNumber       String           @unique
   carType         String           // Cargo, Accessibility, 6-Seater, 4-Seater
-  status          String           @default("Available") // Available, Assigned, Dispatched, Under Maintenance
+  status          String           @default("Available") 
   requiresVAP     Boolean          @default(false)
   stadiumId       String
   stadium         Stadium          @relation(fields: [stadiumId], references: [id])
@@ -54,6 +54,11 @@ model Fleet {
   department      Department?      @relation(fields: [departmentId], references: [id])
   assignedUserId  String?          // FA user assigned to this cart
   assignedUser    User?            @relation("FleetAssignedUser", fields: [assignedUserId], references: [id])
+  
+  // Handover state
+  handoverSigned   Boolean         @default(false)
+  handoverSignedAt DateTime?
+  
   handoverLogs    HandoverLog[]
   maintenanceLogs MaintenanceLog[]
   createdAt       DateTime         @default(now())

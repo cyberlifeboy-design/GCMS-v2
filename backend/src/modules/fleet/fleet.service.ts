@@ -66,15 +66,18 @@ export class FleetService {
         assignedUserId?: string | null;
         departmentId?: string | null;
     }) {
+        const initialStatus = data.assignedUserId ? 'Assigned' : (data.status || 'Available');
         return prisma.fleet.create({
             data: {
                 carNumber: data.carNumber,
                 carType: data.carType,
-                status: data.status || 'Available',
+                status: initialStatus,
                 requiresVAP: data.requiresVAP ?? false,
                 stadiumId: data.stadiumId,
                 assignedUserId: data.assignedUserId || null,
                 departmentId: data.departmentId || null,
+                handoverSigned: false,
+                handoverSignedAt: null,
             },
             include: { stadium: { select: { id: true, name: true, code: true } }, department: { select: { id: true, name: true, code: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
@@ -89,9 +92,27 @@ export class FleetService {
         assignedUserId: string | null;
         departmentId: string | null;
     }>) {
+        // If assignedUserId is changing, reset handover flags and update status
+        const updateData: any = { ...data };
+        if (data.assignedUserId !== undefined) {
+            updateData.handoverSigned = false;
+            updateData.handoverSignedAt = null;
+            
+            // If assigned, status must be at least Assigned (if not already something more active)
+            if (data.assignedUserId) {
+                // Only auto-update to Assigned if it's currently Available
+                // If it's already Active/Dispatched, we probably shouldn't blindly reset status
+                // But for a new assignment, Assigned is the right start
+                updateData.status = 'Assigned';
+            } else {
+                // If unassigned, must be Available
+                updateData.status = 'Available';
+            }
+        }
+
         return prisma.fleet.update({
             where: { id },
-            data,
+            data: updateData,
             include: { stadium: { select: { id: true, name: true, code: true } }, department: { select: { id: true, name: true, code: true } }, assignedUser: { select: { id: true, name: true, phone: true } } },
         });
     }
@@ -104,7 +125,12 @@ export class FleetService {
         const newStatus = userId ? 'Assigned' : 'Available';
         const fleet = await prisma.fleet.update({
             where: { id: fleetId },
-            data: { assignedUserId: userId, status: newStatus },
+            data: { 
+                assignedUserId: userId, 
+                status: newStatus,
+                handoverSigned: false,
+                handoverSignedAt: null,
+            },
             include: { 
                 assignedUser: { select: { id: true, name: true, phone: true } },
                 stadium: { select: { id: true, name: true } },
@@ -209,7 +235,12 @@ export class FleetService {
                 const newStatus = userId ? 'Assigned' : 'Available';
                 await prisma.fleet.update({
                     where: { id: fleetId },
-                    data: { assignedUserId: userId, status: newStatus },
+                    data: { 
+                        assignedUserId: userId, 
+                        status: newStatus,
+                        handoverSigned: false,
+                        handoverSignedAt: null,
+                    },
                 });
                 results.success++;
             } catch (err: any) {

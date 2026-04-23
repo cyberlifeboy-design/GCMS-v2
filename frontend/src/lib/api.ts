@@ -116,6 +116,15 @@ export const handoverApi = {
         apiClient.post('/handover/bulk-checkin', data),
     getHistory: (params?: Record<string, unknown>) =>
         apiClient.get('/handover/history', { params }),
+    
+    // Refined Workflow Actions
+    signHandover: (fleetId: string) =>
+        apiClient.post('/handover/sign-handover', { fleetId }),
+    requestHandback: (fleetId: string) =>
+        apiClient.post('/handover/request-handback', { fleetId }),
+    acceptHandback: (fleetId: string) =>
+        apiClient.post('/handover/accept-handback', { fleetId }),
+
     // Pool management endpoints
     getPoolStatus: () =>
         apiClient.get('/handover/pool-status'),

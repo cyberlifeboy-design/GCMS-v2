@@ -1,32 +1,29 @@
 import { Router } from 'express';
 import { HandoverController } from './handover.controller';
-import { authenticate } from '../../middleware/auth.middleware';
-import { requireRole } from '../../middleware/rbac.middleware';
-import { auditLog } from '../../middleware/audit.middleware';
+import { authenticate, authorize } from '../../middleware/auth.middleware';
 
 const router = Router();
 
-router.use(authenticate);
+// Dashboard & Pool Status
+router.get('/pool-status', authenticate, HandoverController.getPoolStatus);
+router.get('/pool-dashboard', authenticate, HandoverController.getPoolDashboard);
+router.get('/available/:stadiumId', authenticate, HandoverController.getAvailableInPool);
+router.get('/in-use/:stadiumId', authenticate, HandoverController.getInUse);
 
-// POST /checkout — FA and Admin can check out
-router.post('/checkout', requireRole('FA', 'Admin', 'SuperAdmin'), HandoverController.uploadMiddleware, auditLog(), HandoverController.checkOut);
+// Standard Actions
+router.post('/checkin', authenticate, HandoverController.checkIn);
+router.post('/checkout', authenticate, HandoverController.uploadMiddleware, HandoverController.checkOut);
 
-// POST /checkin — FA and Admin can check in
-router.post('/checkin', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.checkIn);
+// Refined Workflow Actions
+router.post('/sign-handover', authenticate, HandoverController.signHandover);
+router.post('/request-handback', authenticate, HandoverController.requestHandback);
+router.post('/accept-handback', authenticate, authorize(['Admin', 'SuperAdmin']), HandoverController.acceptHandback);
 
-// POST /bulk-checkout — bulk operations
-router.post('/bulk-checkout', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.bulkCheckOut);
+// Bulk Actions
+router.post('/bulk-checkin', authenticate, HandoverController.bulkCheckIn);
+router.post('/bulk-checkout', authenticate, HandoverController.bulkCheckOut);
 
-// POST /bulk-checkin
-router.post('/bulk-checkin', requireRole('FA', 'Admin', 'SuperAdmin'), auditLog(), HandoverController.bulkCheckIn);
-
-// GET /history — full log (RBAC scoped inside controller)
-router.get('/history', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getHistory);
-
-// Pool management
-router.get('/pool-status', requireRole('SuperAdmin', 'Admin', 'Observer'), HandoverController.getPoolStatus);
-router.get('/pool-dashboard', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getPoolDashboard);
-router.get('/available/:stadiumId', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getAvailableInPool);
-router.get('/in-use/:stadiumId', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), HandoverController.getInUse);
+// History
+router.get('/history', authenticate, HandoverController.getHistory);
 
 export default router;
