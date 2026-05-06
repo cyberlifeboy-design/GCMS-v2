@@ -6,26 +6,17 @@ import PDFDocument from 'pdfkit';
 import { Document, Packer, Paragraph, TextRun, Header, Footer, PageOrientation, AlignmentType } from 'docx';
 import PptxGenJS from 'pptxgenjs';
 import { prisma } from '../../config/database';
-import { minioClient } from '../../config/storage';
+import { getFileBuffer } from '../../config/storage';
 
-/**
- * Fetch an image stored in MinIO (via /api/v1/storage/<bucket>/<file> URLs)
- * or any reachable http/https URL. Returns a Buffer or null on failure.
- */
 async function fetchImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
     if (!url) return null;
     try {
-        // Internal MinIO path: /api/v1/storage/<bucket>/<filename>
-        const minioMatch = url.match(/\/api\/v1\/storage\/([^/]+)\/(.+)$/);
-        if (minioMatch) {
-            const [, bucket, objectName] = minioMatch;
-            const stream = await minioClient.getObject(bucket, objectName);
-            return await new Promise<Buffer>((resolve, reject) => {
-                const chunks: Buffer[] = [];
-                stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-                stream.on('end', () => resolve(Buffer.concat(chunks)));
-                stream.on('error', reject);
-            });
+        // Internal storage path: /api/v1/storage/<bucket>/<filename>
+        // getFileBuffer tries MinIO first, falls back to local disk
+        const internalMatch = url.match(/\/api\/v1\/storage\/([^/]+)\/(.+)$/);
+        if (internalMatch) {
+            const [, bucket, fileName] = internalMatch;
+            return await getFileBuffer(bucket, fileName);
         }
         // External URL (http/https)
         if (url.startsWith('http://') || url.startsWith('https://')) {

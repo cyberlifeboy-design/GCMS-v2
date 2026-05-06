@@ -1,4 +1,6 @@
 import * as Minio from 'minio';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // MinIO client configuration
 export const minioClient = new Minio.Client({
@@ -9,6 +11,9 @@ export const minioClient = new Minio.Client({
     secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin123',
 });
 
+// Local fallback directory when MinIO is unavailable
+export const UPLOADS_DIR = path.join(__dirname, '../../../uploads');
+
 // Bucket names
 export const BUCKETS = {
     SIGNATURES: 'signatures',
@@ -18,55 +23,34 @@ export const BUCKETS = {
 };
 
 /**
- * Initialize MinIO buckets on server startup
+ * Initialize MinIO buckets on server startup.
+ * Also creates local fallback directories.
  */
 export async function initializeMinIO(): Promise<void> {
+    // Always create local fallback dirs
+    for (const bucket of Object.values(BUCKETS)) {
+        await fs.promises.mkdir(path.join(UPLOADS_DIR, bucket), { recursive: true });
+    }
+
     try {
-        // Create signatures bucket
-        const signaturesExists = await minioClient.bucketExists(BUCKETS.SIGNATURES);
-        if (!signaturesExists) {
-            await minioClient.makeBucket(BUCKETS.SIGNATURES, 'us-east-1');
-            console.log(`✓ Created MinIO bucket: ${BUCKETS.SIGNATURES}`);
-        } else {
-            console.log(`✓ MinIO bucket exists: ${BUCKETS.SIGNATURES}`);
+        const bucketList = [BUCKETS.SIGNATURES, BUCKETS.INCIDENT_PHOTOS, BUCKETS.MAINTENANCE_PHOTOS, BUCKETS.BRANDING];
+        for (const bucket of bucketList) {
+            const exists = await minioClient.bucketExists(bucket);
+            if (!exists) {
+                await minioClient.makeBucket(bucket, 'us-east-1');
+                console.log(`✓ Created MinIO bucket: ${bucket}`);
+            } else {
+                console.log(`✓ MinIO bucket exists: ${bucket}`);
+            }
         }
-
-        // Create incident photos bucket
-        const photosExists = await minioClient.bucketExists(BUCKETS.INCIDENT_PHOTOS);
-        if (!photosExists) {
-            await minioClient.makeBucket(BUCKETS.INCIDENT_PHOTOS, 'us-east-1');
-            console.log(`✓ Created MinIO bucket: ${BUCKETS.INCIDENT_PHOTOS}`);
-        } else {
-            console.log(`✓ MinIO bucket exists: ${BUCKETS.INCIDENT_PHOTOS}`);
-        }
-
-        // Create maintenance photos bucket
-        const maintenanceExists = await minioClient.bucketExists(BUCKETS.MAINTENANCE_PHOTOS);
-        if (!maintenanceExists) {
-            await minioClient.makeBucket(BUCKETS.MAINTENANCE_PHOTOS, 'us-east-1');
-            console.log(`✓ Created MinIO bucket: ${BUCKETS.MAINTENANCE_PHOTOS}`);
-        } else {
-            console.log(`✓ MinIO bucket exists: ${BUCKETS.MAINTENANCE_PHOTOS}`);
-        }
-
-        // Create branding bucket
-        const brandingExists = await minioClient.bucketExists(BUCKETS.BRANDING);
-        if (!brandingExists) {
-            await minioClient.makeBucket(BUCKETS.BRANDING, 'us-east-1');
-            console.log(`✓ Created MinIO bucket: ${BUCKETS.BRANDING}`);
-        } else {
-            console.log(`✓ MinIO bucket exists: ${BUCKETS.BRANDING}`);
-        }
-
         console.log('✓ MinIO initialization complete');
     } catch (error) {
-        console.warn('⚠️  MinIO initialization failed (non-critical):', error);
-        // Don't throw - allow server to start even if MinIO is not available
+        console.warn('⚠️  MinIO unavailable — using local disk fallback for storage');
     }
 }
 
 /**
- * Upload a file to MinIO
+ * Upload a file. Tries MinIO first; falls back to local disk if MinIO is unavailable.
  */
 export async function uploadFile(
     bucket: string,
@@ -78,13 +62,31 @@ export async function uploadFile(
         await minioClient.putObject(bucket, fileName, fileBuffer, fileBuffer.length, {
             'Content-Type': contentType,
         });
+    } catch {
+        // MinIO unavailable — save to local disk
+        const dir = path.join(UPLOADS_DIR, bucket);
+        await fs.promises.mkdir(dir, { recursive: true });
+        await fs.promises.writeFile(path.join(dir, fileName), fileBuffer);
+    }
 
-        // Generate URL that routes through the backend storage proxy
-        const url = `/api/v1/storage/${bucket}/${fileName}`;
-        return url;
-    } catch (error) {
-        console.error('File upload failed:', error);
-        throw new Error('Failed to upload file');
+    return `/api/v1/storage/${bucket}/${fileName}`;
+}
+
+/**
+ * Read a file buffer. Tries MinIO first; falls back to local disk.
+ */
+export async function getFileBuffer(bucket: string, fileName: string): Promise<Buffer> {
+    try {
+        const stream = await minioClient.getObject(bucket, fileName);
+        return await new Promise<Buffer>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks)));
+            stream.on('error', reject);
+        });
+    } catch {
+        // MinIO unavailable — read from local disk
+        return fs.promises.readFile(path.join(UPLOADS_DIR, bucket, fileName));
     }
 }
 
@@ -103,25 +105,29 @@ export async function uploadIncidentPhoto(fileName: string, imageBuffer: Buffer)
 }
 
 /**
- * Get presigned URL for temporary access (expires in 7 days)
+ * Get presigned URL for temporary access (expires in 7 days).
+ * Falls back to the storage proxy URL if MinIO is unavailable.
  */
 export async function getPresignedUrl(bucket: string, fileName: string): Promise<string> {
     try {
         return await minioClient.presignedGetObject(bucket, fileName, 7 * 24 * 60 * 60);
-    } catch (error) {
-        console.error('Failed to generate presigned URL:', error);
-        throw new Error('Failed to generate file URL');
+    } catch {
+        return `/api/v1/storage/${bucket}/${fileName}`;
     }
 }
 
 /**
- * Delete file from MinIO
+ * Delete file from MinIO and local disk.
  */
 export async function deleteFile(bucket: string, fileName: string): Promise<void> {
     try {
         await minioClient.removeObject(bucket, fileName);
-    } catch (error) {
-        console.error('File deletion failed:', error);
-        throw new Error('Failed to delete file');
+    } catch {
+        // MinIO unavailable — try local disk
+        try {
+            await fs.promises.unlink(path.join(UPLOADS_DIR, bucket, fileName));
+        } catch {
+            // file may not exist
+        }
     }
 }

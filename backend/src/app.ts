@@ -16,7 +16,9 @@ import notificationRoutes from './modules/notifications/notification.routes';
 import announcementRoutes from './modules/announcements/announcements.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
-import { minioClient, BUCKETS } from './config/storage';
+import { minioClient, BUCKETS, UPLOADS_DIR } from './config/storage';
+import * as fs from 'fs';
+import * as path from 'path';
 import logger from './config/logger';
 
 dotenv.config();
@@ -79,22 +81,39 @@ app.get('/api/v1', (req: Request, res: Response) => {
     });
 });
 
-// Storage proxy - serve MinIO files through the API
+// Storage proxy - serve files via MinIO, with local disk fallback
 const allowedBuckets = new Set(Object.values(BUCKETS));
+const CONTENT_TYPES: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+};
 app.get('/api/v1/storage/:bucket/:filename', async (req: Request, res: Response) => {
     const bucket = req.params.bucket as string;
     const filename = req.params.filename as string;
     if (!allowedBuckets.has(bucket)) {
         return res.status(404).json({ error: 'Not found' });
     }
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = CONTENT_TYPES[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
     try {
         const stat = await minioClient.statObject(bucket, filename);
-        res.setHeader('Content-Type', stat.metaData?.['content-type'] || 'application/octet-stream');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Content-Type', stat.metaData?.['content-type'] || contentType);
         const stream = await minioClient.getObject(bucket, filename);
-        stream.pipe(res);
+        return stream.pipe(res);
     } catch {
-        res.status(404).json({ error: 'File not found' });
+        // MinIO unavailable — serve from local disk
+        try {
+            const buffer = await fs.promises.readFile(path.join(UPLOADS_DIR, bucket, filename));
+            return res.send(buffer);
+        } catch {
+            return res.status(404).json({ error: 'File not found' });
+        }
     }
 });
 

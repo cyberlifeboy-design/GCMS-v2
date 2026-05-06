@@ -260,7 +260,7 @@ export const settingsApi = {
         apiClient.get('/settings'),
     update: (data: FormData) =>
         apiClient.put('/settings', data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+            headers: { 'Content-Type': undefined },
         }),
 };
 

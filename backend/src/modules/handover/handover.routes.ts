@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { HandoverController } from './handover.controller';
-import { authenticate, authorize } from '../../middleware/auth.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
+import { requireRole } from '../../middleware/rbac.middleware';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.post('/checkout', authenticate, HandoverController.uploadMiddleware, Hand
 // Refined Workflow Actions
 router.post('/sign-handover', authenticate, HandoverController.signHandover);
 router.post('/request-handback', authenticate, HandoverController.requestHandback);
-router.post('/accept-handback', authenticate, authorize(['Admin', 'SuperAdmin']), HandoverController.acceptHandback);
+router.post('/accept-handback', authenticate, requireRole(['Admin', 'SuperAdmin']), HandoverController.acceptHandback);
 
 // Bulk Actions
 router.post('/bulk-checkin', authenticate, HandoverController.bulkCheckIn);
