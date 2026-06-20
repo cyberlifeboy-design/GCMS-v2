@@ -622,7 +622,8 @@ export class HandoverService {
         }
 
         // Also find assigned carts without any form yet
-        const fleetWhere: any = { status: 'Assigned', assignedUserId: { not: null }, handoverForm: null };
+        // NOTE: Prisma requires `{ is: null }` to check for absent relations — bare `null` is invalid filter syntax
+        const fleetWhere: any = { status: 'Assigned', assignedUserId: { not: null }, handoverForm: { is: null } };
         if (adminUser.role === 'Admin' && adminUser.stadiumId) {
             fleetWhere.stadiumId = adminUser.stadiumId;
         }

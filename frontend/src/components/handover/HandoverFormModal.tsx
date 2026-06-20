@@ -58,6 +58,7 @@ interface Props {
     fleetId: string;
     preloadedForm?: HandoverFormData | null;
     currentUserName?: string;
+    logoUrl?: string;
     onComplete?: () => void;
 }
 
@@ -233,7 +234,7 @@ function ConditionTable({ value, onChange, disabled }: { value: ConditionMap; on
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm, currentUserName, onComplete }: Props) {
+export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm, currentUserName, logoUrl, onComplete }: Props) {
     const [form, setForm] = useState<HandoverFormData | null>(null);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -377,12 +378,29 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
 
                 <div className="print-form-root">
                     {/* ── Header ── */}
-                    <div className="bg-red-900 text-white p-4 flex items-center gap-4 no-print-shadow">
+                    <div className="bg-red-900 text-white p-4 flex items-center gap-4">
+                        {/* Logo — left side */}
+                        <div className="flex flex-col items-center min-w-[80px]">
+                            {logoUrl ? (
+                                <img src={logoUrl} alt="Organization Logo" className="h-14 w-auto object-contain bg-white rounded p-1" />
+                            ) : (
+                                <div className="h-14 w-14 rounded border border-white/30 flex items-center justify-center text-white/40 text-[8px] text-center leading-tight px-1">
+                                    <span>شعار اللجنة<br/>المحلية</span>
+                                </div>
+                            )}
+                            <span className="text-[8px] text-white/60 mt-0.5 text-center leading-tight">
+                                شعار اللجنة المحلية المنظمة<br/>Local Organizing Committee
+                            </span>
+                        </div>
+
+                        {/* Title — center */}
                         <div className="flex-1 text-center">
                             <div className="text-sm font-semibold" dir="rtl">نموذج تسليم واستلام عربة جولف</div>
                             <div className="text-xl font-bold uppercase tracking-wider">Golf Cart Handover &amp; Return Form</div>
                         </div>
-                        <button type="button" className="no-print text-white/70 hover:text-white" onClick={onClose}><X className="w-5 h-5" /></button>
+
+                        {/* Close button — right */}
+                        <button type="button" className="no-print text-white/70 hover:text-white self-start" onClick={onClose}><X className="w-5 h-5" /></button>
                     </div>
 
                     {/* Status bar */}

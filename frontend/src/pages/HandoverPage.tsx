@@ -14,6 +14,7 @@ import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, Che
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/dateUtils';
 import { toast } from 'sonner';
+import { publicSettingsApi } from '@/lib/api';
 import { Separator } from '@/components/ui/separator';
 import { Pagination } from '@/components/shared/Pagination';
 import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
@@ -144,6 +145,7 @@ export function HandoverPage() {
     const [formModal, setFormModal] = useState<{ open: boolean; fleetId: string; mode: 'admin' | 'user' | 'view' } | null>(null);
     const [pendingHandovers, setPendingHandovers] = useState<{ formsInProgress: HandoverFormRecord[]; cartsWithoutForm: PendingHandoverCart[] } | null>(null);
     const [pendingLoading, setPendingLoading] = useState(false);
+    const [systemLogoUrl, setSystemLogoUrl] = useState<string | null>(null);
     const [selectedCart, setSelectedCart] = useState<UserAssignedCart | null>(null);
     const [checkoutForm, setCheckoutForm] = useState({ conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] as File[] });
 
@@ -194,6 +196,9 @@ export function HandoverPage() {
     useEffect(() => {
         loadPoolDashboard();
         if (isAdmin) loadPendingHandovers();
+        publicSettingsApi.getBranding().then(res => {
+            if (res.data?.logoUrl) setSystemLogoUrl(res.data.logoUrl);
+        }).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -687,6 +692,7 @@ export function HandoverPage() {
                     mode={formModal.mode}
                     fleetId={formModal.fleetId}
                     currentUserName={currentUser?.name}
+                    logoUrl={systemLogoUrl ?? undefined}
                     onComplete={() => {
                         loadPoolDashboard();
                         if (isAdmin) loadPendingHandovers();
