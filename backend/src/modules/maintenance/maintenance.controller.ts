@@ -27,14 +27,16 @@ export class MaintenanceController {
         try {
             const { status, fleetId, page, limit } = req.query as any;
 
-            // RBAC scoping: Admin sees only their assigned stadium
-            // SuperAdmin, Observer, Contracts, and MaintenanceTeam have full access to all stadiums
             let stadiumId: string | undefined;
+            let reportedById: string | undefined;
+
             if (req.user?.role === 'Admin' && req.user.stadiumId) {
                 stadiumId = req.user.stadiumId;
+            } else if (req.user?.role === 'FA') {
+                reportedById = req.user.userId;
             }
 
-            const logs = await maintenanceService.getAll({ stadiumId, status, fleetId }, {
+            const logs = await maintenanceService.getAll({ stadiumId, status, fleetId, reportedById }, {
                 page: page ? parseInt(page) : undefined,
                 limit: limit ? parseInt(limit) : undefined,
             });

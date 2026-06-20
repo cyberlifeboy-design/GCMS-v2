@@ -7,6 +7,7 @@ export class MaintenanceService {
         stadiumId?: string;
         status?: string;
         fleetId?: string;
+        reportedById?: string;
     }, pagination?: { page?: number; limit?: number }) {
         const page = pagination?.page || 1;
         const limit = pagination?.limit || 100;
@@ -15,6 +16,7 @@ export class MaintenanceService {
         const where: any = {
             ...(filters.fleetId && { fleetId: filters.fleetId }),
             ...(filters.status && { status: filters.status }),
+            ...(filters.reportedById && { reportedById: filters.reportedById }),
         };
 
         if (filters.stadiumId) {

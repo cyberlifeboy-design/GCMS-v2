@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { handoverApi, fleetApi } from '@/lib/api';
+import { handoverApi, fleetApi, maintenanceApi, notificationsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock, UserPlus, Trash2, Plus, Phone, Hash } from 'lucide-react';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock, UserPlus, Trash2, Plus, Phone, Hash, Bell, Wrench, Clock } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/dateUtils';
 import { toast } from 'sonner';
@@ -126,7 +126,7 @@ export function HandoverPage() {
     const isFA = role === 'FA';
     const isAdmin = role === 'Admin' || role === 'SuperAdmin';
 
-    const [activeTab, setActiveTab] = useState(isFA ? 'my-carts' : 'pending');
+    const [activeTab, setActiveTab] = useState(isFA ? 'fa-history' : 'pending');
     const [poolDashboard, setPoolDashboard] = useState<PoolDashboard | null>(null);
     const [poolLoading, setPoolLoading] = useState(true);
     const [history, setHistory] = useState<HandoverLog[]>([]);
@@ -146,6 +146,13 @@ export function HandoverPage() {
     const [pendingHandovers, setPendingHandovers] = useState<{ formsInProgress: HandoverFormRecord[]; cartsWithoutForm: PendingHandoverCart[] } | null>(null);
     const [pendingLoading, setPendingLoading] = useState(false);
     const [systemLogoUrl, setSystemLogoUrl] = useState<string | null>(null);
+
+    // FA-specific: my reports + notifications
+    const [myReports, setMyReports] = useState<any[]>([]);
+    const [reportsLoading, setReportsLoading] = useState(false);
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [notifsLoading, setNotifsLoading] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     // Additional drivers modal
     const [driversModal, setDriversModal] = useState<{ open: boolean; fleetId: string; carNumber: string } | null>(null);
@@ -200,6 +207,35 @@ export function HandoverPage() {
         }
     };
 
+    const loadMyReports = async () => {
+        if (!isFA) return;
+        setReportsLoading(true);
+        try {
+            const res = await maintenanceApi.getAll({ limit: 100 } as any);
+            setMyReports(res.data.data || []);
+        } catch { /* silent */ }
+        finally { setReportsLoading(false); }
+    };
+
+    const loadNotifications = async () => {
+        if (!isFA) return;
+        setNotifsLoading(true);
+        try {
+            const res = await notificationsApi.getAll({ limit: 50 });
+            setNotifications(res.data.data || []);
+            setUnreadCount((res.data.data || []).filter((n: any) => !n.isRead).length);
+        } catch { /* silent */ }
+        finally { setNotifsLoading(false); }
+    };
+
+    const markNotifRead = async (id: string) => {
+        try {
+            await notificationsApi.markAsRead(id);
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        } catch { /* silent */ }
+    };
+
     const openDriversModal = async (fleetId: string, carNumber: string) => {
         setDriversModal({ open: true, fleetId, carNumber });
         setDriversLoading(true);
@@ -225,6 +261,7 @@ export function HandoverPage() {
     useEffect(() => {
         loadPoolDashboard();
         if (isAdmin) loadPendingHandovers();
+        if (isFA) { loadMyReports(); loadNotifications(); }
         publicSettingsApi.getBranding().then(res => {
             if (res.data?.logoUrl) setSystemLogoUrl(res.data.logoUrl);
         }).catch(() => {});
@@ -471,18 +508,34 @@ export function HandoverPage() {
                 </div>
             )}
 
-            {/* SHARED SECTION: RECENT ACTIVITY & HISTORY */}
+            {/* TABS: Admin gets operational views, FA gets personal history/reports/notifications */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/50 p-1 rounded-xl">
-                    {isAdmin && <TabsTrigger value="pending" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                        <ClipboardList className="w-3 h-3 mr-1" /> Pending Handovers
-                        {pendingHandovers && (pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length) > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
-                        )}
-                    </TabsTrigger>}
-                    <TabsTrigger value="activity" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
-                    <TabsTrigger value="history" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>
-                    <TabsTrigger value="venues" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
+                <TabsList className="bg-muted/50 p-1 rounded-xl flex-wrap">
+                    {/* ── Admin tabs ── */}
+                    {isAdmin && <>
+                        <TabsTrigger value="pending" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                            <ClipboardList className="w-3 h-3 mr-1" /> Pending Handovers
+                            {pendingHandovers && (pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length) > 0 && (
+                                <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
+                            )}
+                        </TabsTrigger>
+                        <TabsTrigger value="activity" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
+                        <TabsTrigger value="history" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>
+                        <TabsTrigger value="venues" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
+                    </>}
+                    {/* ── FA-only tabs ── */}
+                    {isFA && <>
+                        <TabsTrigger value="fa-history" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                            <Clock className="w-3 h-3 mr-1" /> Usage History
+                        </TabsTrigger>
+                        <TabsTrigger value="fa-reports" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                            <Wrench className="w-3 h-3 mr-1" /> My Reports
+                        </TabsTrigger>
+                        <TabsTrigger value="fa-notifications" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                            <Bell className="w-3 h-3 mr-1" /> Notifications
+                            {unreadCount > 0 && <span className="ml-1.5 bg-red-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{unreadCount}</span>}
+                        </TabsTrigger>
+                    </>}
                 </TabsList>
 
                 {/* ── Pending Handovers (Admin) ── */}
@@ -716,6 +769,148 @@ export function HandoverPage() {
                         ))}
                     </div>
                 </TabsContent>
+
+                {/* ── FA: Usage History ── */}
+                {isFA && (
+                <TabsContent value="fa-history" className="space-y-4">
+                    <Card className="border-none shadow-md overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-blue-50/50 to-transparent border-b py-4">
+                            <CardTitle className="flex items-center gap-2 text-blue-800"><Clock className="w-5 h-5" /> My Usage History</CardTitle>
+                            <CardDescription>All check-in / check-out activity for carts assigned to you.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {histLoading ? (
+                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                            ) : (
+                                <Table>
+                                    <TableHeader className="bg-muted/30">
+                                        <TableRow>
+                                            <TableHead>Cart</TableHead>
+                                            <TableHead>Action</TableHead>
+                                            <TableHead>Venue</TableHead>
+                                            <TableHead>Date &amp; Time</TableHead>
+                                            <TableHead>Notes</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {history.length === 0 ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No usage history yet</TableCell></TableRow>
+                                        ) : history.map(log => (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="font-bold font-mono text-primary">{log.fleet?.carNumber}</TableCell>
+                                                <TableCell>
+                                                    <Badge className={`${actionColors[log.action] ?? 'bg-muted text-muted-foreground'} text-[10px]`}>
+                                                        {actionLabels[log.action] ?? log.action}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{log.fleet?.stadium?.name}</TableCell>
+                                                <TableCell className="text-xs">{formatDateTime(log.createdAt)}</TableCell>
+                                                <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{log.conditionNotes || log.issueDescription || '—'}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                )}
+
+                {/* ── FA: My Reports ── */}
+                {isFA && (
+                <TabsContent value="fa-reports" className="space-y-4">
+                    <Card className="border-none shadow-md overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-red-50/50 to-transparent border-b py-4">
+                            <CardTitle className="flex items-center gap-2 text-red-800"><Wrench className="w-5 h-5" /> My Reported Issues</CardTitle>
+                            <CardDescription>Maintenance and incident reports you've submitted on assigned carts.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {reportsLoading ? (
+                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                            ) : (
+                                <Table>
+                                    <TableHeader className="bg-muted/30">
+                                        <TableRow>
+                                            <TableHead>Cart</TableHead>
+                                            <TableHead>Description</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Reported</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {myReports.length === 0 ? (
+                                            <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No issues reported yet</TableCell></TableRow>
+                                        ) : myReports.map((r: any) => (
+                                            <TableRow key={r.id}>
+                                                <TableCell className="font-bold font-mono text-primary">{r.fleet?.carNumber}</TableCell>
+                                                <TableCell className="text-sm max-w-[300px] truncate">{r.issueDescription}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className={`text-[10px] ${
+                                                        r.status === 'Resolved' ? 'border-green-300 text-green-700' :
+                                                        r.status === 'Open' ? 'border-red-300 text-red-700' :
+                                                        'border-amber-300 text-amber-700'
+                                                    }`}>{r.status}</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{formatDateTime(r.reportedAt)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                )}
+
+                {/* ── FA: Notifications ── */}
+                {isFA && (
+                <TabsContent value="fa-notifications" className="space-y-4">
+                    <Card className="border-none shadow-md overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-purple-50/50 to-transparent border-b py-4 flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2 text-purple-800"><Bell className="w-5 h-5" /> Notifications</CardTitle>
+                                <CardDescription>Messages and alerts from the system and your administrators.</CardDescription>
+                            </div>
+                            {unreadCount > 0 && (
+                                <Button variant="outline" size="sm" onClick={async () => {
+                                    try { await notificationsApi.markAllAsRead(); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))); setUnreadCount(0); } catch { /* silent */ }
+                                }}>Mark all read</Button>
+                            )}
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {notifsLoading ? (
+                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                            ) : notifications.length === 0 ? (
+                                <div className="text-center py-16 text-muted-foreground">
+                                    <Bell className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                                    <p>No notifications yet</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y">
+                                    {notifications.map((n: any) => (
+                                        <div key={n.id} className={`flex items-start gap-4 px-5 py-4 cursor-pointer transition-colors hover:bg-muted/30 ${!n.isRead ? 'bg-purple-50/40' : ''}`}
+                                            onClick={() => !n.isRead && markNotifRead(n.id)}>
+                                            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${!n.isRead ? 'bg-purple-500' : 'bg-muted-foreground/30'}`} />
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-sm ${!n.isRead ? 'font-semibold text-foreground' : 'text-foreground/80'}`}>{n.title}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
+                                                <p className="text-[10px] text-muted-foreground/60 mt-1">{formatDateTime(n.createdAt)}</p>
+                                            </div>
+                                            <Badge variant="outline" className={`text-[9px] flex-shrink-0 ${
+                                                n.type === 'warning' ? 'border-amber-300 text-amber-700' :
+                                                n.type === 'success' ? 'border-green-300 text-green-700' :
+                                                n.type === 'error' ? 'border-red-300 text-red-700' :
+                                                'border-blue-200 text-blue-600'
+                                            }`}>{n.type ?? 'info'}</Badge>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                )}
+
             </Tabs>
 
             {/* ADDITIONAL DRIVERS MODAL */}

@@ -8,8 +8,8 @@ const router = Router();
 
 router.use(authenticate);
 
-// GET /api/v1/maintenance — SuperAdmin/Admin/Observer/Contracts/MaintenanceTeam can view
-router.get('/', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), MaintenanceController.getAll);
+// GET /api/v1/maintenance — FA can see only their own reported issues; others see scope-filtered
+router.get('/', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam', 'FA'), MaintenanceController.getAll);
 
 // GET /api/v1/maintenance/export — CSV export
 router.get('/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), MaintenanceController.exportCsv);
