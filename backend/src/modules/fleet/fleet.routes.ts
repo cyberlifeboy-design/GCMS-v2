@@ -47,4 +47,8 @@ router.post('/:id/assign', requireRole('SuperAdmin', 'Admin'), auditLog(), Fleet
 // DELETE /api/v1/fleet/:id
 router.delete('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), FleetController.delete);
 
+// GET/PATCH /api/v1/fleet/:id/drivers — FA manages additional drivers on their cart
+router.get('/:id/drivers', requireRole('FA', 'Admin', 'SuperAdmin'), FleetController.getDrivers);
+router.patch('/:id/drivers', requireRole('FA', 'Admin', 'SuperAdmin'), FleetController.updateDrivers);
+
 export default router;

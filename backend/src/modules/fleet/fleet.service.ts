@@ -399,6 +399,33 @@ export class FleetService {
             };
         });
     }
+
+    async updateAdditionalDrivers(fleetId: string, requestorId: string, requestorRole: string, drivers: Array<{ name: string; phone: string; accreditationNumber: string }>) {
+        const fleet = await prisma.fleet.findUnique({ where: { id: fleetId } });
+        if (!fleet) throw new Error('Cart not found');
+
+        if (requestorRole === 'FA') {
+            if (fleet.assignedUserId !== requestorId) throw new Error('Cart is not assigned to you');
+            if (!fleet.handoverSigned) throw new Error('Complete the handover form before adding drivers');
+        }
+
+        const updated = await prisma.fleet.update({
+            where: { id: fleetId },
+            data: { additionalDrivers: JSON.stringify(drivers) },
+            select: { id: true, carNumber: true, additionalDrivers: true },
+        });
+
+        return { ...updated, additionalDrivers: JSON.parse(updated.additionalDrivers || '[]') };
+    }
+
+    async getAdditionalDrivers(fleetId: string) {
+        const fleet = await prisma.fleet.findUnique({
+            where: { id: fleetId },
+            select: { id: true, carNumber: true, additionalDrivers: true },
+        });
+        if (!fleet) throw new Error('Cart not found');
+        return { ...fleet, additionalDrivers: JSON.parse(fleet.additionalDrivers || '[]') };
+    }
 }
 
 export const fleetService = new FleetService();

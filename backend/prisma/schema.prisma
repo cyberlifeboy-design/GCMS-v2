@@ -59,6 +59,10 @@ model Fleet {
   handoverSigned   Boolean         @default(false)
   handoverSignedAt DateTime?
 
+  // Additional drivers added by FA user after handover is complete
+  // JSON: [{ name, phone, accreditationNumber }]
+  additionalDrivers String?        @default("[]")
+
   handoverForm     HandoverForm?
   handoverLogs    HandoverLog[]
   maintenanceLogs MaintenanceLog[]

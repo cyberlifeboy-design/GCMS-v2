@@ -317,4 +317,29 @@ export class FleetController {
             res.status(500).json({ error: 'Failed to fetch assignment history' });
         }
     }
+
+    static async getDrivers(req: AuthRequest, res: Response) {
+        try {
+            const data = await fleetService.getAdditionalDrivers(req.params.id);
+            res.status(200).json(data);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async updateDrivers(req: AuthRequest, res: Response) {
+        try {
+            const { drivers } = req.body;
+            if (!Array.isArray(drivers)) return res.status(400).json({ error: 'drivers must be an array' });
+            const data = await fleetService.updateAdditionalDrivers(
+                req.params.id,
+                req.user!.userId,
+                req.user!.role,
+                drivers,
+            );
+            res.status(200).json(data);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
 }

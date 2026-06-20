@@ -94,6 +94,10 @@ export const fleetApi = {
     },
     assignUser: (id: string, userId: string | null) =>
         apiClient.post(`/fleet/${id}/assign`, { userId }),
+    getDrivers: (id: string) =>
+        apiClient.get(`/fleet/${id}/drivers`),
+    updateDrivers: (id: string, drivers: Array<{ name: string; phone: string; accreditationNumber: string }>) =>
+        apiClient.patch(`/fleet/${id}/drivers`, { drivers }),
     getAssignmentMatrix: (params?: Record<string, unknown>) =>
         apiClient.get('/fleet/assignment-matrix', { params }),
     bulkAssign: (assignments: Array<{ fleetId: string; userId: string | null }>) =>

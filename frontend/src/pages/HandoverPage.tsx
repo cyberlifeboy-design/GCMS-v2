@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
-import { handoverApi } from '@/lib/api';
+import { handoverApi, fleetApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock } from 'lucide-react';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock, UserPlus, Trash2, Plus, Phone, Hash } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/dateUtils';
 import { toast } from 'sonner';
@@ -146,6 +146,13 @@ export function HandoverPage() {
     const [pendingHandovers, setPendingHandovers] = useState<{ formsInProgress: HandoverFormRecord[]; cartsWithoutForm: PendingHandoverCart[] } | null>(null);
     const [pendingLoading, setPendingLoading] = useState(false);
     const [systemLogoUrl, setSystemLogoUrl] = useState<string | null>(null);
+
+    // Additional drivers modal
+    const [driversModal, setDriversModal] = useState<{ open: boolean; fleetId: string; carNumber: string } | null>(null);
+    const [driversList, setDriversList] = useState<Array<{ name: string; phone: string; accreditationNumber: string }>>([]);
+    const [driversLoading, setDriversLoading] = useState(false);
+    const [driversSaving, setDriversSaving] = useState(false);
+    const EMPTY_DRIVER = { name: '', phone: '', accreditationNumber: '' };
     const [selectedCart, setSelectedCart] = useState<UserAssignedCart | null>(null);
     const [checkoutForm, setCheckoutForm] = useState({ conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] as File[] });
 
@@ -191,6 +198,28 @@ export function HandoverPage() {
         } finally {
             setHistLoading(false);
         }
+    };
+
+    const openDriversModal = async (fleetId: string, carNumber: string) => {
+        setDriversModal({ open: true, fleetId, carNumber });
+        setDriversLoading(true);
+        try {
+            const res = await fleetApi.getDrivers(fleetId);
+            setDriversList(res.data.additionalDrivers || []);
+        } catch { setDriversList([]); }
+        finally { setDriversLoading(false); }
+    };
+
+    const saveDrivers = async () => {
+        if (!driversModal) return;
+        setDriversSaving(true);
+        try {
+            await fleetApi.updateDrivers(driversModal.fleetId, driversList);
+            toast.success('Drivers list saved');
+            setDriversModal(null);
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to save drivers');
+        } finally { setDriversSaving(false); }
     };
 
     useEffect(() => {
@@ -379,6 +408,11 @@ export function HandoverPage() {
                                         {cart.handoverFormStatus && (
                                             <Button variant="ghost" size="sm" className="w-full text-xs opacity-60" onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'view' })}>
                                                 <ClipboardList className="w-3 h-3 mr-1" /> View Handover Form
+                                            </Button>
+                                        )}
+                                        {handoverComplete && (
+                                            <Button variant="outline" size="sm" className="w-full text-xs border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => openDriversModal(cart.id, cart.carNumber)}>
+                                                <UserPlus className="w-3 h-3 mr-1" /> Manage Additional Drivers
                                             </Button>
                                         )}
                                     </CardFooter>
@@ -683,6 +717,70 @@ export function HandoverPage() {
                     </div>
                 </TabsContent>
             </Tabs>
+
+            {/* ADDITIONAL DRIVERS MODAL */}
+            <Dialog open={!!driversModal} onOpenChange={open => !open && setDriversModal(null)}>
+                <DialogContent className="max-w-lg rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                            <UserPlus className="w-5 h-5 text-blue-600" /> Additional Drivers
+                        </DialogTitle>
+                        <DialogDescription>
+                            Drivers authorized to use cart <strong>{driversModal?.carNumber}</strong>. Requires handover completion.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {driversLoading ? (
+                        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                    ) : (
+                        <div className="space-y-4">
+                            {driversList.map((driver, idx) => (
+                                <div key={idx} className="p-3 rounded-xl border bg-muted/20 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold uppercase text-muted-foreground">Driver {idx + 1}</span>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50" onClick={() => setDriversList(prev => prev.filter((_, i) => i !== idx))}>
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        <div className="relative">
+                                            <UserPlus className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                                            <Input className="pl-8 h-9 text-sm" placeholder="Full name *" value={driver.name}
+                                                onChange={e => setDriversList(prev => prev.map((d, i) => i === idx ? { ...d, name: e.target.value } : d))} />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="relative">
+                                                <Phone className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                                                <Input className="pl-8 h-9 text-sm" placeholder="Phone" value={driver.phone}
+                                                    onChange={e => setDriversList(prev => prev.map((d, i) => i === idx ? { ...d, phone: e.target.value } : d))} />
+                                            </div>
+                                            <div className="relative">
+                                                <Hash className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                                                <Input className="pl-8 h-9 text-sm" placeholder="Accreditation #" value={driver.accreditationNumber}
+                                                    onChange={e => setDriversList(prev => prev.map((d, i) => i === idx ? { ...d, accreditationNumber: e.target.value } : d))} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {driversList.length === 0 && (
+                                <div className="text-center py-6 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
+                                    No additional drivers added yet
+                                </div>
+                            )}
+                            <Button variant="outline" className="w-full" onClick={() => setDriversList(prev => [...prev, { ...EMPTY_DRIVER }])}>
+                                <Plus className="w-4 h-4 mr-2" /> Add Driver
+                            </Button>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setDriversModal(null)}>Cancel</Button>
+                        <Button onClick={saveDrivers} disabled={driversSaving || driversLoading} className="min-w-[120px]">
+                            {driversSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Save Drivers
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* HANDOVER FORM MODAL */}
             {formModal && (

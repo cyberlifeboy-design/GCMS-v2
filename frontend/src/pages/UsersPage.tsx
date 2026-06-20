@@ -843,29 +843,31 @@ export function UsersPage() {
                                 <Label className="text-sm font-semibold">Accreditation Number</Label>
                                 <Input value={editData.accreditationNumber} onChange={e => setEditData(d => ({ ...d, accreditationNumber: e.target.value }))} />
                             </div>
-                            {isSuperAdmin && (
+                            {(isSuperAdmin || isAdmin) && (
                                 <>
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold">Stadium / Venue</Label>
-                                        <Select 
-                                            value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' ? '__none__' : (editData.stadiumId || '__none__')} 
-                                            onValueChange={v => {
-                                                const val = v === '__none__' ? '' : v;
-                                                setEditData(d => ({ ...d, stadiumId: val, departmentId: '' }));
-                                            }}
-                                            disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam'}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select stadium">
-                                                    {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam') ? 'All Stadiums' : undefined}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="__none__">No Stadium</SelectItem>
-                                                {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                    {isSuperAdmin && (
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-semibold">Stadium / Venue</Label>
+                                            <Select
+                                                value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' ? '__none__' : (editData.stadiumId || '__none__')}
+                                                onValueChange={v => {
+                                                    const val = v === '__none__' ? '' : v;
+                                                    setEditData(d => ({ ...d, stadiumId: val, departmentId: '' }));
+                                                }}
+                                                disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam'}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select stadium">
+                                                        {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam') ? 'All Stadiums' : undefined}
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="__none__">No Stadium</SelectItem>
+                                                    {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
                                     <div className="space-y-2">
                                         <Label className="text-sm font-semibold">Department</Label>
                                         <Select
@@ -880,9 +882,15 @@ export function UsersPage() {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="__none__">No Department</SelectItem>
-                                                {departments.filter(d => !editData.stadiumId || d.stadiumId === editData.stadiumId).map(d => (
-                                                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                                ))}
+                                                {departments
+                                                    .filter(d => {
+                                                        // Admin: only show departments within their own stadium
+                                                        const stadiumScope = isSuperAdmin ? editData.stadiumId : currentUser?.stadiumId;
+                                                        return !stadiumScope || d.stadiumId === stadiumScope;
+                                                    })
+                                                    .map(d => (
+                                                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                                    ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
