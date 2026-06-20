@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 3005;
 app.set('trust proxy', 1);
 
 // Middleware
-app.use(cors({ origin: [process.env.CORS_ORIGIN || 'http://localhost:3000', 'https://gcms.mehaisi.com'] }));
+app.use(cors({ origin: [process.env.CORS_ORIGIN || 'http://localhost:3000', 'https://gcms.mehaisi.com', 'https://point-dangerous-packs-local.trycloudflare.com'] }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sanitizeInput); // Sanitize all inputs after body parser

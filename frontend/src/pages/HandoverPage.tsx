@@ -1,22 +1,21 @@
 import { useState, useEffect } from 'react';
-import { handoverApi, usersApi, departmentsApi } from '@/lib/api';
+import { handoverApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, Users, Building2, TrendingUp, Clock, ChevronUp, ChevronDown, Save, FileSignature, CheckCircle2, RotateCcw } from 'lucide-react';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { carTypeColors } from '@/lib/constants';
-import { Pagination } from '@/components/shared/Pagination';
 import { formatDateTime } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 import { Separator } from '@/components/ui/separator';
+import { Pagination } from '@/components/shared/Pagination';
 
 interface HandoverLog {
     id: string;
@@ -99,6 +98,7 @@ const statusColors: Record<string, string> = {
     'Returned': 'bg-indigo-100 text-indigo-800 border-indigo-200',
     'HandbackPending': 'bg-slate-100 text-slate-800 border-slate-200',
     'Under Maintenance': 'bg-red-100 text-red-800 border-red-200',
+    'Retired': 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
 export function HandoverPage() {
@@ -107,6 +107,7 @@ export function HandoverPage() {
     const isFA = role === 'FA';
     const isAdmin = role === 'Admin' || role === 'SuperAdmin';
 
+    const [activeTab, setActiveTab] = useState(isFA ? 'my-carts' : 'dashboard');
     const [poolDashboard, setPoolDashboard] = useState<PoolDashboard | null>(null);
     const [poolLoading, setPoolLoading] = useState(true);
     const [history, setHistory] = useState<HandoverLog[]>([]);
@@ -223,19 +224,6 @@ export function HandoverPage() {
             loadPoolDashboard();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Request failed');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleAcceptHandback = async (fleetId: string) => {
-        setSubmitting(true);
-        try {
-            await handoverApi.acceptHandback(fleetId);
-            toast.success('Handback accepted. Cart is now Available.');
-            loadPoolDashboard();
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Action failed');
         } finally {
             setSubmitting(false);
         }
@@ -367,22 +355,16 @@ export function HandoverPage() {
                                         <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
                                     ) : !poolDashboard?.stadiums ? (
                                         <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Error loading data</TableCell></TableRow>
-                                    ) : (() => {
-                                        // Scan venues for pending or returned carts that need release
-                                        const pendingCarts: any[] = [];
-                                        // This is a placeholder since the summary doesn't give us individual carts
-                                        // In the real app, we'd fetch GET /handover/available/:stadiumId which includes Returned/HandbackPending
-                                        return (
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        <CheckCircle2 className="w-8 h-8 opacity-20" />
-                                                        <p className="font-medium italic">Use the 'Venue Status' tab below to release carts by venue.</p>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })()}
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <CheckCircle2 className="w-8 h-8 opacity-20" />
+                                                    <p className="font-medium italic">Use the 'Venue Status' tab below to release carts by venue.</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
                                 </TableBody>
                             </Table>
                          </CardContent>
@@ -391,7 +373,7 @@ export function HandoverPage() {
             )}
 
             {/* SHARED SECTION: RECENT ACTIVITY & HISTORY */}
-            <Tabs defaultValue="activity" className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-muted/50 p-1 rounded-xl">
                     <TabsTrigger value="activity" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
                     <TabsTrigger value="history" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>

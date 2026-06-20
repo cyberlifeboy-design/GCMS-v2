@@ -3,14 +3,13 @@ import { maintenanceApi, fleetApi, stadiumsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Download, Loader2, Wrench, CheckCircle, AlertTriangle, Clock, Car, DollarSign, FileText, Send } from 'lucide-react';
+import { Plus, Search, Download, Loader2, CheckCircle, Clock, DollarSign, FileText, Send, FilterX } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { carTypeColors } from '@/lib/constants';
 import { Pagination } from '@/components/shared/Pagination';
 import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
@@ -70,10 +69,7 @@ export function MaintenancePage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [stadiumFilter, setStadiumFilter] = useState(() => {
-        if (currentUser?.role === 'Admin' && currentUser?.stadiumId) return currentUser.stadiumId;
-        return 'all';
-    });
+    const [stadiumFilter, setStadiumFilter] = useState('all');
     const [cartFilter, setCartFilter] = useState('all');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
@@ -326,6 +322,34 @@ export function MaintenancePage() {
                                 {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                             </SelectContent>
                         </Select>
+                        {isSuperAdmin && (
+                            <Select value={stadiumFilter} onValueChange={setStadiumFilter}>
+                                <SelectTrigger className="w-40"><SelectValue placeholder="All Venues" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Venues</SelectItem>
+                                    {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        )}
+                        <Select value={cartFilter} onValueChange={setCartFilter}>
+                            <SelectTrigger className="w-40"><SelectValue placeholder="All Carts" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Carts</SelectItem>
+                                {fleet.map(f => <SelectItem key={f.id} value={f.id}>{f.carNumber}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <div className="flex items-center gap-2">
+                            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-36 h-9 text-xs" />
+                            <span className="text-muted-foreground">—</span>
+                            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-36 h-9 text-xs" />
+                        </div>
+                        {(search || statusFilter !== 'all' || stadiumFilter !== 'all' || cartFilter !== 'all' || dateFrom || dateTo) && (
+                            <Button variant="ghost" size="sm" onClick={() => {
+                                setSearch(''); setStatusFilter('all'); setStadiumFilter('all'); setCartFilter('all'); setDateFrom(''); setDateTo('');
+                            }}>
+                                <FilterX className="w-4 h-4 mr-2" />Clear
+                            </Button>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">

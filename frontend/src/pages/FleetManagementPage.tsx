@@ -55,8 +55,6 @@ export function FleetManagementPage() {
     const { user } = useAuthStore();
     const isSuperAdmin = user?.role === 'SuperAdmin';
     const isAdmin = user?.role === 'Admin';
-    const isMaintenance = user?.role === 'MaintenanceTeam';
-    const isContracts = user?.role === 'Contracts';
     const canManage = isSuperAdmin || isAdmin;
 
     // Data state
