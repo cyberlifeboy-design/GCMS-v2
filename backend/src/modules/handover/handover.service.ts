@@ -417,6 +417,7 @@ export class HandoverService {
                     department: { select: { name: true } },
                     handoverSigned: true,
                     handoverSignedAt: true,
+                    handoverForm: { select: { id: true, status: true, adminSignatureData: true } },
                 },
                 orderBy: { carNumber: 'asc' },
             });
@@ -432,6 +433,8 @@ export class HandoverService {
                 departmentName: cart.department?.name || undefined,
                 handoverSigned: cart.handoverSigned,
                 handoverSignedAt: cart.handoverSignedAt,
+                handoverFormStatus: cart.handoverForm?.status ?? null,
+                handoverFormId: cart.handoverForm?.id ?? null,
             }));
         }
 
@@ -484,6 +487,214 @@ export class HandoverService {
                 assignedUser: { select: { id: true, name: true, phone: true, email: true, role: true } },
             },
             orderBy: { carNumber: 'asc' },
+        });
+    }
+
+    // ── Handover Form Methods ─────────────────────────────────────────────────
+
+    async createHandoverForm(data: {
+        fleetId: string;
+        adminId: string;
+        serialNumber?: string;
+        faCode?: string;
+        handoverDate?: string;
+        approvedReturnDate?: string;
+        handoverLocation?: string;
+        receiverLicenseNo?: string;
+        handoverBy?: string;
+        handedOverTo?: string;
+        handoverByContact?: string;
+        receiverContact?: string;
+        cartTypeData?: string;
+        conditionData?: string;
+        additionalDrivers?: string;
+        issuesNotes?: string;
+        tc1?: boolean;
+        tc2?: boolean;
+        tc3?: boolean;
+        finalName?: string;
+        finalDate?: string;
+        adminSignatureData?: string;
+        finalSignatureData?: string;
+    }) {
+        const vehicle = await prisma.fleet.findUnique({
+            where: { id: data.fleetId },
+            include: { assignedUser: { select: { name: true } }, stadium: { select: { name: true } }, department: { select: { name: true, code: true } } },
+        });
+        if (!vehicle) throw new Error('Vehicle not found');
+        if (!vehicle.assignedUserId) throw new Error('Cart must be assigned to a user before creating a handover form');
+
+        const existing = await prisma.handoverForm.findUnique({ where: { fleetId: data.fleetId } });
+        if (existing && existing.status === 'COMPLETE') throw new Error('Handover already completed for this cart');
+
+        const status = data.adminSignatureData ? 'ADMIN_SIGNED' : 'PENDING';
+
+        if (existing) {
+            return prisma.handoverForm.update({
+                where: { id: existing.id },
+                data: {
+                    serialNumber: data.serialNumber ?? vehicle.carNumber,
+                    faCode: data.faCode ?? vehicle.department?.code,
+                    handoverDate: data.handoverDate,
+                    approvedReturnDate: data.approvedReturnDate,
+                    handoverLocation: data.handoverLocation ?? vehicle.stadium.name,
+                    receiverLicenseNo: data.receiverLicenseNo,
+                    handoverBy: data.handoverBy,
+                    handedOverTo: data.handedOverTo ?? vehicle.assignedUser?.name,
+                    handoverByContact: data.handoverByContact,
+                    receiverContact: data.receiverContact,
+                    cartTypeData: data.cartTypeData,
+                    conditionData: data.conditionData,
+                    additionalDrivers: data.additionalDrivers,
+                    issuesNotes: data.issuesNotes,
+                    tc1: data.tc1 ?? false,
+                    tc2: data.tc2 ?? false,
+                    tc3: data.tc3 ?? false,
+                    finalName: data.finalName,
+                    finalDate: data.finalDate,
+                    adminSignatureData: data.adminSignatureData,
+                    adminSignedAt: data.adminSignatureData ? new Date() : undefined,
+                    adminSignedById: data.adminSignatureData ? data.adminId : undefined,
+                    finalSignatureData: data.finalSignatureData,
+                    status,
+                },
+                include: { fleet: { select: { carNumber: true, carType: true } } },
+            });
+        }
+
+        return prisma.handoverForm.create({
+            data: {
+                fleetId: data.fleetId,
+                serialNumber: data.serialNumber ?? vehicle.carNumber,
+                faCode: data.faCode ?? vehicle.department?.code,
+                handoverDate: data.handoverDate,
+                approvedReturnDate: data.approvedReturnDate,
+                handoverLocation: data.handoverLocation ?? vehicle.stadium.name,
+                receiverLicenseNo: data.receiverLicenseNo,
+                handoverBy: data.handoverBy,
+                handedOverTo: data.handedOverTo ?? vehicle.assignedUser?.name,
+                handoverByContact: data.handoverByContact,
+                receiverContact: data.receiverContact,
+                cartTypeData: data.cartTypeData,
+                conditionData: data.conditionData,
+                additionalDrivers: data.additionalDrivers,
+                issuesNotes: data.issuesNotes,
+                tc1: data.tc1 ?? false,
+                tc2: data.tc2 ?? false,
+                tc3: data.tc3 ?? false,
+                finalName: data.finalName,
+                finalDate: data.finalDate,
+                adminSignatureData: data.adminSignatureData,
+                adminSignedAt: data.adminSignatureData ? new Date() : undefined,
+                adminSignedById: data.adminSignatureData ? data.adminId : undefined,
+                finalSignatureData: data.finalSignatureData,
+                status,
+            },
+            include: { fleet: { select: { carNumber: true, carType: true } } },
+        });
+    }
+
+    async getHandoverForm(fleetId: string) {
+        return prisma.handoverForm.findUnique({
+            where: { fleetId },
+            include: {
+                fleet: {
+                    select: {
+                        carNumber: true, carType: true,
+                        stadium: { select: { name: true, code: true } },
+                        department: { select: { name: true, code: true } },
+                        assignedUser: { select: { name: true, email: true, phone: true } },
+                    },
+                },
+                adminSignedByUser: { select: { name: true, email: true } },
+                userSignedByUser: { select: { name: true, email: true } },
+            },
+        });
+    }
+
+    async getPendingHandovers(adminUser: { role: string; stadiumId?: string }) {
+        const where: any = {
+            fleet: { status: 'Assigned', assignedUserId: { not: null } },
+            OR: [{ status: 'PENDING' }, { status: 'ADMIN_SIGNED' }],
+        };
+        if (adminUser.role === 'Admin' && adminUser.stadiumId) {
+            where.fleet = { ...where.fleet, stadiumId: adminUser.stadiumId };
+        }
+
+        // Also find assigned carts without any form yet
+        const fleetWhere: any = { status: 'Assigned', assignedUserId: { not: null }, handoverForm: null };
+        if (adminUser.role === 'Admin' && adminUser.stadiumId) {
+            fleetWhere.stadiumId = adminUser.stadiumId;
+        }
+
+        const [formsInProgress, cartsWithoutForm] = await Promise.all([
+            prisma.handoverForm.findMany({
+                where,
+                include: {
+                    fleet: {
+                        select: {
+                            carNumber: true, carType: true, status: true,
+                            stadium: { select: { name: true, code: true } },
+                            department: { select: { name: true, code: true } },
+                            assignedUser: { select: { name: true, email: true, phone: true } },
+                        },
+                    },
+                    adminSignedByUser: { select: { name: true } },
+                    userSignedByUser: { select: { name: true } },
+                },
+                orderBy: { updatedAt: 'desc' },
+            }),
+            prisma.fleet.findMany({
+                where: fleetWhere,
+                select: {
+                    id: true, carNumber: true, carType: true, status: true,
+                    stadium: { select: { name: true, code: true } },
+                    department: { select: { name: true, code: true } },
+                    assignedUser: { select: { name: true, email: true, phone: true } },
+                },
+            }),
+        ]);
+
+        return { formsInProgress, cartsWithoutForm };
+    }
+
+    async userSignHandoverForm(data: { fleetId: string; userId: string; userSignatureData: string; tc1?: boolean; tc2?: boolean; tc3?: boolean; finalName?: string; finalDate?: string; finalSignatureData?: string }) {
+        const form = await prisma.handoverForm.findUnique({ where: { fleetId: data.fleetId } });
+        if (!form) throw new Error('No handover form found for this cart. Ask your Admin to create it first.');
+        if (form.status === 'COMPLETE') throw new Error('Handover form already fully signed');
+        if (form.status === 'PENDING') throw new Error('Admin must sign the form before you can sign it');
+
+        const vehicle = await prisma.fleet.findUnique({ where: { id: data.fleetId } });
+        if (!vehicle) throw new Error('Vehicle not found');
+        if (vehicle.assignedUserId !== data.userId) throw new Error('Vehicle is not assigned to you');
+
+        return prisma.$transaction(async (tx) => {
+            const updatedForm = await tx.handoverForm.update({
+                where: { id: form.id },
+                data: {
+                    userSignatureData: data.userSignatureData,
+                    userSignedAt: new Date(),
+                    userSignedById: data.userId,
+                    tc1: data.tc1 ?? form.tc1,
+                    tc2: data.tc2 ?? form.tc2,
+                    tc3: data.tc3 ?? form.tc3,
+                    finalName: data.finalName ?? form.finalName,
+                    finalDate: data.finalDate ?? form.finalDate,
+                    finalSignatureData: data.finalSignatureData ?? form.finalSignatureData,
+                    status: 'COMPLETE',
+                },
+            });
+
+            await tx.handoverLog.create({
+                data: { fleetId: data.fleetId, userId: data.userId, action: 'HandoverSigned' },
+            });
+
+            await tx.fleet.update({
+                where: { id: data.fleetId },
+                data: { status: 'Active', handoverSigned: true, handoverSignedAt: new Date() },
+            });
+
+            return updatedForm;
         });
     }
 

@@ -226,6 +226,69 @@ export class HandoverController {
         }
     }
 
+    // ── Handover Form Handlers ────────────────────────────────────────────────
+
+    static async createHandoverForm(req: AuthRequest, res: Response) {
+        try {
+            const role = req.user?.role;
+            if (role !== 'Admin' && role !== 'SuperAdmin') {
+                return res.status(403).json({ error: 'Only admins can create handover forms' });
+            }
+            const form = await handoverService.createHandoverForm({
+                ...req.body,
+                adminId: req.user!.userId,
+            });
+            res.status(201).json(form);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async getHandoverForm(req: AuthRequest, res: Response) {
+        try {
+            const fleetId = req.params.fleetId;
+            const form = await handoverService.getHandoverForm(fleetId);
+            res.status(200).json(form ?? null);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async getPendingHandovers(req: AuthRequest, res: Response) {
+        try {
+            const role = req.user?.role;
+            if (role !== 'Admin' && role !== 'SuperAdmin') {
+                return res.status(403).json({ error: 'Admins only' });
+            }
+            const data = await handoverService.getPendingHandovers({
+                role: req.user!.role,
+                stadiumId: req.user!.stadiumId,
+            });
+            res.status(200).json(data);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async userSignHandoverForm(req: AuthRequest, res: Response) {
+        try {
+            const result = await handoverService.userSignHandoverForm({
+                fleetId: req.body.fleetId,
+                userId: req.user!.userId,
+                userSignatureData: req.body.userSignatureData,
+                tc1: req.body.tc1,
+                tc2: req.body.tc2,
+                tc3: req.body.tc3,
+                finalName: req.body.finalName,
+                finalDate: req.body.finalDate,
+                finalSignatureData: req.body.finalSignatureData,
+            });
+            res.status(200).json(result);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message });
+        }
+    }
+
     static async getInUse(req: AuthRequest, res: Response) {
         try {
             const { stadiumId } = req.params;

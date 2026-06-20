@@ -10,12 +10,13 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw } from 'lucide-react';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 import { Separator } from '@/components/ui/separator';
 import { Pagination } from '@/components/shared/Pagination';
+import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
 
 interface HandoverLog {
     id: string;
@@ -40,6 +41,23 @@ interface UserAssignedCart {
     departmentName?: string;
     handoverSigned: boolean;
     handoverSignedAt: string | null;
+    handoverFormStatus: string | null;  // PENDING | ADMIN_SIGNED | COMPLETE | null
+    handoverFormId: string | null;
+}
+
+interface PendingHandoverCart {
+    id: string; carNumber: string; carType: string; status: string;
+    stadium: { name: string; code: string };
+    department?: { name: string; code: string } | null;
+    assignedUser?: { name: string; email: string; phone?: string } | null;
+}
+
+interface HandoverFormRecord {
+    id: string; fleetId: string; status: string;
+    fleet: PendingHandoverCart;
+    adminSignedByUser?: { name: string } | null;
+    userSignedByUser?: { name: string } | null;
+    updatedAt: string;
 }
 
 interface PoolStatusStadium {
@@ -107,7 +125,7 @@ export function HandoverPage() {
     const isFA = role === 'FA';
     const isAdmin = role === 'Admin' || role === 'SuperAdmin';
 
-    const [activeTab, setActiveTab] = useState(isFA ? 'my-carts' : 'dashboard');
+    const [activeTab, setActiveTab] = useState(isFA ? 'my-carts' : 'pending');
     const [poolDashboard, setPoolDashboard] = useState<PoolDashboard | null>(null);
     const [poolLoading, setPoolLoading] = useState(true);
     const [history, setHistory] = useState<HandoverLog[]>([]);
@@ -121,8 +139,26 @@ export function HandoverPage() {
     const [submitting, setSubmitting] = useState(false);
     const [signingCart, setSigningCart] = useState<UserAssignedCart | null>(null);
     const [checkoutOpen, setCheckoutOpen] = useState(false);
+
+    // Handover Form Modal
+    const [formModal, setFormModal] = useState<{ open: boolean; fleetId: string; mode: 'admin' | 'user' | 'view' } | null>(null);
+    const [pendingHandovers, setPendingHandovers] = useState<{ formsInProgress: HandoverFormRecord[]; cartsWithoutForm: PendingHandoverCart[] } | null>(null);
+    const [pendingLoading, setPendingLoading] = useState(false);
     const [selectedCart, setSelectedCart] = useState<UserAssignedCart | null>(null);
     const [checkoutForm, setCheckoutForm] = useState({ conditionNotes: '', hasIssue: false, issueDescription: '', photos: [] as File[] });
+
+    const loadPendingHandovers = async () => {
+        if (!isAdmin) return;
+        try {
+            setPendingLoading(true);
+            const res = await handoverApi.getPendingHandovers();
+            setPendingHandovers(res.data);
+        } catch {
+            console.error('Failed to load pending handovers');
+        } finally {
+            setPendingLoading(false);
+        }
+    };
 
     const loadPoolDashboard = async () => {
         try {
@@ -157,6 +193,7 @@ export function HandoverPage() {
 
     useEffect(() => {
         loadPoolDashboard();
+        if (isAdmin) loadPendingHandovers();
     }, []);
 
     useEffect(() => {
@@ -265,50 +302,67 @@ export function HandoverPage() {
                          </div>
                     ) : poolDashboard?.userAssignedCarts && poolDashboard.userAssignedCarts.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {poolDashboard.userAssignedCarts.map(cart => (
-                                <Card key={cart.id} className="overflow-hidden border-2 transition-all hover:shadow-lg border-muted/50">
-                                    <div className={`h-2 w-full ${statusColors[cart.status].split(' ')[0]}`} />
+                            {poolDashboard.userAssignedCarts.map(cart => {
+                                const handoverComplete = cart.handoverSigned && cart.handoverFormStatus === 'COMPLETE';
+                                const awaitingAdminSign = !cart.handoverFormStatus || cart.handoverFormStatus === 'PENDING';
+                                const readyForUserSign = cart.handoverFormStatus === 'ADMIN_SIGNED';
+                                return (
+                                <Card key={cart.id} className={`overflow-hidden border-2 transition-all ${handoverComplete ? 'hover:shadow-lg border-muted/50' : 'border-amber-300 opacity-80'}`}>
+                                    <div className={`h-2 w-full ${statusColors[cart.status]?.split(' ')[0] ?? 'bg-muted'}`} />
                                     <CardHeader className="pb-4">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <CardTitle className="text-2xl font-black">{cart.carNumber}</CardTitle>
+                                                <CardTitle className={`text-2xl font-black ${!handoverComplete ? 'text-muted-foreground' : ''}`}>{cart.carNumber}</CardTitle>
                                                 <CardDescription className="font-medium">{cart.carType} · {cart.stadiumName}</CardDescription>
                                             </div>
-                                            <Badge className={`${statusColors[cart.status]} border shadow-none px-3 py-1 text-[10px] font-bold uppercase tracking-wider`}>
-                                                {cart.status}
-                                            </Badge>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <Badge className={`${statusColors[cart.status]} border shadow-none px-3 py-1 text-[10px] font-bold uppercase tracking-wider`}>
+                                                    {cart.status}
+                                                </Badge>
+                                                {!handoverComplete && (
+                                                    <Badge variant="outline" className="text-amber-700 border-amber-400 text-[9px] px-2">
+                                                        <Lock className="w-2.5 h-2.5 mr-1" /> Handover Pending
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-muted/30 border border-muted/20">
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-muted-foreground font-medium">Handover Signed:</span>
-                                                <span className={cart.handoverSigned ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
-                                                    {cart.handoverSigned ? "YES" : "PENDING"}
-                                                </span>
+                                    <CardContent className="space-y-3">
+                                        {!handoverComplete && (
+                                            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs space-y-1">
+                                                <p className="font-bold flex items-center gap-1"><Lock className="w-3 h-3" /> Cart locked until handover form is signed</p>
+                                                {awaitingAdminSign && <p>Waiting for Admin to create &amp; sign the handover form</p>}
+                                                {readyForUserSign && <p className="text-purple-700 font-semibold">Admin signed ✓ — your signature required</p>}
+                                                <p className="text-[10px] opacity-70">You cannot check-in, add drivers, or report issues until both parties sign</p>
                                             </div>
-                                            {cart.handoverSignedAt && (
-                                                <div className="flex justify-between text-[10px] text-muted-foreground">
-                                                    <span>Signed At:</span>
-                                                    <span>{formatDateTime(cart.handoverSignedAt)}</span>
+                                        )}
+                                        {handoverComplete && (
+                                            <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-green-50 border border-green-200">
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-green-700 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Handover Signed</span>
+                                                    {cart.handoverSignedAt && <span className="text-muted-foreground text-[10px]">{formatDateTime(cart.handoverSignedAt)}</span>}
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
                                     </CardContent>
-                                    <CardFooter className="bg-muted/10 border-t p-4 flex gap-2">
-                                        {!cart.handoverSigned ? (
-                                            <Button className="w-full bg-purple-600 hover:bg-purple-700 h-11 rounded-xl font-bold" onClick={() => setSigningCart(cart)}>
+                                    <CardFooter className="bg-muted/10 border-t p-4 flex flex-col gap-2">
+                                        {readyForUserSign ? (
+                                            <Button className="w-full bg-purple-600 hover:bg-purple-700 h-11 rounded-xl font-bold" onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'user' })}>
                                                 <FileSignature className="w-4 h-4 mr-2" /> Sign Handover Form
                                             </Button>
-                                        ) : cart.status === 'Active' ? (
+                                        ) : awaitingAdminSign ? (
+                                            <Button variant="outline" className="w-full h-11 rounded-xl font-bold opacity-60" disabled>
+                                                <Lock className="w-4 h-4 mr-2" /> Awaiting Admin Signature
+                                            </Button>
+                                        ) : handoverComplete && cart.status === 'Active' ? (
                                             <Button className="w-full bg-blue-600 hover:bg-blue-700 h-11 rounded-xl font-bold" onClick={() => handleCheckIn(cart.id)} disabled={submitting}>
                                                 <LogIn className="w-4 h-4 mr-2" /> Start Usage (Check-In)
                                             </Button>
-                                        ) : cart.status === 'Dispatched' ? (
+                                        ) : handoverComplete && cart.status === 'Dispatched' ? (
                                             <Button className="w-full bg-amber-600 hover:bg-amber-700 h-11 rounded-xl font-bold text-white" onClick={() => { setSelectedCart(cart); setCheckoutOpen(true); }}>
                                                 <LogOut className="w-4 h-4 mr-2" /> Finish Usage (Check-Out)
                                             </Button>
-                                        ) : cart.status === 'Returned' ? (
+                                        ) : handoverComplete && cart.status === 'Returned' ? (
                                             <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 rounded-xl font-bold" onClick={() => handleRequestHandback(cart.id)} disabled={submitting}>
                                                 <RotateCcw className="w-4 h-4 mr-2" /> Handback to Admin
                                             </Button>
@@ -317,9 +371,15 @@ export function HandoverPage() {
                                                 Waiting for Admin
                                             </Button>
                                         )}
+                                        {cart.handoverFormStatus && (
+                                            <Button variant="ghost" size="sm" className="w-full text-xs opacity-60" onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'view' })}>
+                                                <ClipboardList className="w-3 h-3 mr-1" /> View Handover Form
+                                            </Button>
+                                        )}
                                     </CardFooter>
                                 </Card>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <Card className="border-dashed border-2 bg-muted/5 p-12 text-center">
@@ -375,10 +435,100 @@ export function HandoverPage() {
             {/* SHARED SECTION: RECENT ACTIVITY & HISTORY */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-muted/50 p-1 rounded-xl">
+                    {isAdmin && <TabsTrigger value="pending" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                        <ClipboardList className="w-3 h-3 mr-1" /> Pending Handovers
+                        {pendingHandovers && (pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length) > 0 && (
+                            <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
+                        )}
+                    </TabsTrigger>}
                     <TabsTrigger value="activity" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
                     <TabsTrigger value="history" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>
                     <TabsTrigger value="venues" className="rounded-lg px-6 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
                 </TabsList>
+
+                {/* ── Pending Handovers (Admin) ── */}
+                {isAdmin && (
+                <TabsContent value="pending" className="space-y-6">
+                    <Card className="border-none shadow-md overflow-hidden">
+                        <CardHeader className="bg-amber-50 border-b">
+                            <CardTitle className="flex items-center gap-2"><ClipboardList className="w-5 h-5 text-amber-600" /> Carts Awaiting Handover Form</CardTitle>
+                            <CardDescription>Assigned carts that need a handover form to be created and/or signed before the user can operate them.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {pendingLoading ? (
+                                <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                            ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Cart #</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Assigned To</TableHead>
+                                        <TableHead>Venue</TableHead>
+                                        <TableHead>Form Status</TableHead>
+                                        <TableHead className="text-right">Action</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {/* Carts without any form */}
+                                    {pendingHandovers?.cartsWithoutForm.map(cart => (
+                                        <TableRow key={cart.id} className="bg-red-50/30">
+                                            <TableCell className="font-black font-mono text-primary">{cart.carNumber}</TableCell>
+                                            <TableCell className="text-sm">{cart.carType}</TableCell>
+                                            <TableCell>
+                                                <div className="text-sm font-medium">{cart.assignedUser?.name ?? '—'}</div>
+                                                <div className="text-[10px] text-muted-foreground">{cart.assignedUser?.email}</div>
+                                            </TableCell>
+                                            <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium.code}</Badge></TableCell>
+                                            <TableCell><Badge className="bg-red-100 text-red-800 border-red-200 text-[9px]">No Form Created</Badge></TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" className="bg-red-900 hover:bg-red-800 text-white"
+                                                    onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'admin' })}>
+                                                    <FileSignature className="w-3 h-3 mr-1" /> Create &amp; Sign Form
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {/* Forms in progress */}
+                                    {pendingHandovers?.formsInProgress.map(record => (
+                                        <TableRow key={record.id}>
+                                            <TableCell className="font-black font-mono text-primary">{record.fleet.carNumber}</TableCell>
+                                            <TableCell className="text-sm">{record.fleet.carType}</TableCell>
+                                            <TableCell>
+                                                <div className="text-sm font-medium">{record.fleet.assignedUser?.name ?? '—'}</div>
+                                                <div className="text-[10px] text-muted-foreground">{record.fleet.assignedUser?.email}</div>
+                                            </TableCell>
+                                            <TableCell><Badge variant="outline" className="font-mono text-xs">{record.fleet.stadium.code}</Badge></TableCell>
+                                            <TableCell>
+                                                {record.status === 'PENDING' && <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[9px]">Admin Signature Needed</Badge>}
+                                                {record.status === 'ADMIN_SIGNED' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px]">Awaiting User Signature</Badge>}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" variant="outline"
+                                                    onClick={() => setFormModal({ open: true, fleetId: record.fleetId, mode: record.status === 'PENDING' ? 'admin' : 'view' })}>
+                                                    <ClipboardList className="w-3 h-3 mr-1" />
+                                                    {record.status === 'PENDING' ? 'Sign Form' : 'View Form'}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {!pendingLoading && !pendingHandovers?.cartsWithoutForm.length && !pendingHandovers?.formsInProgress.length && (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <CheckCircle2 className="w-8 h-8 opacity-20" />
+                                                    <p className="font-medium">All assigned carts have completed handover forms</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                )}
 
                 <TabsContent value="activity">
                     <Card className="border-none shadow-md overflow-hidden">
@@ -529,7 +679,22 @@ export function HandoverPage() {
                 </TabsContent>
             </Tabs>
 
-            {/* HANDOVER SIGNING MODAL */}
+            {/* HANDOVER FORM MODAL */}
+            {formModal && (
+                <HandoverFormModal
+                    open={formModal.open}
+                    onClose={() => setFormModal(null)}
+                    mode={formModal.mode}
+                    fleetId={formModal.fleetId}
+                    currentUserName={currentUser?.name}
+                    onComplete={() => {
+                        loadPoolDashboard();
+                        if (isAdmin) loadPendingHandovers();
+                    }}
+                />
+            )}
+
+            {/* HANDOVER SIGNING MODAL (legacy — kept for backward compat) */}
             <Dialog open={!!signingCart} onOpenChange={open => !open && setSigningCart(null)}>
                 <DialogContent className="max-w-lg overflow-hidden p-0 rounded-3xl border-none shadow-2xl animate-in zoom-in-95 duration-300">
                     <div className="bg-purple-600 p-8 text-white">

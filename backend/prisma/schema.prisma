@@ -58,7 +58,8 @@ model Fleet {
   // Handover state
   handoverSigned   Boolean         @default(false)
   handoverSignedAt DateTime?
-  
+
+  handoverForm     HandoverForm?
   handoverLogs    HandoverLog[]
   maintenanceLogs MaintenanceLog[]
   createdAt       DateTime         @default(now())
@@ -95,8 +96,10 @@ model User {
   focalPointOf        Department[]    @relation("DepartmentFocalPoint")
   handoverLogs        HandoverLog[]
   refreshTokens       RefreshToken[]
-  assignedCarts       Fleet[]         @relation("FleetAssignedUser")
-  maintenanceLogs     MaintenanceLog[] @relation("MaintenanceReporter")
+  assignedCarts         Fleet[]         @relation("FleetAssignedUser")
+  adminSignedForms      HandoverForm[]  @relation("HandoverFormAdminSigner")
+  userSignedForms       HandoverForm[]  @relation("HandoverFormUserSigner")
+  maintenanceLogs       MaintenanceLog[] @relation("MaintenanceReporter")
   approvedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceApprover")
   reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
   createdAt           DateTime        @default(now())
@@ -283,6 +286,80 @@ model CarRequest {
   @@index([stadiumId])
   @@index([departmentId])
   @@index([requestToken])
+}
+
+// Handover Form — stores the full bilingual handover & return form data + signatures
+// Status: PENDING → ADMIN_SIGNED → COMPLETE (both signed → fleet goes Active)
+model HandoverForm {
+  id            String    @id @default(cuid())
+  fleetId       String    @unique
+  fleet         Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+
+  // ── Section 1: Handover Details ──
+  serialNumber          String?
+  faCode                String?
+  handoverDate          String?
+  approvedReturnDate    String?
+  handoverLocation      String?
+  receiverLicenseNo     String?
+  handoverBy            String?
+  handedOverTo          String?
+  handoverByContact     String?
+  receiverContact       String?
+
+  // ── Section 2: Cart Info (JSON) ──
+  // { cargo, fourSeat, sixSeat, access, over18, licenseType, entity }
+  cartTypeData          String?
+
+  // ── Section 3: Condition Inspection (JSON) ──
+  // { pre: { body, lights, ... }, aft: { ... } }
+  conditionData         String?
+
+  // ── Section 4: Additional Drivers (JSON) ──
+  // [{ name, contact, entity, licenseNo }]
+  additionalDrivers     String?
+
+  // ── Section 5: Issues ──
+  issuesNotes           String?
+
+  // ── Section 6: Return Details ──
+  inspectionDone        String?
+  returnDate            String?
+  receivedBy            String?
+  returnedBy            String?
+  returnReceiverContact String?
+  returnedByContact     String?
+  returnAdminSigData    String?
+  returnUserSigData     String?
+
+  // ── Section 7: Terms ──
+  tc1                   Boolean  @default(false)
+  tc2                   Boolean  @default(false)
+  tc3                   Boolean  @default(false)
+  finalName             String?
+  finalDate             String?
+  finalSignatureData    String?
+
+  // ── Admin Signature (Venue Logistics Rep — s1) ──
+  adminSignatureData    String?
+  adminSignedAt         DateTime?
+  adminSignedById       String?
+  adminSignedByUser     User?    @relation("HandoverFormAdminSigner", fields: [adminSignedById], references: [id])
+
+  // ── User Signature (Receiver — s2) ──
+  userSignatureData     String?
+  userSignedAt          DateTime?
+  userSignedById        String?
+  userSignedByUser      User?    @relation("HandoverFormUserSigner", fields: [userSignedById], references: [id])
+
+  // PENDING | ADMIN_SIGNED | COMPLETE
+  status                String   @default("PENDING")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([fleetId])
+  @@index([status])
 }
 
 // Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected

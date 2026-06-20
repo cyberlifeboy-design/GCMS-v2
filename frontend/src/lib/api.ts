@@ -125,6 +125,16 @@ export const handoverApi = {
     acceptHandback: (fleetId: string) =>
         apiClient.post('/handover/accept-handback', { fleetId }),
 
+    // Handover Form
+    createHandoverForm: (data: Record<string, unknown>) =>
+        apiClient.post('/handover/forms', data),
+    getHandoverForm: (fleetId: string) =>
+        apiClient.get(`/handover/forms/${fleetId}`),
+    getPendingHandovers: () =>
+        apiClient.get('/handover/forms/pending'),
+    userSignHandoverForm: (data: Record<string, unknown>) =>
+        apiClient.post('/handover/forms/user-sign', data),
+
     // Pool management endpoints
     getPoolStatus: () =>
         apiClient.get('/handover/pool-status'),
