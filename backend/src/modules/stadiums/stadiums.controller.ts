@@ -66,6 +66,20 @@ export class StadiumController {
         }
     }
 
+    static async bulkCreate(req: AuthRequest, res: Response): Promise<void> {
+        try {
+            const { venues } = req.body;
+            if (!Array.isArray(venues) || venues.length === 0) {
+                res.status(400).json({ error: 'venues array is required' });
+                return;
+            }
+            const result = await stadiumsService.bulkCreate(venues);
+            res.status(201).json(result);
+        } catch (error) {
+            res.status(400).json({ error: (error as Error).message });
+        }
+    }
+
     static async delete(req: AuthRequest, res: Response): Promise<void> {
         try {
             const id = parseParam(req.params.id);

@@ -213,7 +213,15 @@ model SystemSettings {
   
   // Timezone Settings
   timezone                      String?   @default("UTC") // System timezone (IANA format, e.g., "America/New_York")
-  
+
+  // Handover Form — Terms & Conditions (editable by SuperAdmin only)
+  handoverTcEnTitle             String?   // English T&C section title
+  handoverTcEnBody              String?   // English T&C body HTML (TipTap output)
+  handoverTcArTitle             String?   // Arabic T&C section title
+  handoverTcArBody              String?   // Arabic T&C body HTML (TipTap output)
+  // JSON: [{id:string, en:string, ar:string}] — confirmation checkboxes shown on form
+  handoverTcCheckboxes          String?
+
   updatedAt                     DateTime  @updatedAt
   updatedById                   String?
 }
@@ -340,6 +348,8 @@ model HandoverForm {
   tc1                   Boolean  @default(false)
   tc2                   Boolean  @default(false)
   tc3                   Boolean  @default(false)
+  // JSON: {[checkboxId]: boolean} — dynamic checkbox checked state
+  tcData                String?
   finalName             String?
   finalDate             String?
   finalSignatureData    String?

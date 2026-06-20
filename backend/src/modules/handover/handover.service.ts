@@ -512,6 +512,7 @@ export class HandoverService {
         tc1?: boolean;
         tc2?: boolean;
         tc3?: boolean;
+        tcData?: string;
         finalName?: string;
         finalDate?: string;
         adminSignatureData?: string;
@@ -550,6 +551,7 @@ export class HandoverService {
                     tc1: data.tc1 ?? false,
                     tc2: data.tc2 ?? false,
                     tc3: data.tc3 ?? false,
+                    tcData: data.tcData,
                     finalName: data.finalName,
                     finalDate: data.finalDate,
                     adminSignatureData: data.adminSignatureData,
@@ -603,10 +605,10 @@ export class HandoverService {
                         carNumber: true, carType: true,
                         stadium: { select: { name: true, code: true } },
                         department: { select: { name: true, code: true } },
-                        assignedUser: { select: { name: true, email: true, phone: true } },
+                        assignedUser: { select: { name: true, email: true, phone: true, accreditationNumber: true } },
                     },
                 },
-                adminSignedByUser: { select: { name: true, email: true } },
+                adminSignedByUser: { select: { name: true, email: true, phone: true } },
                 userSignedByUser: { select: { name: true, email: true } },
             },
         });
@@ -637,7 +639,7 @@ export class HandoverService {
                             carNumber: true, carType: true, status: true,
                             stadium: { select: { name: true, code: true } },
                             department: { select: { name: true, code: true } },
-                            assignedUser: { select: { name: true, email: true, phone: true } },
+                            assignedUser: { select: { name: true, email: true, phone: true, accreditationNumber: true } },
                         },
                     },
                     adminSignedByUser: { select: { name: true } },
@@ -651,7 +653,7 @@ export class HandoverService {
                     id: true, carNumber: true, carType: true, status: true,
                     stadium: { select: { name: true, code: true } },
                     department: { select: { name: true, code: true } },
-                    assignedUser: { select: { name: true, email: true, phone: true } },
+                    assignedUser: { select: { name: true, email: true, phone: true, accreditationNumber: true } },
                 },
             }),
         ]);
@@ -659,7 +661,7 @@ export class HandoverService {
         return { formsInProgress, cartsWithoutForm };
     }
 
-    async userSignHandoverForm(data: { fleetId: string; userId: string; userSignatureData: string; tc1?: boolean; tc2?: boolean; tc3?: boolean; finalName?: string; finalDate?: string; finalSignatureData?: string }) {
+    async userSignHandoverForm(data: { fleetId: string; userId: string; userSignatureData: string; tc1?: boolean; tc2?: boolean; tc3?: boolean; tcData?: string; finalName?: string; finalDate?: string; finalSignatureData?: string }) {
         const form = await prisma.handoverForm.findUnique({ where: { fleetId: data.fleetId } });
         if (!form) throw new Error('No handover form found for this cart. Ask your Admin to create it first.');
         if (form.status === 'COMPLETE') throw new Error('Handover form already fully signed');
@@ -679,6 +681,7 @@ export class HandoverService {
                     tc1: data.tc1 ?? form.tc1,
                     tc2: data.tc2 ?? form.tc2,
                     tc3: data.tc3 ?? form.tc3,
+                    tcData: data.tcData ?? form.tcData,
                     finalName: data.finalName ?? form.finalName,
                     finalDate: data.finalDate ?? form.finalDate,
                     finalSignatureData: data.finalSignatureData ?? form.finalSignatureData,

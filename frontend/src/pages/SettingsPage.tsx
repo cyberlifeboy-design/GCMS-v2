@@ -4,13 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { 
-    Loader2, Save, Upload, Image, FileSpreadsheet, FileText, 
+import {
+    Loader2, Save, Upload, Image, FileSpreadsheet, FileText,
     File, Link as LinkIcon, Copy, Check, Bell, Clock,
-    Megaphone, Sun, Moon, Monitor, 
-    ChevronDown, ChevronUp, User,
+    Megaphone, Sun, Moon, Monitor,
+    ChevronDown, ChevronUp, User, Plus, Trash2, GripVertical,
     Palette, ShieldCheck, Wrench, Globe, Users
 } from 'lucide-react';
+import { RichEditor } from '@/components/ui/rich-editor';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -48,6 +49,11 @@ interface Settings {
     enableHandoverReminder?: boolean;
     handoverReminderHoursBefore?: number;
     timezone?: string;
+    handoverTcEnTitle?: string;
+    handoverTcEnBody?: string;
+    handoverTcArTitle?: string;
+    handoverTcArBody?: string;
+    handoverTcCheckboxes?: string;
 }
 
 interface Stadium {
@@ -153,6 +159,18 @@ export function SettingsPage() {
     const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
     const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
     const [timezone, setTimezone] = useState('UTC');
+    const [tcEnTitle, setTcEnTitle] = useState('');
+    const [tcEnBody, setTcEnBody] = useState('');
+    const [tcArTitle, setTcArTitle] = useState('');
+    const [tcArBody, setTcArBody] = useState('');
+
+    type TcCheckbox = { id: string; en: string; ar: string };
+    const DEFAULT_TC_CHECKBOXES: TcCheckbox[] = [
+        { id: 'tc1', en: 'I confirm that I have read, understood and agree to comply with these Terms and Conditions.', ar: 'أؤكد أنني قرأت هذه الشروط والأحكام وفهمتها وأوافق على الامتثال لها.' },
+        { id: 'tc2', en: 'I confirm that I have read, understood and agree to comply with the LOC Golf Cart Usage Policy & Procedure.', ar: 'أؤكد أنني قرأت سياسة وإجراءات استخدام عربة الجولف الخاصة بـ LOC وأوافق على الامتثال لها.' },
+        { id: 'tc3', en: 'I confirm that I have completed the Venue specific Golf Cart familiarisation.', ar: 'أؤكد أنني أكملت التعريف بعربة الجولف الخاص بالمنشأة.' },
+    ];
+    const [tcCheckboxes, setTcCheckboxes] = useState<TcCheckbox[]>(DEFAULT_TC_CHECKBOXES);
 
     useEffect(() => {
         if (user?.exportFormat) setExportFormat(user.exportFormat as any);
@@ -198,6 +216,13 @@ export function SettingsPage() {
                 setEnableHandoverReminder(d.enableHandoverReminder ?? true);
                 setHandoverReminderHoursBefore(d.handoverReminderHoursBefore ?? 1);
                 setTimezone(d.timezone || 'UTC');
+                setTcEnTitle(d.handoverTcEnTitle || '');
+                setTcEnBody(d.handoverTcEnBody || '');
+                setTcArTitle(d.handoverTcArTitle || '');
+                setTcArBody(d.handoverTcArBody || '');
+                if (d.handoverTcCheckboxes) {
+                    try { setTcCheckboxes(JSON.parse(d.handoverTcCheckboxes)); } catch {}
+                }
                 setStadiums(stadiumsRes.data.data || []);
             } catch (e) { console.error(e); } finally { setLoading(false); }
         };
@@ -287,6 +312,11 @@ export function SettingsPage() {
             fd.append('enableHandoverReminder', String(enableHandoverReminder));
             fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
             fd.append('timezone', timezone || 'UTC');
+            fd.append('handoverTcEnTitle', tcEnTitle);
+            fd.append('handoverTcEnBody', tcEnBody);
+            fd.append('handoverTcArTitle', tcArTitle);
+            fd.append('handoverTcArBody', tcArBody);
+            fd.append('handoverTcCheckboxes', JSON.stringify(tcCheckboxes));
             await settingsApi.update(fd);
             toast.success('System settings saved');
         } catch (err: any) {
@@ -296,39 +326,50 @@ export function SettingsPage() {
         }
     };
 
-    const ImageField = ({ label, currentUrl, onPreview, onFileChange }: { label: string; currentUrl: string; onPreview: (url: string) => void; onFileChange: (file: File | null) => void }) => (
-        <div className="space-y-2">
-            <Label className="text-sm font-semibold">{label}</Label>
-            {currentUrl ? (
-                <div className="relative group border rounded-lg overflow-hidden bg-muted/30 aspect-video flex items-center justify-center">
-                    <img src={currentUrl} alt={label} className="max-h-full max-w-full object-contain p-2" />
-                    {isSuperAdmin && (
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                             <Button type="button" variant="secondary" size="sm" onClick={() => document.getElementById(`file-${label.replace(/\s+/g, '-')}`)?.click()}>
-                                <Upload className="w-4 h-4 mr-2" /> Change
-                             </Button>
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div className="border border-dashed rounded-lg aspect-video flex flex-col items-center justify-center bg-muted/20 text-muted-foreground">
-                    <Image className="w-8 h-8 mb-1 opacity-40" />
-                    <span className="text-[10px]">No {label.toLowerCase()}</span>
-                </div>
-            )}
-            {isSuperAdmin && (
-                <Input
-                    id={`file-${label.replace(/\s+/g, '-')}`}
-                    type="file" accept="image/*" className="hidden"
-                    onChange={e => {
-                        const f = e.target.files?.[0] || null;
-                        onFileChange(f);
-                        if (f) onPreview(URL.createObjectURL(f));
-                    }}
-                />
-            )}
-        </div>
-    );
+    const ImageField = ({ label, currentUrl, onPreview, onFileChange }: { label: string; currentUrl: string; onPreview: (url: string) => void; onFileChange: (file: File | null) => void }) => {
+        const inputId = `file-${label.replace(/\s+/g, '-')}`;
+        const triggerUpload = () => document.getElementById(inputId)?.click();
+        return (
+            <div className="space-y-2">
+                <Label className="text-sm font-semibold">{label}</Label>
+                {currentUrl ? (
+                    <div className="relative group border rounded-lg overflow-hidden bg-muted/30 aspect-video flex items-center justify-center">
+                        <img src={currentUrl} alt={label} className="max-h-full max-w-full object-contain p-2" />
+                        {isSuperAdmin && (
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <Button type="button" variant="secondary" size="sm" onClick={triggerUpload}>
+                                    <Upload className="w-4 h-4 mr-2" /> Change
+                                </Button>
+                                <Button type="button" variant="destructive" size="sm" onClick={() => { onFileChange(null); onPreview(''); }}>
+                                    Remove
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div
+                        onClick={isSuperAdmin ? triggerUpload : undefined}
+                        className={`border-2 border-dashed rounded-lg aspect-video flex flex-col items-center justify-center bg-muted/20 text-muted-foreground transition-colors ${isSuperAdmin ? 'cursor-pointer hover:border-primary/50 hover:bg-primary/5' : ''}`}
+                    >
+                        <Upload className="w-8 h-8 mb-2 opacity-40" />
+                        <span className="text-sm font-medium">{isSuperAdmin ? `Click to upload ${label}` : `No ${label.toLowerCase()}`}</span>
+                        {isSuperAdmin && <span className="text-[10px] text-muted-foreground/60 mt-1">PNG, JPG, SVG up to 5MB</span>}
+                    </div>
+                )}
+                {isSuperAdmin && (
+                    <Input
+                        id={inputId}
+                        type="file" accept="image/*" className="hidden"
+                        onChange={e => {
+                            const f = e.target.files?.[0] || null;
+                            onFileChange(f);
+                            if (f) onPreview(URL.createObjectURL(f));
+                        }}
+                    />
+                )}
+            </div>
+        );
+    };
 
     if (loading) return <div className="flex flex-col items-center justify-center h-[60vh] gap-4"><Loader2 className="w-10 h-10 animate-spin text-primary" /><p className="text-sm text-muted-foreground">Loading settings...</p></div>;
 
@@ -360,6 +401,9 @@ export function SettingsPage() {
                             </TabsTrigger>
                             <TabsTrigger value="workflow" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
                                 <Clock className="w-5 h-5 mr-3" /> Workflow
+                            </TabsTrigger>
+                            <TabsTrigger value="handover-tc" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <FileText className="w-5 h-5 mr-3" /> Handover T&amp;C
                             </TabsTrigger>
                             <TabsTrigger value="access" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
                                 <ShieldCheck className="w-5 h-5 mr-3" /> Access Control
@@ -641,6 +685,134 @@ export function SettingsPage() {
                                     </CardContent>
                                     <CardFooter className="justify-end border-t p-5 bg-muted/5">
                                         <Button onClick={handleSaveSystem} className="rounded-xl px-8 h-11">Save Workflow Configuration</Button>
+                                    </CardFooter>
+                                </Card>
+                            </TabsContent>
+
+                            <TabsContent value="handover-tc" className="mt-0 space-y-6">
+                                {/* ── T&C Body Editor ── */}
+                                <Card className="border-none shadow-md overflow-hidden">
+                                    <CardHeader className="bg-muted/10">
+                                        <CardTitle className="text-2xl">Handover Form — Terms &amp; Conditions</CardTitle>
+                                        <CardDescription>
+                                            Rich text displayed on every handover form. Leave blank to use the built-in default text.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 space-y-8">
+                                        {/* English */}
+                                        <div className="space-y-4">
+                                            <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">English</Label>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">Section Title</Label>
+                                                <Input
+                                                    value={tcEnTitle}
+                                                    onChange={e => setTcEnTitle(e.target.value)}
+                                                    placeholder="USE OF GOLF CART — TERMS AND CONDITIONS"
+                                                    className="h-12 rounded-xl"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">Body Content</Label>
+                                                <RichEditor
+                                                    value={tcEnBody}
+                                                    onChange={setTcEnBody}
+                                                    placeholder="Enter English terms and conditions..."
+                                                    dir="ltr"
+                                                    minHeight={200}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Arabic */}
+                                        <div className="space-y-4">
+                                            <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Arabic / عربي</Label>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">عنوان القسم / Section Title</Label>
+                                                <Input
+                                                    value={tcArTitle}
+                                                    onChange={e => setTcArTitle(e.target.value)}
+                                                    placeholder="شروط وأحكام استخدام عربة الجولف"
+                                                    className="h-12 rounded-xl"
+                                                    dir="rtl"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-medium">نص الشروط / Body Content</Label>
+                                                <RichEditor
+                                                    value={tcArBody}
+                                                    onChange={setTcArBody}
+                                                    placeholder="أدخل الشروط والأحكام باللغة العربية..."
+                                                    dir="rtl"
+                                                    minHeight={200}
+                                                />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                        <Button onClick={handleSaveSystem} className="rounded-xl px-8 h-11">Save T&amp;C Text</Button>
+                                    </CardFooter>
+                                </Card>
+
+                                {/* ── Confirmation Checkboxes Manager ── */}
+                                <Card className="border-none shadow-md overflow-hidden">
+                                    <CardHeader className="bg-muted/10">
+                                        <CardTitle className="text-xl">Confirmation Checkboxes</CardTitle>
+                                        <CardDescription>
+                                            The user must tick all of these before they can sign the handover form. Drag to reorder.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-6 space-y-3">
+                                        {tcCheckboxes.map((cb, i) => (
+                                            <div key={cb.id} className="border rounded-xl p-4 space-y-3 bg-muted/5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                                        <GripVertical className="w-4 h-4" />
+                                                        <span className="text-xs font-bold uppercase tracking-wider">Checkbox {i + 1}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setTcCheckboxes(prev => prev.filter((_, idx) => idx !== i))}
+                                                        className="text-red-500 hover:text-red-700 transition-colors p-1 rounded"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-[10px] text-muted-foreground uppercase font-bold">English Text</Label>
+                                                        <Textarea
+                                                            value={cb.en}
+                                                            onChange={e => setTcCheckboxes(prev => prev.map((c, idx) => idx === i ? { ...c, en: e.target.value } : c))}
+                                                            className="rounded-lg text-xs min-h-[60px] resize-none"
+                                                            placeholder="Confirmation statement in English..."
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label className="text-[10px] text-muted-foreground uppercase font-bold">Arabic Text / النص العربي</Label>
+                                                        <Textarea
+                                                            value={cb.ar}
+                                                            onChange={e => setTcCheckboxes(prev => prev.map((c, idx) => idx === i ? { ...c, ar: e.target.value } : c))}
+                                                            className="rounded-lg text-xs min-h-[60px] resize-none"
+                                                            placeholder="جملة التأكيد بالعربية..."
+                                                            dir="rtl"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setTcCheckboxes(prev => [...prev, { id: `tc_${Date.now()}`, en: '', ar: '' }])}
+                                            className="w-full border-2 border-dashed border-muted-foreground/30 rounded-xl py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Plus className="w-4 h-4" /> Add Confirmation Checkbox
+                                        </button>
+                                    </CardContent>
+                                    <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                        <Button onClick={handleSaveSystem} className="rounded-xl px-8 h-11">Save Checkboxes</Button>
                                     </CardFooter>
                                 </Card>
                             </TabsContent>

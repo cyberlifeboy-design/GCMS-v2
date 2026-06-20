@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility, PowerOff, Power, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility, PowerOff, Power, Trash2, Upload, CheckCircle2, SkipForward } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 
@@ -28,6 +28,19 @@ interface Stadium {
     fleetStats?: FleetStats;
 }
 
+const DEFAULT_VENUES = [
+    { name: 'Al Bayt Stadium',           code: 'ABS',  location: 'https://maps.app.goo.gl/1yR2yyU9GDbocyMKA' },
+    { name: 'Lusail Stadium',             code: 'LUS',  location: 'https://maps.app.goo.gl/z9DgEg2kicHEqx7h7' },
+    { name: 'Education City Stadium',     code: 'ECS',  location: 'https://maps.app.goo.gl/m4q4YF5tW3JiYfwc7' },
+    { name: 'Lusail Multipurpose Hall',   code: 'LMPH', location: 'https://maps.app.goo.gl/PUuKcku5YMXrdqbT7' },
+    { name: 'Khalifa International Stadium', code: 'KIS', location: 'https://maps.app.goo.gl/LKa58NmXvdSa7FtAA' },
+    { name: 'Ahmad bin Ali Stadium',      code: 'AAS',  location: 'https://maps.app.goo.gl/Xq5mFNQLr7dcQJuK9' },
+    { name: 'Al Thumama Stadium',         code: 'ATS',  location: 'https://maps.app.goo.gl/kt4GeiYrVzbfLKww8' },
+    { name: 'Al Janoub Stadium',          code: 'AJS',  location: 'https://maps.app.goo.gl/qYn8fHDWZZ27kjcP6' },
+    { name: 'Jassim Bin Hamad Stadium',   code: 'JHS',  location: 'https://maps.app.goo.gl/rjodpBVHH7vpjnA3A' },
+    { name: 'Qatar Sports Club',          code: 'QSC',  location: 'https://maps.app.goo.gl/d9AwmxGJGfjvpx7b7' },
+];
+
 export function StadiumsPage() {
     const { user } = useAuthStore();
     const isSuperAdmin = user?.role === 'SuperAdmin';
@@ -40,6 +53,8 @@ export function StadiumsPage() {
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({ name: '', code: '', location: '' });
     const [deleteConfirm, setDeleteConfirm] = useState<Stadium | null>(null);
+
+    const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
     const loadStadiums = async () => {
         try {
@@ -106,6 +121,24 @@ export function StadiumsPage() {
         }
     };
 
+    const handleBulkLoad = async () => {
+        setSubmitting(true);
+        try {
+            const res = await stadiumsApi.bulkCreate(DEFAULT_VENUES);
+            setBulkConfirmOpen(false);
+            loadStadiums();
+            if (res.data.created > 0) {
+                toast.success(`Added ${res.data.created} venue${res.data.created !== 1 ? 's' : ''}${res.data.skipped ? `, ${res.data.skipped} already existed` : ''}`);
+            } else {
+                toast.info('All default venues already exist — nothing was added');
+            }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Bulk import failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     if (!isSuperAdmin) {
         return <div className="p-8 text-center text-muted-foreground">Access denied. SuperAdmin only.</div>;
     }
@@ -114,9 +147,14 @@ export function StadiumsPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold">Stadium & Venue Management</h1>
-                <Button onClick={() => { setFormData({ name: '', code: '', location: '' }); setModal({ open: true, mode: 'create' }); }}>
-                    <Plus className="w-4 h-4 mr-2" />Add Venue
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setBulkConfirmOpen(true)}>
+                        <Upload className="w-4 h-4 mr-2" />Add Bulk
+                    </Button>
+                    <Button onClick={() => { setFormData({ name: '', code: '', location: '' }); setModal({ open: true, mode: 'create' }); }}>
+                        <Plus className="w-4 h-4 mr-2" />Add Venue
+                    </Button>
+                </div>
             </div>
 
             <Card>
@@ -234,6 +272,47 @@ export function StadiumsPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Load Default Venues Dialog */}
+            <Dialog open={bulkConfirmOpen} onOpenChange={o => { if (!submitting) setBulkConfirmOpen(o); }}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Load Default Venues</DialogTitle>
+                        <DialogDescription>
+                            The following {DEFAULT_VENUES.length} venues from the GC project template will be added. Venues with an already-existing code will be skipped automatically.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-64 overflow-y-auto border rounded-lg divide-y text-sm">
+                        {DEFAULT_VENUES.map(v => {
+                            const alreadyExists = stadiums.some(s => s.code.toUpperCase() === v.code.toUpperCase());
+                            return (
+                                <div key={v.code} className="flex items-center justify-between px-3 py-2">
+                                    <div>
+                                        <span className="font-medium">{v.name}</span>
+                                        <code className="ml-2 text-xs bg-muted px-1 rounded">{v.code}</code>
+                                    </div>
+                                    {alreadyExists ? (
+                                        <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                                            <SkipForward className="w-3 h-3" />Skip
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="default" className="text-xs flex items-center gap-1 bg-green-600">
+                                            <CheckCircle2 className="w-3 h-3" />Add
+                                        </Badge>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBulkConfirmOpen(false)} disabled={submitting}>Cancel</Button>
+                        <Button onClick={handleBulkLoad} disabled={submitting}>
+                            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Import Venues
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

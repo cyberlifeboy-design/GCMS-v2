@@ -140,6 +140,26 @@ export class StadiumsService {
         });
     }
 
+    async bulkCreate(venues: { name: string; code: string; location: string }[]): Promise<{ created: number; skipped: number; details: { name: string; code: string; status: 'created' | 'skipped' }[] }> {
+        const existing = await this.prisma.stadium.findMany({ select: { code: true } });
+        const existingCodes = new Set(existing.map(s => s.code.toUpperCase()));
+
+        const details: { name: string; code: string; status: 'created' | 'skipped' }[] = [];
+        let created = 0;
+
+        for (const venue of venues) {
+            if (existingCodes.has(venue.code.toUpperCase())) {
+                details.push({ name: venue.name, code: venue.code, status: 'skipped' });
+                continue;
+            }
+            await this.prisma.stadium.create({ data: venue });
+            details.push({ name: venue.name, code: venue.code, status: 'created' });
+            created++;
+        }
+
+        return { created, skipped: venues.length - created, details };
+    }
+
     async delete(id: string) {
         // Check if stadium has associated data
         const stadium = await this.prisma.stadium.findUnique({

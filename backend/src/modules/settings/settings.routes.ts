@@ -16,6 +16,11 @@ router.get('/public', async (_req: Request, res: Response) => {
             headerUrl: settings?.headerUrl || null,
             footerUrl: settings?.footerUrl || null,
             footerText: settings?.footerText || null,
+            handoverTcEnTitle: settings?.handoverTcEnTitle || null,
+            handoverTcEnBody: settings?.handoverTcEnBody || null,
+            handoverTcArTitle: settings?.handoverTcArTitle || null,
+            handoverTcArBody: settings?.handoverTcArBody || null,
+            handoverTcCheckboxes: settings?.handoverTcCheckboxes || null,
         });
     } catch {
         res.json({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });

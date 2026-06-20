@@ -68,6 +68,12 @@ const updateSettingsSchema = z.object({
     handoverReminderHoursBefore: coerceOptionalNumber,
     // Timezone settings
     timezone: z.string().optional().nullable(),
+    // Handover T&C (SuperAdmin only — enforced at route level)
+    handoverTcEnTitle: z.string().optional().nullable(),
+    handoverTcEnBody: z.string().optional().nullable(),
+    handoverTcArTitle: z.string().optional().nullable(),
+    handoverTcArBody: z.string().optional().nullable(),
+    handoverTcCheckboxes: z.string().optional().nullable(),
 });
 
 export class SettingsController {

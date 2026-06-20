@@ -279,6 +279,7 @@ export class HandoverController {
                 tc1: req.body.tc1,
                 tc2: req.body.tc2,
                 tc3: req.body.tc3,
+                tcData: req.body.tcData,
                 finalName: req.body.finalName,
                 finalDate: req.body.finalDate,
                 finalSignatureData: req.body.finalSignatureData,

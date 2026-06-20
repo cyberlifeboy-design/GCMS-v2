@@ -42,6 +42,12 @@ export class SettingsService {
         handoverReminderHoursBefore: number;
         // Timezone settings
         timezone: string | null;
+        // Handover T&C
+        handoverTcEnTitle: string | null;
+        handoverTcEnBody: string | null;
+        handoverTcArTitle: string | null;
+        handoverTcArBody: string | null;
+        handoverTcCheckboxes: string | null;
     }>, updatedById?: string) {
         const existing = await this.get();
         return prisma.systemSettings.update({

@@ -182,6 +182,8 @@ export const stadiumsApi = {
         apiClient.delete(`/stadiums/${id}`),
     toggleActive: (id: string, isActive: boolean) =>
         apiClient.put(`/stadiums/${id}`, { isActive }),
+    bulkCreate: (venues: { name: string; code: string; location: string }[]) =>
+        apiClient.post('/stadiums/bulk', { venues }),
 };
 
 // Departments

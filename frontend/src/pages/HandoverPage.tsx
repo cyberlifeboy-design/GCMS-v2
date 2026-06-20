@@ -985,6 +985,8 @@ export function HandoverPage() {
                     mode={formModal.mode}
                     fleetId={formModal.fleetId}
                     currentUserName={currentUser?.name}
+                    adminName={isAdmin ? currentUser?.name : undefined}
+                    adminPhone={isAdmin ? currentUser?.phone : undefined}
                     logoUrl={systemLogoUrl ?? undefined}
                     onComplete={() => {
                         loadPoolDashboard();

@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Printer, CheckCircle2, PenLine, X } from 'lucide-react';
-import { handoverApi } from '@/lib/api';
+import { handoverApi, publicSettingsApi } from '@/lib/api';
+import { RichContent } from '@/components/ui/rich-editor';
 import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ export interface HandoverFormData {
     conditionData?: string;
     additionalDrivers?: string;
     issuesNotes?: string;
-    tc1?: boolean; tc2?: boolean; tc3?: boolean;
+    tc1?: boolean; tc2?: boolean; tc3?: boolean; tcData?: string;
     finalName?: string;
     finalDate?: string;
     adminSignatureData?: string;
@@ -42,7 +43,7 @@ export interface HandoverFormData {
         carNumber: string; carType: string;
         stadium?: { name: string; code: string };
         department?: { name: string; code: string };
-        assignedUser?: { name: string; email: string; phone?: string };
+        assignedUser?: { name: string; email: string; phone?: string; accreditationNumber?: string };
     };
 }
 
@@ -51,6 +52,22 @@ interface ConditionRating { pre: string; aft: string; } // good | mod | poor | '
 type ConditionMap = Record<string, ConditionRating>;
 interface AdditionalDriver { name: string; contact: string; entity: string; licenseNo: string; }
 
+type TcCheckbox = { id: string; en: string; ar: string };
+
+const DEFAULT_TC_CHECKBOXES: TcCheckbox[] = [
+    { id: 'tc1', en: 'I confirm that I have read, understood and agree to comply with these Terms and Conditions.', ar: 'أؤكد أنني قرأت هذه الشروط والأحكام وفهمتها وأوافق على الامتثال لها.' },
+    { id: 'tc2', en: 'I confirm that I have read, understood and agree to comply with the LOC Golf Cart Usage Policy & Procedure.', ar: 'أؤكد أنني قرأت سياسة وإجراءات استخدام عربة الجولف الخاصة بـ LOC وأوافق على الامتثال لها.' },
+    { id: 'tc3', en: 'I confirm that I have completed the Venue specific Golf Cart familiarisation.', ar: 'أؤكد أنني أكملت التعريف بعربة الجولف الخاص بالمنشأة.' },
+];
+
+interface TcSettings {
+    handoverTcEnTitle: string | null;
+    handoverTcEnBody: string | null;
+    handoverTcArTitle: string | null;
+    handoverTcArBody: string | null;
+    handoverTcCheckboxes: string | null;
+}
+
 interface Props {
     open: boolean;
     onClose: () => void;
@@ -58,6 +75,8 @@ interface Props {
     fleetId: string;
     preloadedForm?: HandoverFormData | null;
     currentUserName?: string;
+    adminName?: string;
+    adminPhone?: string;
     logoUrl?: string;
     onComplete?: () => void;
 }
@@ -234,10 +253,24 @@ function ConditionTable({ value, onChange, disabled }: { value: ConditionMap; on
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm, currentUserName, logoUrl, onComplete }: Props) {
+// Map fleet carType string to checkbox state
+function cartTypeFromString(carType: string): Partial<CartTypeData> {
+    const t = carType.toLowerCase();
+    return {
+        cargo: t.includes('cargo'),
+        fourSeat: t.includes('4') || t.includes('four'),
+        sixSeat: t.includes('6') || t.includes('six'),
+        access: t.includes('access'),
+    };
+}
+
+export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm, currentUserName, adminName, adminPhone, logoUrl, onComplete }: Props) {
     const [form, setForm] = useState<HandoverFormData | null>(null);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [tc, setTc] = useState<TcSettings>({ handoverTcEnTitle: null, handoverTcEnBody: null, handoverTcArTitle: null, handoverTcArBody: null, handoverTcCheckboxes: null });
+    const [tcBoxes, setTcBoxes] = useState<TcCheckbox[]>(DEFAULT_TC_CHECKBOXES);
+    const [tcChecked, setTcChecked] = useState<Record<string, boolean>>({});
 
     // Form state
     const [f, setF] = useState({
@@ -249,7 +282,6 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const [cartType, setCartType] = useState<CartTypeData>({ cargo: false, fourSeat: false, sixSeat: false, access: false, over18: '', licenseType: '', entity: '' });
     const [condition, setCondition] = useState<ConditionMap>({});
     const [drivers, setDrivers] = useState<AdditionalDriver[]>([{ name: '', contact: '', entity: '', licenseNo: '' }, { name: '', contact: '', entity: '', licenseNo: '' }, { name: '', contact: '', entity: '', licenseNo: '' }]);
-    const [tc1, setTc1] = useState(false); const [tc2, setTc2] = useState(false); const [tc3, setTc3] = useState(false);
     const [adminSig, setAdminSig] = useState('');
     const [userSig, setUserSig] = useState('');
     const [finalSig, setFinalSig] = useState('');
@@ -260,52 +292,80 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const loadForm = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await handoverApi.getHandoverForm(fleetId);
-            const data: HandoverFormData | null = res.data;
+            const [formRes, settingsRes] = await Promise.all([
+                handoverApi.getHandoverForm(fleetId),
+                publicSettingsApi.getBranding(),
+            ]);
+            const data: HandoverFormData | null = formRes.data;
+            const s = settingsRes.data;
+            setTc({ handoverTcEnTitle: s.handoverTcEnTitle, handoverTcEnBody: s.handoverTcEnBody, handoverTcArTitle: s.handoverTcArTitle, handoverTcArBody: s.handoverTcArBody, handoverTcCheckboxes: s.handoverTcCheckboxes });
+            if (s.handoverTcCheckboxes) {
+                try { setTcBoxes(JSON.parse(s.handoverTcCheckboxes)); } catch {}
+            }
             setForm(data);
+
             if (data) {
+                // Form exists — load saved values, fall back to system data
                 setF({
                     serialNumber: data.serialNumber || data.fleet?.carNumber || '',
-                    faCode: data.faCode || data.fleet?.department?.code || '',
+                    faCode: data.faCode || data.fleet?.assignedUser?.accreditationNumber || '',
                     handoverDate: data.handoverDate || today,
                     approvedReturnDate: data.approvedReturnDate || '',
-                    handoverLocation: data.handoverLocation || data.fleet?.stadium?.name || '',
+                    handoverLocation: data.handoverLocation || data.fleet?.stadium?.code || '',
                     receiverLicenseNo: data.receiverLicenseNo || '',
-                    handoverBy: data.handoverBy || '',
+                    handoverBy: data.handoverBy || adminName || '',
                     handedOverTo: data.handedOverTo || data.fleet?.assignedUser?.name || '',
-                    handoverByContact: data.handoverByContact || '',
+                    handoverByContact: data.handoverByContact || adminPhone || '',
                     receiverContact: data.receiverContact || data.fleet?.assignedUser?.phone || '',
                     issuesNotes: data.issuesNotes || '',
                     finalName: data.finalName || (mode === 'user' ? (currentUserName || '') : ''),
                     finalDate: data.finalDate || today,
                 });
-                if (data.cartTypeData) try { setCartType(JSON.parse(data.cartTypeData)); } catch {}
+                if (data.cartTypeData) {
+                    try { setCartType(JSON.parse(data.cartTypeData)); } catch {}
+                } else if (data.fleet?.carType) {
+                    setCartType(prev => ({ ...prev, ...cartTypeFromString(data.fleet!.carType) }));
+                }
                 if (data.conditionData) try { setCondition(JSON.parse(data.conditionData)); } catch {}
                 if (data.additionalDrivers) try { const d = JSON.parse(data.additionalDrivers); setDrivers(d.length >= 3 ? d : [...d, ...Array(3-d.length).fill({ name: '', contact: '', entity: '', licenseNo: '' })]); } catch {}
-                setTc1(!!data.tc1); setTc2(!!data.tc2); setTc3(!!data.tc3);
+                // Load checked state — tcData (dynamic) takes priority, fall back to tc1/tc2/tc3
+                if (data.tcData) {
+                    try { setTcChecked(JSON.parse(data.tcData)); } catch {}
+                } else {
+                    setTcChecked({ tc1: !!data.tc1, tc2: !!data.tc2, tc3: !!data.tc3 });
+                }
                 if (data.adminSignatureData) setAdminSig(data.adminSignatureData);
                 if (data.userSignatureData) setUserSig(data.userSignatureData);
                 if (data.finalSignatureData) setFinalSig(data.finalSignatureData);
             } else if (mode === 'admin') {
-                // No form yet — pre-fill from cart data via preloadedForm
+                // No form yet — auto-fill everything from system data
                 const pf = preloadedForm;
-                setF(prev => ({ ...prev,
-                    serialNumber: pf?.fleet?.carNumber || pf?.serialNumber || '',
-                    faCode: pf?.fleet?.department?.code || '',
-                    handoverLocation: pf?.fleet?.stadium?.name || '',
-                    handedOverTo: pf?.fleet?.assignedUser?.name || '',
-                    receiverContact: pf?.fleet?.assignedUser?.phone || '',
+                const fleet = pf?.fleet;
+                setF(prev => ({
+                    ...prev,
+                    serialNumber: fleet?.carNumber || pf?.serialNumber || '',
+                    faCode: fleet?.assignedUser?.accreditationNumber || '',
                     handoverDate: today,
+                    handoverLocation: fleet?.stadium?.code || '',
+                    handoverBy: adminName || '',
+                    handedOverTo: fleet?.assignedUser?.name || '',
+                    handoverByContact: adminPhone || '',
+                    receiverContact: fleet?.assignedUser?.phone || '',
                 }));
+                if (fleet?.carType) {
+                    setCartType(prev => ({ ...prev, ...cartTypeFromString(fleet.carType) }));
+                }
             }
         } catch {
             toast.error('Failed to load handover form');
         } finally {
             setLoading(false);
         }
-    }, [fleetId, mode, today]);
+    }, [fleetId, mode, today, adminName, adminPhone]);
 
     useEffect(() => { if (open) loadForm(); }, [open]);
+
+    const allTcChecked = tcBoxes.every(cb => !!tcChecked[cb.id]);
 
     const handleAdminSubmit = async () => {
         if (!adminSig) { toast.error('Admin signature is required'); return; }
@@ -317,7 +377,8 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 cartTypeData: JSON.stringify(cartType),
                 conditionData: JSON.stringify(condition),
                 additionalDrivers: JSON.stringify(drivers),
-                tc1, tc2, tc3,
+                tc1: !!tcChecked['tc1'], tc2: !!tcChecked['tc2'], tc3: !!tcChecked['tc3'],
+                tcData: JSON.stringify(tcChecked),
                 adminSignatureData: adminSig,
                 finalSignatureData: finalSig,
             });
@@ -332,14 +393,15 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     };
 
     const handleUserSubmit = async () => {
-        if (!tc1 || !tc2 || !tc3) { toast.error('Please confirm all Terms & Conditions checkboxes'); return; }
+        if (!allTcChecked) { toast.error('Please confirm all Terms & Conditions checkboxes'); return; }
         if (!userSig) { toast.error('Your signature is required'); return; }
         setSubmitting(true);
         try {
             await handoverApi.userSignHandoverForm({
                 fleetId,
                 userSignatureData: userSig,
-                tc1, tc2, tc3,
+                tc1: !!tcChecked['tc1'], tc2: !!tcChecked['tc2'], tc3: !!tcChecked['tc3'],
+                tcData: JSON.stringify(tcChecked),
                 finalName: f.finalName,
                 finalDate: f.finalDate,
                 finalSignatureData: finalSig || userSig,
@@ -498,12 +560,16 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                             <SectionHeader title="Golf Cart Information" ar="معلومات عربة الجولف" />
                             <div className="border-b divide-y">
                                 <TypeRow label="Type of Golf Cart" ar="نوع عربة الجولف">
+                                    {/* Auto-filled from system — read-only display */}
                                     {(['cargo','fourSeat','sixSeat','access'] as const).map((k, i) => (
-                                        <label key={k} className="flex items-center gap-1.5 cursor-pointer">
-                                            <input type="checkbox" checked={cartType[k]} disabled={isAdminReadonly}
-                                                onChange={e => setCartType(p => ({ ...p, [k]: e.target.checked }))}
-                                                className="w-4 h-4 accent-red-800" />
-                                            <span>{['CARGO','4-SEATER','6-SEATER','ACCESSIBILITY'][i]}</span>
+                                        <label key={k} className="flex items-center gap-1.5">
+                                            <input type="checkbox" checked={cartType[k]} disabled
+                                                readOnly
+                                                className="w-4 h-4 accent-red-800 cursor-default"
+                                            />
+                                            <span className={cartType[k] ? 'font-semibold text-red-900' : 'text-muted-foreground'}>
+                                                {['CARGO','4-SEATER','6-SEATER','ACCESSIBILITY'][i]}
+                                            </span>
                                         </label>
                                     ))}
                                 </TypeRow>
@@ -595,44 +661,62 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                             {/* ── Section 7: Terms & Conditions ── */}
                             <SectionHeader title="Terms & Conditions" ar="الشروط والأحكام" />
                             <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x border-b">
+                                {/* English */}
                                 <div className="p-4 text-xs leading-relaxed space-y-2">
-                                    <h3 className="font-bold text-red-900 uppercase text-sm">USE OF GOLF CART — TERMS AND CONDITIONS</h3>
-                                    <p className="font-semibold">Golf Cart Users Responsibilities</p>
-                                    <p>By operating a Golf Cart, I hereby confirm that I am eighteen (18) years of age or older; have a valid driving license in accordance with applicable laws in Qatar; am a staff member or designated contractor assigned to act on behalf of LOC; agree to operate the Golf Cart in accordance with LOC's H&S instructions; agree to not engage in speeding (max 15 km/h), joy riding, or unreasonable use; will limit occupants to the number of seats; will not drive on public roads; will keep keys with me; acknowledge that costs related to damage will be borne by my Function Area; and will operate in accordance with Law no. (19) of 2007 Regarding the Traffic Law.</p>
-                                    <p className="font-semibold">Waiver, Liability and Indemnity</p>
-                                    <p>By operating a Golf Cart, to the fullest extent permitted by law, I unconditionally agree to indemnify and hold harmless LOC from any liability, costs, expenses, demands, loss and/or damage.</p>
+                                    <h3 className="font-bold text-red-900 uppercase text-sm">
+                                        {tc.handoverTcEnTitle || 'USE OF GOLF CART — TERMS AND CONDITIONS'}
+                                    </h3>
+                                    {tc.handoverTcEnBody ? (
+                                        <RichContent html={tc.handoverTcEnBody} dir="ltr" />
+                                    ) : (
+                                        <>
+                                            <p className="font-semibold">Golf Cart Users Responsibilities</p>
+                                            <p>By operating a Golf Cart, I hereby confirm that I am eighteen (18) years of age or older; have a valid driving license in accordance with applicable laws in Qatar; am a staff member or designated contractor assigned to act on behalf of LOC; agree to operate the Golf Cart in accordance with LOC's H&S instructions; agree to not engage in speeding (max 15 km/h), joy riding, or unreasonable use; will limit occupants to the number of seats; will not drive on public roads; will keep keys with me; acknowledge that costs related to damage will be borne by my Function Area; and will operate in accordance with Law no. (19) of 2007 Regarding the Traffic Law.</p>
+                                            <p className="font-semibold">Waiver, Liability and Indemnity</p>
+                                            <p>By operating a Golf Cart, to the fullest extent permitted by law, I unconditionally agree to indemnify and hold harmless LOC from any liability, costs, expenses, demands, loss and/or damage.</p>
+                                        </>
+                                    )}
+                                    {/* Dynamic confirmation checkboxes — English labels */}
                                     <div className="space-y-2 mt-3">
-                                        <label className="flex items-start gap-2 cursor-pointer">
-                                            <Checkbox checked={tc1} onCheckedChange={v => setTc1(!!v)} disabled={mode === 'admin' || isReadonly} className="mt-0.5" />
-                                            <span>I confirm that I have read, understood and agree to comply with these Terms and Conditions.</span>
-                                        </label>
-                                        <label className="flex items-start gap-2 cursor-pointer">
-                                            <Checkbox checked={tc2} onCheckedChange={v => setTc2(!!v)} disabled={mode === 'admin' || isReadonly} className="mt-0.5" />
-                                            <span>I confirm that I have read, understood and agree to comply with the LOC Golf Cart Usage Policy & Procedure.</span>
-                                        </label>
-                                        <label className="flex items-start gap-2 cursor-pointer">
-                                            <Checkbox checked={tc3} onCheckedChange={v => setTc3(!!v)} disabled={mode === 'admin' || isReadonly} className="mt-0.5" />
-                                            <span>I confirm that I have completed the Venue specific Golf Cart familiarisation.</span>
-                                        </label>
+                                        {tcBoxes.map(cb => (
+                                            <label key={cb.id} className="flex items-start gap-2 cursor-pointer">
+                                                <Checkbox
+                                                    checked={!!tcChecked[cb.id]}
+                                                    onCheckedChange={v => setTcChecked(p => ({ ...p, [cb.id]: !!v }))}
+                                                    disabled={mode === 'admin' || isReadonly}
+                                                    className="mt-0.5"
+                                                />
+                                                <span>{cb.en}</span>
+                                            </label>
+                                        ))}
                                     </div>
                                 </div>
+                                {/* Arabic */}
                                 <div className="p-4 text-xs leading-relaxed space-y-2" dir="rtl">
-                                    <h3 className="font-bold text-red-900 text-sm">شروط وأحكام استخدام عربة الجولف</h3>
-                                    <p className="font-semibold">مسؤوليات مستخدمي عربة الجولف</p>
-                                    <p>من خلال تشغيل عربة الجولف، أقر بأنني أبلغ من العمر 18 عاماً أو أكثر؛ ولدي رخصة قيادة سارية؛ وأوافق على تشغيل العربة وفقاً لتعليمات الصحة والسلامة؛ وعدم تجاوز السرعة (الحد الأقصى 15 كم/ساعة)؛ وتحديد عدد الركاب بعدد المقاعد؛ وعدم القيادة على الطرق العامة؛ والإقرار بتحمّل FA تكاليف الأضرار.</p>
+                                    <h3 className="font-bold text-red-900 text-sm">
+                                        {tc.handoverTcArTitle || 'شروط وأحكام استخدام عربة الجولف'}
+                                    </h3>
+                                    {tc.handoverTcArBody ? (
+                                        <RichContent html={tc.handoverTcArBody} dir="rtl" />
+                                    ) : (
+                                        <>
+                                            <p className="font-semibold">مسؤوليات مستخدمي عربة الجولف</p>
+                                            <p>من خلال تشغيل عربة الجولف، أقر بأنني أبلغ من العمر 18 عاماً أو أكثر؛ ولدي رخصة قيادة سارية؛ وأوافق على تشغيل العربة وفقاً لتعليمات الصحة والسلامة؛ وعدم تجاوز السرعة (الحد الأقصى 15 كم/ساعة)؛ وتحديد عدد الركاب بعدد المقاعد؛ وعدم القيادة على الطرق العامة؛ والإقرار بتحمّل FA تكاليف الأضرار.</p>
+                                        </>
+                                    )}
+                                    {/* Dynamic confirmation checkboxes — Arabic labels */}
                                     <div className="space-y-2 mt-3" dir="rtl">
-                                        <label className="flex items-start gap-2 cursor-pointer">
-                                            <Checkbox checked={tc1} onCheckedChange={v => setTc1(!!v)} disabled={mode === 'admin' || isReadonly} className="mt-0.5" />
-                                            <span>أؤكد أنني قرأت هذه الشروط والأحكام وفهمتها وأوافق على الامتثال لها.</span>
-                                        </label>
-                                        <label className="flex items-start gap-2 cursor-pointer">
-                                            <Checkbox checked={tc2} onCheckedChange={v => setTc2(!!v)} disabled={mode === 'admin' || isReadonly} className="mt-0.5" />
-                                            <span>أؤكد أنني قرأت سياسة وإجراءات استخدام عربة الجولف الخاصة بـ LOC وأوافق على الامتثال لها.</span>
-                                        </label>
-                                        <label className="flex items-start gap-2 cursor-pointer">
-                                            <Checkbox checked={tc3} onCheckedChange={v => setTc3(!!v)} disabled={mode === 'admin' || isReadonly} className="mt-0.5" />
-                                            <span>أؤكد أنني أكملت التعريف بعربة الجولف الخاص بالمنشأة.</span>
-                                        </label>
+                                        {tcBoxes.map(cb => (
+                                            <label key={cb.id} className="flex items-start gap-2 cursor-pointer">
+                                                <Checkbox
+                                                    checked={!!tcChecked[cb.id]}
+                                                    onCheckedChange={v => setTcChecked(p => ({ ...p, [cb.id]: !!v }))}
+                                                    disabled={mode === 'admin' || isReadonly}
+                                                    className="mt-0.5"
+                                                />
+                                                <span>{cb.ar}</span>
+                                            </label>
+                                        ))}
                                     </div>
                                 </div>
                             </div>

@@ -13,6 +13,13 @@ const router = Router();
 router.get('/', authenticate, StadiumController.getAll);
 
 /**
+ * @route   POST /api/v1/stadiums/bulk
+ * @desc    Bulk-create stadiums (skips existing codes)
+ * @access  Protected (SuperAdmin only)
+ */
+router.post('/bulk', authenticate, requireRole('SuperAdmin'), StadiumController.bulkCreate);
+
+/**
  * @route   GET /api/v1/stadiums/:id
  * @desc    Get stadium by ID
  * @access  Protected
