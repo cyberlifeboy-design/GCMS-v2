@@ -795,10 +795,19 @@ export class HandoverService {
             throw new Error(`Vehicle cannot be returned (Current status: ${vehicle.status})`);
         }
 
-        // Update handover form with return condition and admin return signature
-        await prisma.handoverForm.updateMany({
+        // Upsert: create form record if none exists, update if one does
+        await prisma.handoverForm.upsert({
             where: { fleetId },
-            data: {
+            create: {
+                fleetId,
+                status: 'RETURNED',
+                conditionData: data.conditionData ?? undefined,
+                returnAdminSigData: data.returnSignatureData ?? undefined,
+                returnDate: new Date().toISOString().split('T')[0],
+                adminSignedById: adminId,
+                adminSignedAt: new Date(),
+            },
+            update: {
                 conditionData: data.conditionData ?? undefined,
                 returnAdminSigData: data.returnSignatureData ?? undefined,
                 returnDate: new Date().toISOString().split('T')[0],

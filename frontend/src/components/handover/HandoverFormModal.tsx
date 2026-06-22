@@ -292,6 +292,9 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const [returnNotes, setReturnNotes] = useState('');
 
     const isReadonly = mode === 'view' || mode === 'admin-return' || (mode === 'user' && form?.status === 'COMPLETE');
+    const isComplete = form?.status === 'COMPLETE';
+    const isReturned = form?.status === 'RETURNED';
+    const canPrint = isComplete || isReturned;
     const today = new Date().toISOString().slice(0, 10);
 
     const loadForm = useCallback(async () => {
@@ -469,7 +472,6 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     };
 
     const isAdminReadonly = mode !== 'admin';
-    const isComplete = form?.status === 'COMPLETE';
 
     return (
         <Dialog open={open} onOpenChange={o => { if (!o && !submitting) onClose(); }}>
@@ -514,7 +516,9 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                     {/* Status bar */}
                     <div className="bg-zinc-800 text-white px-4 py-2 flex items-center justify-between gap-3 no-print">
                         <div className="flex items-center gap-3">
-                            {form?.status === 'HANDBACK_PENDING'
+                            {isReturned
+                                ? <Badge className="bg-indigo-600 text-white">Returned</Badge>
+                                : form?.status === 'HANDBACK_PENDING'
                                 ? <Badge className="bg-purple-600 text-white">Handback Pending</Badge>
                                 : isComplete
                                 ? <Badge className="bg-green-600 text-white">Fully Signed</Badge>
@@ -524,8 +528,9 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                             }
                             {form?.adminSignedAt && <span className="text-xs text-zinc-400">Admin signed: {new Date(form.adminSignedAt).toLocaleDateString()}</span>}
                             {form?.userSignedAt && <span className="text-xs text-zinc-400">User signed: {new Date(form.userSignedAt).toLocaleDateString()}</span>}
+                            {form?.returnDate && <span className="text-xs text-zinc-400">Returned: {form.returnDate}</span>}
                         </div>
-                        {isComplete && <Button variant="secondary" size="sm" className="no-print" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Save PDF</Button>}
+                        {canPrint && <Button variant="secondary" size="sm" className="no-print" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Save PDF</Button>}
                     </div>
 
                     {loading ? (
@@ -901,6 +906,14 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     <span className="font-semibold text-sm">Handover complete. Both parties have signed.</span>
                                     <div className="flex-1" />
                                     <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Print / Save PDF</Button>
+                                </div>
+                            )}
+                            {isReturned && (
+                                <div className="flex items-center gap-3 p-4 bg-indigo-50 border-t text-indigo-800 no-print">
+                                    <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+                                    <span className="font-semibold text-sm">Cart returned and released to pool. Return form signed.</span>
+                                    <div className="flex-1" />
+                                    <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Print / Save PDF</Button>
                                 </div>
                             )}
                         </div>
