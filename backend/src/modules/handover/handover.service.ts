@@ -110,6 +110,7 @@ export class HandoverService {
                 where: { id: data.fleetId },
                 data: {
                     status: 'Dispatched',
+                    checkedInAt: new Date(),
                 },
             });
 
@@ -160,7 +161,7 @@ export class HandoverService {
                     userId: data.userId,
                     action: 'CheckedOut',
                     conditionNotes: data.conditionNotes,
-                    photosUrls: data.photosUrls || [],
+                    photosUrls: JSON.stringify(data.photosUrls || []),
                 },
             });
 
@@ -169,6 +170,7 @@ export class HandoverService {
                 where: { id: data.fleetId },
                 data: {
                     status: nextStatus,
+                    checkedInAt: null,
                 },
             });
 
@@ -178,7 +180,7 @@ export class HandoverService {
                         fleetId: data.fleetId,
                         reportedById: data.userId,
                         issueDescription: data.issueDescription,
-                        photosUrls: data.photosUrls || [],
+                        photosUrls: JSON.stringify(data.photosUrls || []),
                         status: 'Open',
                     },
                 });
@@ -417,6 +419,7 @@ export class HandoverService {
                     department: { select: { name: true } },
                     handoverSigned: true,
                     handoverSignedAt: true,
+                    checkedInAt: true,
                     handoverForm: { select: { id: true, status: true, adminSignatureData: true } },
                 },
                 orderBy: { carNumber: 'asc' },
@@ -433,6 +436,7 @@ export class HandoverService {
                 departmentName: cart.department?.name || undefined,
                 handoverSigned: cart.handoverSigned,
                 handoverSignedAt: cart.handoverSignedAt,
+                checkedInAt: cart.checkedInAt,
                 handoverFormStatus: cart.handoverForm?.status ?? null,
                 handoverFormId: cart.handoverForm?.id ?? null,
             }));
@@ -614,6 +618,51 @@ export class HandoverService {
         });
     }
 
+    async listForms(user: { userId: string; role: string; stadiumId?: string }, params: { page?: number; limit?: number; status?: string }) {
+        const page = params.page || 1;
+        const limit = Math.min(params.limit || 20, 100);
+        const skip = (page - 1) * limit;
+
+        const where: any = {};
+        if (user.role === 'FA') {
+            // Use userSignedById so forms remain visible even after fleet.assignedUserId is cleared on return
+            where.userSignedById = user.userId;
+        } else if (user.role === 'Admin' && user.stadiumId) {
+            where.fleet = { stadiumId: user.stadiumId };
+        }
+        if (params.status) {
+            where.status = params.status;
+        } else {
+            where.status = { in: ['COMPLETE', 'HANDBACK_PENDING', 'RETURNED'] };
+        }
+
+        const [forms, total] = await Promise.all([
+            prisma.handoverForm.findMany({
+                where,
+                orderBy: { updatedAt: 'desc' },
+                skip,
+                take: limit,
+                include: {
+                    fleet: {
+                        select: {
+                            carNumber: true, carType: true,
+                            stadium: { select: { name: true, code: true } },
+                            assignedUser: { select: { name: true, email: true } },
+                        },
+                    },
+                    adminSignedByUser: { select: { name: true } },
+                    userSignedByUser: { select: { name: true } },
+                },
+            }),
+            prisma.handoverForm.count({ where }),
+        ]);
+
+        return {
+            data: forms,
+            pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+        };
+    }
+
     async getPendingHandovers(adminUser: { role: string; stadiumId?: string }) {
         const where: any = {
             fleet: { status: 'Assigned', assignedUserId: { not: null } },
@@ -700,6 +749,84 @@ export class HandoverService {
 
             return updatedForm;
         });
+    }
+
+    async saveAfterUse(fleetId: string, userId: string, data: {
+        conditionData?: string;
+        additionalDrivers?: string;
+        afteruseSignatureData?: string;
+    }) {
+        const form = await prisma.handoverForm.findUnique({ where: { fleetId } });
+        if (!form) throw new Error('Handover form not found');
+        if (form.status !== 'COMPLETE') throw new Error('Handover form must be fully signed before after-use submission');
+
+        await prisma.handoverForm.update({
+            where: { fleetId },
+            data: {
+                conditionData: data.conditionData ?? form.conditionData,
+                additionalDrivers: data.additionalDrivers ?? form.additionalDrivers,
+                afteruseSignatureData: data.afteruseSignatureData,
+                afteruseSignedAt: new Date(),
+                afteruseSignedById: userId,
+                status: 'HANDBACK_PENDING',
+            },
+        });
+
+        await prisma.fleet.update({
+            where: { id: fleetId },
+            data: { status: 'HandbackPending' },
+        });
+
+        return { success: true };
+    }
+
+    /**
+     * Admin signs the return form and releases the car back to the pool.
+     * Saves after-use condition + admin return signature, then clears assignment.
+     */
+    async adminSignReturn(fleetId: string, adminId: string, data: {
+        conditionData?: string;
+        returnSignatureData?: string;
+        returnNotes?: string;
+    }) {
+        const vehicle = await prisma.fleet.findUnique({ where: { id: fleetId } });
+        if (!vehicle) throw new Error('Vehicle not found');
+        if (!['Returned', 'HandbackPending'].includes(vehicle.status)) {
+            throw new Error(`Vehicle cannot be returned (Current status: ${vehicle.status})`);
+        }
+
+        // Update handover form with return condition and admin return signature
+        await prisma.handoverForm.updateMany({
+            where: { fleetId },
+            data: {
+                conditionData: data.conditionData ?? undefined,
+                returnAdminSigData: data.returnSignatureData ?? undefined,
+                returnDate: new Date().toISOString().split('T')[0],
+                status: 'RETURNED',
+            },
+        });
+
+        const log = await prisma.handoverLog.create({
+            data: {
+                fleetId,
+                userId: adminId,
+                action: 'HandbackAccepted',
+                conditionNotes: data.returnNotes ?? undefined,
+            },
+        });
+
+        await prisma.fleet.update({
+            where: { id: fleetId },
+            data: {
+                status: 'Available',
+                assignedUserId: null,
+                handoverSigned: false,
+                handoverSignedAt: null,
+                checkedInAt: null,
+            },
+        });
+
+        return log;
     }
 
     async getInUse(stadiumId: string, user: { userId: string; role: string }) {

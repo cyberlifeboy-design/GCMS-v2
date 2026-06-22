@@ -20,11 +20,13 @@ const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').the
 const RequestsManagementPage = lazy(() => import('@/pages/RequestsManagementPage').then(m => ({ default: m.RequestsManagementPage })));
 const PublicRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.PublicRequestPage })));
 const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage').then(m => ({ default: m.NotificationCenterPage })));
+const UsageHistoryPage = lazy(() => import('@/pages/UsageHistoryPage').then(m => ({ default: m.UsageHistoryPage })));
+const MyReportsPage = lazy(() => import('@/pages/MyReportsPage').then(m => ({ default: m.MyReportsPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
-    if (user?.role === 'FA') return <Navigate to="/handover" replace />;
+    if (user?.role === 'FA') return <DashboardPage />;
     return <DashboardPage />;
 }
 
@@ -73,6 +75,8 @@ function AppContent() {
                                     <Route path="/notifications" element={<PageGuard pageKey="notifications"><NotificationCenterPage /></PageGuard>} />
                                     <Route path="/settings" element={<PageGuard pageKey="settings"><SettingsPage /></PageGuard>} />
                                     <Route path="/requests" element={<PageGuard pageKey="requests"><RequestsManagementPage /></PageGuard>} />
+                                    <Route path="/usage-history" element={<UsageHistoryPage />} />
+                                    <Route path="/my-reports" element={<MyReportsPage />} />
                                     <Route path="/profile" element={<ProfilePage />} />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>

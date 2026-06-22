@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { reportsApi, stadiumsApi, usersApi } from '@/lib/api';
+import { reportsApi, stadiumsApi, usersApi, handoverApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag, Activity, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag, Activity, Search, FileSignature } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
+import { formatDateTime } from '@/lib/dateUtils';
 
 interface UtilizationData {
     totalFleet?: number;
@@ -78,11 +81,8 @@ export function ReportsPage() {
     const role = user?.role;
     const canViewReports = role === 'SuperAdmin' || role === 'Admin' || role === 'Observer';
     const defaultExportFormat = user?.exportFormat || 'xlsx';
-    // Locked to a specific venue when Admin, or Observer with 'assigned' venue access
-    const isStadiumLocked = !!(user?.stadiumId && (
-        role === 'Admin' ||
-        (role === 'Observer' && user.venueReportAccess === 'assigned')
-    ));
+    // Only Admin is locked to their own venue; Observer/Contracts/MaintenanceTeam see all stadiums
+    const isStadiumLocked = !!(user?.stadiumId && role === 'Admin');
 
     const [utilization, setUtilization] = useState<UtilizationData | null>(null);
     const [stadiumReports, setStadiumReports] = useState<StadiumReport[]>([]);
@@ -96,15 +96,34 @@ export function ReportsPage() {
     const [exporting, setExporting] = useState<string | null>(null);
 
     const [selectedStadiumFilter, setSelectedStadiumFilter] = useState<string>(() => {
-        if (user?.stadiumId && (
-            user.role === 'Admin' ||
-            (user.role === 'Observer' && user.venueReportAccess === 'assigned')
-        )) return user.stadiumId;
+        if (user?.stadiumId && user.role === 'Admin') return user.stadiumId;
         return '';
     });
     const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('');
     const [selectedLabelStadium, setSelectedLabelStadium] = useState<string>('');
     const [allStadiums, setAllStadiums] = useState<Array<{id: string; name: string; code: string}>>([]);
+
+    // Handover Forms state
+    const [handoverForms, setHandoverForms] = useState<any[]>([]);
+    const [formsLoading, setFormsLoading] = useState(false);
+    const [formsPagination, setFormsPagination] = useState({ total: 0, totalPages: 1, page: 1 });
+    const [formsPage, setFormsPage] = useState(1);
+    const [formsSearch, setFormsSearch] = useState('');
+    const [formsStatusFilter, setFormsStatusFilter] = useState('');
+    const [formModal, setFormModal] = useState<{ open: boolean; fleetId: string } | null>(null);
+
+    const loadForms = async (page = 1) => {
+        setFormsLoading(true);
+        try {
+            const params: Record<string, unknown> = { page, limit: 20 };
+            if (formsStatusFilter) params.status = formsStatusFilter;
+            const res = await handoverApi.listForms(params);
+            setHandoverForms(res.data.data || []);
+            setFormsPagination(res.data.pagination || { total: 0, totalPages: 1, page: 1 });
+        } catch { /* ignore */ } finally {
+            setFormsLoading(false);
+        }
+    };
 
     // FA Audit Trail state
     const [faTrailLogs, setFaTrailLogs] = useState<any[]>([]);
@@ -310,7 +329,7 @@ export function ReportsPage() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="stadiums" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-6">
                     <TabsTrigger value="stadiums" className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Stadium Reports
@@ -326,6 +345,10 @@ export function ReportsPage() {
                     <TabsTrigger value="fa-audit" className="flex items-center gap-2">
                         <Activity className="w-4 h-4" />
                         FA Audit Trail
+                    </TabsTrigger>
+                    <TabsTrigger value="handover-forms" className="flex items-center gap-2" onClick={() => loadForms(1)}>
+                        <FileSignature className="w-4 h-4" />
+                        Handover Forms
                     </TabsTrigger>
                     <TabsTrigger value="labels" className="flex items-center gap-2">
                         <Tag className="w-4 h-4" />
@@ -862,6 +885,107 @@ export function ReportsPage() {
                     </Card>
                 </TabsContent>
 
+                {/* Handover Forms Tab */}
+                <TabsContent value="handover-forms">
+                    <Card className="border-none shadow-md overflow-hidden">
+                        <CardHeader className="bg-muted/5 border-b py-4">
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                                <div>
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <FileSignature className="w-4 h-4" /> Signed Handover Forms
+                                    </CardTitle>
+                                    <CardDescription>View and download PDF copies of completed handover forms.</CardDescription>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Select value={formsStatusFilter || '__all__'} onValueChange={v => { setFormsStatusFilter(v === '__all__' ? '' : v); setFormsPage(1); }}>
+                                        <SelectTrigger className="w-40 h-8 text-xs">
+                                            <SelectValue placeholder="All Statuses" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__all__">All Statuses</SelectItem>
+                                            <SelectItem value="COMPLETE">Complete</SelectItem>
+                                            <SelectItem value="HANDBACK_PENDING">Handback Pending</SelectItem>
+                                            <SelectItem value="RETURNED">Returned</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <div className="relative">
+                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                        <Input className="pl-7 h-8 w-48 text-xs" placeholder="Search cart or FA..." value={formsSearch} onChange={e => setFormsSearch(e.target.value)} />
+                                    </div>
+                                    <Button size="sm" onClick={() => loadForms(formsPage)} disabled={formsLoading}>
+                                        {formsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {formsLoading ? (
+                                <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                            ) : handoverForms.length === 0 ? (
+                                <div className="text-center py-16 text-muted-foreground">
+                                    <FileSignature className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                                    <p className="font-medium">No completed handover forms found.</p>
+                                    <p className="text-sm mt-1">Click the search button to load forms.</p>
+                                </div>
+                            ) : (
+                                <Table>
+                                    <TableHeader className="bg-muted/20">
+                                        <TableRow>
+                                            <TableHead>Cart #</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>FA / Assignee</TableHead>
+                                            <TableHead>Venue</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Admin Signed</TableHead>
+                                            <TableHead>User Signed</TableHead>
+                                            <TableHead className="text-right">PDF</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {handoverForms
+                                            .filter(f => {
+                                                if (!formsSearch) return true;
+                                                const q = formsSearch.toLowerCase();
+                                                return f.fleet?.carNumber?.toLowerCase().includes(q) || f.fleet?.assignedUser?.name?.toLowerCase().includes(q);
+                                            })
+                                            .map(f => (
+                                            <TableRow key={f.id}>
+                                                <TableCell className="font-black font-mono text-primary">{f.fleet?.carNumber}</TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{f.fleet?.carType}</TableCell>
+                                                <TableCell>
+                                                    <div className="text-sm font-medium">{f.fleet?.assignedUser?.name ?? '—'}</div>
+                                                    <div className="text-[10px] text-muted-foreground">{f.fleet?.assignedUser?.email}</div>
+                                                </TableCell>
+                                                <TableCell><Badge variant="outline" className="font-mono text-[10px]">{f.fleet?.stadium?.code}</Badge></TableCell>
+                                                <TableCell>
+                                                    {f.status === 'COMPLETE' && <Badge className="bg-green-100 text-green-800 border-green-200 text-[9px]">Complete</Badge>}
+                                                    {f.status === 'HANDBACK_PENDING' && <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-[9px]">Handback Pending</Badge>}
+                                                    {f.status === 'RETURNED' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Returned</Badge>}
+                                                </TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{f.adminSignedAt ? formatDateTime(f.adminSignedAt) : '—'}</TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{f.userSignedAt ? formatDateTime(f.userSignedAt) : '—'}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button size="sm" variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                                        onClick={() => setFormModal({ open: true, fleetId: f.fleetId })}>
+                                                        <Download className="w-3 h-3 mr-1" /> View &amp; PDF
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                            {formsPagination.totalPages > 1 && (
+                                <div className="flex justify-center gap-2 p-4 border-t">
+                                    <Button size="sm" variant="outline" disabled={formsPage <= 1} onClick={() => { const p = formsPage - 1; setFormsPage(p); loadForms(p); }}>Prev</Button>
+                                    <span className="text-sm self-center text-muted-foreground">Page {formsPage} / {formsPagination.totalPages}</span>
+                                    <Button size="sm" variant="outline" disabled={formsPage >= formsPagination.totalPages} onClick={() => { const p = formsPage + 1; setFormsPage(p); loadForms(p); }}>Next</Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
                 {/* Print Labels Tab */}
                 <TabsContent value="labels">
                     <Card>
@@ -949,6 +1073,16 @@ export function ReportsPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Handover Form View Modal */}
+            {formModal && (
+                <HandoverFormModal
+                    open={formModal.open}
+                    onClose={() => setFormModal(null)}
+                    mode="view"
+                    fleetId={formModal.fleetId}
+                />
+            )}
         </div>
     );
 }

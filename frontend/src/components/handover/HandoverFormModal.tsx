@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 export interface HandoverFormData {
     id?: string;
     fleetId: string;
-    status: string; // PENDING | ADMIN_SIGNED | COMPLETE
+    status: string; // PENDING | ADMIN_SIGNED | COMPLETE | HANDBACK_PENDING | RETURNED
     serialNumber?: string;
     faCode?: string;
     handoverDate?: string;
@@ -35,9 +35,11 @@ export interface HandoverFormData {
     adminSignatureData?: string;
     userSignatureData?: string;
     finalSignatureData?: string;
+    returnAdminSigData?: string;
+    returnDate?: string;
     adminSignedAt?: string;
     userSignedAt?: string;
-    adminSignedByUser?: { name: string };
+    adminSignedByUser?: { name: string; phone?: string };
     userSignedByUser?: { name: string };
     fleet?: {
         carNumber: string; carType: string;
@@ -71,7 +73,7 @@ interface TcSettings {
 interface Props {
     open: boolean;
     onClose: () => void;
-    mode: 'admin' | 'user' | 'view';
+    mode: 'admin' | 'user' | 'view' | 'afteruse' | 'admin-return';
     fleetId: string;
     preloadedForm?: HandoverFormData | null;
     currentUserName?: string;
@@ -202,7 +204,7 @@ const CONDITION_ITEMS = [
     { key: 'horn', en: 'Horn', ar: 'البوق' },
 ];
 
-function ConditionTable({ value, onChange, disabled }: { value: ConditionMap; onChange: (v: ConditionMap) => void; disabled: boolean; }) {
+function ConditionTable({ value, onChange, disablePre, disableAft }: { value: ConditionMap; onChange: (v: ConditionMap) => void; disablePre: boolean; disableAft: boolean; }) {
     const set = (key: string, side: 'pre' | 'aft', rating: string) => {
         onChange({ ...value, [key]: { ...(value[key] || { pre: '', aft: '' }), [side]: rating } });
     };
@@ -229,7 +231,7 @@ function ConditionTable({ value, onChange, disabled }: { value: ConditionMap; on
                     </div>
                     {ratings.map(r => (
                         <div key={`pre-${r}`} className="flex items-center justify-center border-l">
-                            <input type="radio" name={`pre-${item.key}`} value={r} disabled={disabled}
+                            <input type="radio" name={`pre-${item.key}`} value={r} disabled={disablePre}
                                 checked={(value[item.key]?.pre ?? '') === r}
                                 onChange={() => set(item.key, 'pre', r)}
                                 className="w-4 h-4 accent-primary cursor-pointer"
@@ -238,7 +240,7 @@ function ConditionTable({ value, onChange, disabled }: { value: ConditionMap; on
                     ))}
                     {ratings.map(r => (
                         <div key={`aft-${r}`} className="flex items-center justify-center border-l">
-                            <input type="radio" name={`aft-${item.key}`} value={r} disabled={disabled}
+                            <input type="radio" name={`aft-${item.key}`} value={r} disabled={disableAft}
                                 checked={(value[item.key]?.aft ?? '') === r}
                                 onChange={() => set(item.key, 'aft', r)}
                                 className="w-4 h-4 accent-primary cursor-pointer"
@@ -285,8 +287,11 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const [adminSig, setAdminSig] = useState('');
     const [userSig, setUserSig] = useState('');
     const [finalSig, setFinalSig] = useState('');
+    const [afteruseSig, setAfteruseSig] = useState('');
+    const [returnSig, setReturnSig] = useState('');
+    const [returnNotes, setReturnNotes] = useState('');
 
-    const isReadonly = mode === 'view' || (mode === 'user' && form?.status === 'COMPLETE');
+    const isReadonly = mode === 'view' || mode === 'admin-return' || (mode === 'user' && form?.status === 'COMPLETE');
     const today = new Date().toISOString().slice(0, 10);
 
     const loadForm = useCallback(async () => {
@@ -337,6 +342,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 if (data.adminSignatureData) setAdminSig(data.adminSignatureData);
                 if (data.userSignatureData) setUserSig(data.userSignatureData);
                 if (data.finalSignatureData) setFinalSig(data.finalSignatureData);
+                if (data.returnAdminSigData) setReturnSig(data.returnAdminSigData);
             } else if (mode === 'admin') {
                 // No form yet — auto-fill everything from system data
                 const pf = preloadedForm;
@@ -416,6 +422,46 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
         }
     };
 
+    const handleAfteruseSubmit = async () => {
+        if (!afteruseSig) { toast.error('Signature is required for after-use inspection'); return; }
+        setSubmitting(true);
+        try {
+            await handoverApi.saveAfterUse({
+                fleetId,
+                conditionData: JSON.stringify(condition),
+                additionalDrivers: JSON.stringify(drivers),
+                afteruseSignatureData: afteruseSig,
+            });
+            toast.success('After-use inspection submitted. Cart is pending handback.');
+            onComplete?.();
+            onClose();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to submit after-use inspection');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleAdminReturnSubmit = async () => {
+        if (!returnSig) { toast.error('Admin return signature is required'); return; }
+        setSubmitting(true);
+        try {
+            await handoverApi.adminReturn({
+                fleetId,
+                conditionData: JSON.stringify(condition),
+                returnSignatureData: returnSig,
+                returnNotes,
+            });
+            toast.success('Return form signed. Cart released to the pool.');
+            onComplete?.();
+            onClose();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to sign return form');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handlePrint = () => window.print();
 
     const setDriver = (i: number, field: keyof AdditionalDriver, val: string) => {
@@ -468,7 +514,9 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                     {/* Status bar */}
                     <div className="bg-zinc-800 text-white px-4 py-2 flex items-center justify-between gap-3 no-print">
                         <div className="flex items-center gap-3">
-                            {isComplete
+                            {form?.status === 'HANDBACK_PENDING'
+                                ? <Badge className="bg-purple-600 text-white">Handback Pending</Badge>
+                                : isComplete
                                 ? <Badge className="bg-green-600 text-white">Fully Signed</Badge>
                                 : form?.status === 'ADMIN_SIGNED'
                                 ? <Badge className="bg-amber-500 text-white">Awaiting User Signature</Badge>
@@ -560,18 +608,29 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                             <SectionHeader title="Golf Cart Information" ar="معلومات عربة الجولف" />
                             <div className="border-b divide-y">
                                 <TypeRow label="Type of Golf Cart" ar="نوع عربة الجولف">
-                                    {/* Auto-filled from system — read-only display */}
-                                    {(['cargo','fourSeat','sixSeat','access'] as const).map((k, i) => (
-                                        <label key={k} className="flex items-center gap-1.5">
-                                            <input type="checkbox" checked={cartType[k]} disabled
-                                                readOnly
-                                                className="w-4 h-4 accent-red-800 cursor-default"
-                                            />
-                                            <span className={cartType[k] ? 'font-semibold text-red-900' : 'text-muted-foreground'}>
-                                                {['CARGO','4-SEATER','6-SEATER','ACCESSIBILITY'][i]}
-                                            </span>
-                                        </label>
-                                    ))}
+                                    {(['cargo','fourSeat','sixSeat','access'] as const).map((k, i) => {
+                                        const isSelected = cartType[k];
+                                        const canEdit = mode === 'admin';
+                                        const labels = ['CARGO','4-SEATER','6-SEATER','ACCESSIBILITY'];
+                                        return (
+                                            <label key={k} className={`flex items-center gap-1.5 ${canEdit ? 'cursor-pointer' : 'cursor-default'} ${!isSelected && !canEdit ? 'opacity-40' : ''}`}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    disabled={!canEdit}
+                                                    onChange={() => {
+                                                        setCartType(prev => ({
+                                                            ...prev,
+                                                            cargo: false, fourSeat: false, sixSeat: false, access: false,
+                                                            [k]: !prev[k as keyof CartTypeData],
+                                                        }));
+                                                    }}
+                                                    className={`w-4 h-4 accent-red-800 ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                                                />
+                                                <span className={isSelected ? 'font-semibold text-red-900' : ''}>{labels[i]}</span>
+                                            </label>
+                                        );
+                                    })}
                                 </TypeRow>
                                 <TypeRow label="Confirm Driver is Over 18 Years Old" ar="تأكيد أن السائق يبلغ أكثر من 18 عاماً">
                                     {['yes','no'].map(v => (
@@ -605,7 +664,12 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                             {/* ── Section 3: Condition Inspection ── */}
                             <SectionHeader title="Vehicle Condition Inspection" ar="فحص حالة المركبة" />
                             <div className="p-3 border-b">
-                                <ConditionTable value={condition} onChange={setCondition} disabled={isAdminReadonly} />
+                                <ConditionTable
+                                    value={condition}
+                                    onChange={setCondition}
+                                    disablePre={mode !== 'admin'}
+                                    disableAft={mode !== 'admin' && mode !== 'afteruse' && mode !== 'admin-return'}
+                                />
                             </div>
 
                             {/* ── Section 4: Additional Drivers ── */}
@@ -631,7 +695,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                                             <input
                                                                 className="w-full px-2 py-1.5 outline-none bg-transparent text-xs"
                                                                 value={d[(['name','contact','entity','licenseNo'] as (keyof AdditionalDriver)[])[fi]]}
-                                                                readOnly={isAdminReadonly}
+                                                                readOnly={isReadonly}
                                                                 onChange={e => setDriver(di, (['name','contact','entity','licenseNo'] as (keyof AdditionalDriver)[])[fi], e.target.value)}
                                                             />
                                                         </td>
@@ -683,7 +747,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                                 <Checkbox
                                                     checked={!!tcChecked[cb.id]}
                                                     onCheckedChange={v => setTcChecked(p => ({ ...p, [cb.id]: !!v }))}
-                                                    disabled={mode === 'admin' || isReadonly}
+                                                    disabled={isReadonly}
                                                     className="mt-0.5"
                                                 />
                                                 <span>{cb.en}</span>
@@ -711,7 +775,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                                 <Checkbox
                                                     checked={!!tcChecked[cb.id]}
                                                     onCheckedChange={v => setTcChecked(p => ({ ...p, [cb.id]: !!v }))}
-                                                    disabled={mode === 'admin' || isReadonly}
+                                                    disabled={isReadonly}
                                                     className="mt-0.5"
                                                 />
                                                 <span>{cb.ar}</span>
@@ -747,8 +811,61 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                 </div>
                             </div>
 
+                            {/* ── After-Use Signature Section ── */}
+                            {mode === 'afteruse' && (
+                                <div className="p-4 bg-muted/20 border-b">
+                                    <div className="text-[11px] font-bold uppercase text-muted-foreground mb-2">After-Use Inspection — Sign-Off / التوقيع على فحص ما بعد الاستخدام</div>
+                                    <div className="max-w-sm">
+                                        <SignatureCanvas
+                                            label="After-Use Signature / توقيع ما بعد الاستخدام"
+                                            value={afteruseSig}
+                                            onChange={setAfteruseSig}
+                                            disabled={false}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Admin Return Sign-Off Section ── */}
+                            {(mode === 'admin-return' || (mode === 'view' && form?.status === 'RETURNED')) && (
+                                <div className="p-5 bg-indigo-50/60 border-b space-y-4">
+                                    <div className="text-[11px] font-black uppercase text-indigo-800 tracking-wider border-b border-indigo-200 pb-2">
+                                        Return Inspection — Admin Sign-Off / فحص الإرجاع — توقيع المسؤول
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] font-bold uppercase text-muted-foreground">Return Date / تاريخ الإرجاع</div>
+                                            <input
+                                                type="date"
+                                                defaultValue={form?.returnDate || new Date().toISOString().slice(0, 10)}
+                                                readOnly={mode === 'view'}
+                                                className="w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-indigo-400"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] font-bold uppercase text-muted-foreground">Return Notes / ملاحظات الإرجاع</div>
+                                            <textarea
+                                                className="w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-indigo-400 min-h-[72px]"
+                                                placeholder="Any notes on car condition or return..."
+                                                value={returnNotes}
+                                                onChange={e => setReturnNotes(e.target.value)}
+                                                readOnly={mode === 'view'}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="max-w-sm">
+                                        <SignatureCanvas
+                                            label="Admin Return Signature / توقيع المسؤول عند الاستلام"
+                                            value={returnSig}
+                                            onChange={setReturnSig}
+                                            disabled={mode === 'view'}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             {/* ── Action Buttons ── */}
-                            {!isReadonly && (
+                            {(!isReadonly || mode === 'admin-return') && (
                                 <div className="flex gap-3 p-4 bg-muted/10 border-t no-print">
                                     <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
                                     <div className="flex-1" />
@@ -762,6 +879,18 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                         <Button className="bg-purple-700 hover:bg-purple-600 text-white px-8" onClick={handleUserSubmit} disabled={submitting}>
                                             {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
                                             I Accept &amp; Sign
+                                        </Button>
+                                    )}
+                                    {mode === 'afteruse' && (
+                                        <Button className="bg-orange-700 hover:bg-orange-600 text-white px-8" onClick={handleAfteruseSubmit} disabled={submitting}>
+                                            {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                                            Submit After-Use Inspection
+                                        </Button>
+                                    )}
+                                    {mode === 'admin-return' && (
+                                        <Button className="bg-indigo-700 hover:bg-indigo-600 text-white px-8" onClick={handleAdminReturnSubmit} disabled={submitting}>
+                                            {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                                            Sign &amp; Release Cart to Pool
                                         </Button>
                                     )}
                                 </div>

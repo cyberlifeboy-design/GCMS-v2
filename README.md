@@ -27,11 +27,12 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 
 ### Key Capabilities
 
-- **Multi-Stadium Support**: Manage fleets across multiple stadiums/venues
-- **Role-Based Access Control**: SuperAdmin, Admin, FA (Field Assistant), and Observer roles
+- **Multi-Stadium Support**: Manage fleets across multiple stadiums/venues with bulk venue import
+- **Role-Based Access Control**: SuperAdmin, Admin, FA, Observer, Contracts, and MaintenanceTeam roles
 - **Fleet Management**: Track carts, assignments, and status across locations
-- **Handover Workflow**: Complete check-in/check-out system with photo documentation
-- **Maintenance Tracking**: Report, track, and resolve maintenance issues
+- **Handover Workflow**: Complete check-in/check-out system with auto-fill, bilingual PDF, two-party digital signing, and photo documentation
+- **Terms & Conditions**: Rich text T&C editor (TipTap) with dynamic confirmation checkboxes, bilingual EN/AR
+- **Maintenance Tracking**: Report, track, resolve, and quote maintenance issues with automated approval workflow
 - **Reporting**: Export reports in Excel, PDF, or Word formats
 - **Public Request System**: Allow department leads to request carts without login
 - **System Configuration**: Comprehensive settings for customization
@@ -42,11 +43,13 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 
 - **JWT-based authentication** with refresh tokens
 - **Password reset** via email
-- **Role-based access control** (RBAC) with four roles:
+- **Role-based access control** (RBAC) with six roles:
   - **SuperAdmin**: Full system access, stadium management, all stadiums visibility
   - **Admin**: Stadium-specific management, user creation, fleet operations
-  - **FA (Field Assistant)**: Handover operations, maintenance reporting
+  - **FA (Field Assistant)**: Handover operations, maintenance reporting, additional driver management
   - **Observer**: Read-only access to reports and dashboards
+  - **Contracts**: Logistics department scoped, handles quotation approvals
+  - **MaintenanceTeam**: Logistics department scoped, handles maintenance assignments and resolutions
 
 ### 🚗 Fleet Management
 
@@ -55,20 +58,29 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Bulk Import**: Import carts via CSV upload
 - **Assignment Matrix**: Visual view of cart assignments by FA and department
 - **Assignment History**: Track all assignment changes
+- **Additional Drivers**: FA can register additional drivers per assigned cart (name, phone, accreditation number) after handover is signed
 
 ### 🔄 Handover System
 
-- **Check-Out**: Record cart handover with FA assignment and photos
-- **Check-In**: Return carts with condition notes
+- **Auto-Fill**: All form fields pre-populated from system data (serial number, FA code, date/location, admin & FA names, contact numbers)
+- **Cart Type Lock**: Golf Cart Type is read-only on the form — fetched from fleet data, displayed as locked checkboxes
+- **Bilingual PDF**: Full EN/AR handover form with two-party digital signing
+- **Dynamic T&C**: Confirmation checkboxes defined by SuperAdmin in Settings, stored as JSON, rendered per-form
+- **Check-Out / Check-In**: Record handovers with FA assignment and photos
 - **Bulk Operations**: Check-in/out multiple carts at once
 - **Photo Documentation**: Attach photos during handover
 - **History Tracking**: Complete audit trail of all handovers
+- **Admin Return Flow**: Complete cart return lifecycle — FA requests handback → cart enters HandbackPending queue → Admin opens Inspect & Sign Return Form → fills After-Use condition, adds return notes, signs → cart released to Available pool
+- **Return Queue (Admin)**: HandoverPage "Releases & Returns" section shows all carts in Returned/HandbackPending status with "Inspect & Sign Return" button per row; FleetPage also provides one-click return inspection via RotateCcw button
+- **Return Signature Stored**: Admin return sign-off saved to `returnAdminSigData` field with `returnDate`; form status progresses to `RETURNED`; visible in view mode when reopening the form
 
 ### 🔧 Maintenance Management
 
 - **Issue Reporting**: Report maintenance issues with photos
 - **Status Tracking**: Open → In Progress → Resolved
+- **Contracts & MaintenanceTeam Workflow**: Automated quotation submission and approval by Contracts role before MaintenanceTeam resolves
 - **Admin Dashboard**: Monitor all maintenance issues
+- **FA Scoped View**: FA users see only their own reported issues
 - **Photo Evidence**: Document issues with multiple photos
 
 ### 📊 Reports & Analytics
@@ -81,6 +93,9 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
   - Fleet inventory exports
   - Full system reports
 - **Activity Audit Log**: Track all system actions
+- **FA Personal Reports**: FA users have a dedicated "My Reports" tab scoped to their own submissions
+- **Signed Handover Forms (FA)**: "My Reports" page includes a "Signed Handover Forms" card listing all the FA's completed/returned forms with Cart#, type, venue, status badge, signed date, and "View & PDF" button — opens the full form in view mode with a "Print / Save PDF" button
+- **Handover Forms Tab (Admin)**: Admin "Reports" page includes a "Handover Forms" tab with search by cart/FA name, filter by COMPLETE / HANDBACK_PENDING / RETURNED, paginated table, and "View & PDF" per row; same print-to-PDF flow via `window.print()` with `@media print` CSS
 
 ### 📝 Car Request System (Public)
 
@@ -95,6 +110,7 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Tournament Branding**: Upload logo, header, and footer images
 - **Notifications**: Configure maintenance alert emails
 - **Handover Settings**: Timeout thresholds, default stadium
+- **Handover T&C**: Rich text editor (TipTap) for bilingual EN/AR Terms & Conditions title and body; dynamic checkbox manager (add/edit/remove confirmation checkboxes with EN+AR labels)
 - **Feature Toggles**: Enable/disable maintenance reports, handover photos
 - **System Announcements**: Display time-bound announcements
 - **Export Preferences**: User-specific default export format
@@ -102,8 +118,9 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 ### 🏟️ Stadium & Department Management
 
 - **Stadiums**: Create, edit, activate/deactivate venues
+- **Bulk Import**: POST /stadiums/bulk — import multiple venues at once; ships with 10-venue GC template (ABS, LUS, ECS, LMPH, KIS, AAS, ATS, AJS, JHS, QSC)
 - **Departments**: Organize by department within stadiums
-- **Bulk Creation**: Create departments across all stadiums at once
+- **Bulk Creation**: Create departments across all stadiums at once (FAC25 default template available)
 - **FA Assignment**: Assign FAs to specific departments
 
 ### 👥 User Management
@@ -112,7 +129,20 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Bulk User Import**: Create multiple users at once
 - **User Status**: Activate/deactivate users
 - **Password Management**: Reset passwords, set temporary passwords
+- **FA Credential Editing**: Admins can update FA name, email, phone, and accreditation; department scoped per Admin role
 - **Preferences**: Export format preferences per user
+
+### 🔔 FA Dashboard (Handover Cycle Page)
+
+FA users see a role-specific view with three personal tabs:
+
+- **Usage History**: All check-in/check-out/handover log entries for the FA's assigned carts
+- **My Reports**: Maintenance issues the FA has personally reported
+- **Notifications**: System and admin push notifications with unread badge; mark-as-read per item or bulk
+
+Admin/SuperAdmin retain the full Pending Handovers / Real-time Stream / Global Audit / Venue Status tabs, plus:
+
+- **Releases & Returns**: Admin "Releases & Returns" panel in HandoverPage shows all carts with `Returned` or `HandbackPending` status; each row has "Inspect & Sign Return" to open the return form modal
 
 ## Tech Stack
 
@@ -121,6 +151,7 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Build Tool**: Vite
 - **Styling**: Tailwind CSS
 - **UI Components**: shadcn/ui (Radix-based)
+- **Rich Text Editor**: TipTap (handover T&C in Settings)
 - **State Management**: Zustand
 - **Routing**: React Router v6
 - **HTTP Client**: Axios
@@ -130,7 +161,7 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Runtime**: Node.js 20 LTS
 - **Framework**: Express.js
 - **ORM**: Prisma
-- **Database**: PostgreSQL 16
+- **Database**: PostgreSQL 16 (SQLite for local dev)
 - **Storage**: MinIO (S3-compatible)
 - **Authentication**: JWT with bcrypt password hashing
 - **Email**: Resend (production), MailHog (development)
@@ -146,15 +177,14 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 ### Prerequisites
 
 - Node.js 20 LTS
-- Docker & Docker Compose
-- PostgreSQL 16 (via Docker)
+- Docker & Docker Compose (for production infra)
 
-### Installation
+### Local Development (SQLite)
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/O96a/GCMS.git
-cd GCMS
+git clone https://github.com/cyberlifeboy-design/GCMS-v2.git
+cd GCMS-v2
 ```
 
 2. **Install dependencies**
@@ -162,32 +192,20 @@ cd GCMS
 # Backend
 cd backend
 npm install
-cp .env.example .env
 
 # Frontend
 cd ../frontend
 npm install
-cp .env.example .env
 ```
 
 3. **Configure environment**
 
 Backend `.env`:
 ```env
-DATABASE_URL="postgresql://user:password@localhost:5432/gcms"
+DATABASE_URL="file:./dev.db"
 JWT_SECRET="your-jwt-secret"
 JWT_REFRESH_SECRET="your-refresh-secret"
-MINIO_ENDPOINT="localhost"
-MINIO_PORT="9000"
-MINIO_ACCESS_KEY="minioadmin"
-MINIO_SECRET_KEY="minioadmin"
-MINIO_BUCKET="gcms"
-MINIO_USE_SSL="false"
-SMTP_HOST="localhost"
-SMTP_PORT="1025"
-SMTP_USER=""
-SMTP_PASS=""
-SMTP_FROM="noreply@gcms.local"
+CORS_ORIGIN="http://localhost:3000"
 ```
 
 Frontend `.env`:
@@ -195,83 +213,82 @@ Frontend `.env`:
 VITE_API_URL=http://localhost:3005/api/v1
 ```
 
-4. **Start infrastructure**
-```bash
-docker-compose up -d
-```
-
-5. **Initialize database**
+4. **Initialize database**
 ```bash
 cd backend
 npx prisma migrate dev
 npx prisma db seed
 ```
 
-6. **Run development servers**
+5. **Run development servers**
 ```bash
-# Terminal 1 - Backend
+# Terminal 1 — Backend (port 3005)
 cd backend
-npm run dev
+npx tsx src/server.ts
 
-# Terminal 2 - Frontend
+# Terminal 2 — Frontend (port 3000)
 cd frontend
 npm run dev
 ```
 
-Access the application at `http://localhost:3000`
+Access the application at **http://localhost:3000**
 
-### Default Users
+> **Windows note:** Stop the backend before running `prisma migrate dev` — the running process holds a `.dll.node` file lock (EPERM rename error). Kill with `Stop-Process -Name "node" -Force`, migrate, then restart.
 
-After seeding, the following users are created:
+### Default Users (after seed)
 
 | Role | Email | Password |
 |------|-------|----------|
-| SuperAdmin | superadmin@gcms.local | admin123 |
-| Admin | admin@gcms.local | admin123 |
+| SuperAdmin | superadmin@gcms.com | Admin@2024! |
+| Admin | admin@gcms.com | Admin@2024! |
+| FA | fa@gcms.com | FA@2024! |
+| Observer | observer@gcms.com | Observer@2024! |
 
 ## Project Structure
 
 ```
-GCMS/
+GCMS-v2/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma      # Database schema
-│   │   ├── seed.ts             # Seed data
-│   │   └── migrations/         # Migration files
+│   │   ├── schema.prisma         # Database schema
+│   │   ├── seed.ts               # Seed data
+│   │   └── migrations/           # Migration files
 │   ├── src/
-│   │   ├── config/             # Configuration files
-│   │   ├── middleware/         # Express middleware
-│   │   ├── modules/            # Feature modules
-│   │   │   ├── auth/           # Authentication
-│   │   │   ├── departments/    # Department management
-│   │   │   ├── fleet/          # Fleet management
-│   │   │   ├── handover/       # Handover operations
-│   │   │   ├── maintenance/    # Maintenance tracking
-│   │   │   ├── reports/        # Reporting & exports
-│   │   │   ├── requests/       # Public car requests
-│   │   │   ├── settings/       # System settings
-│   │   │   ├── stadiums/       # Stadium management
-│   │   │   └── users/          # User management
-│   │   ├── services/           # Shared services
-│   │   ├── app.ts             # Express app setup
-│   │   └── index.ts           # Entry point
+│   │   ├── config/               # Configuration files
+│   │   ├── middleware/           # Express middleware (RBAC, auth)
+│   │   └── modules/              # Feature modules
+│   │       ├── auth/             # Authentication
+│   │       ├── departments/      # Department management
+│   │       ├── fleet/            # Fleet management + additional drivers
+│   │       ├── handover/         # Handover operations
+│   │       ├── maintenance/      # Maintenance + Contracts/MT workflow
+│   │       ├── notifications/    # Push notifications
+│   │       ├── reports/          # Reporting & exports
+│   │       ├── requests/         # Public car requests
+│   │       ├── settings/         # System settings + T&C
+│   │       ├── stadiums/         # Stadium management + bulk import
+│   │       └── users/            # User management
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── auth/          # Auth components
-│   │   │   ├── layout/        # Layout components
-│   │   │   └── ui/            # UI primitives
+│   │   │   ├── handover/         # HandoverFormModal (auto-fill, dynamic T&C)
+│   │   │   ├── layout/           # Layout components
+│   │   │   └── ui/               # UI primitives + rich-editor (TipTap)
 │   │   ├── lib/
-│   │   │   ├── api.ts         # API client
-│   │   │   ├── constants.ts   # Constants
-│   │   │   └── utils.ts       # Utilities
-│   │   ├── pages/             # Page components
-│   │   ├── stores/            # Zustand stores
-│   │   ├── App.tsx            # App component
-│   │   └── main.tsx           # Entry point
+│   │   │   ├── api.ts            # API client
+│   │   │   ├── constants.ts      # Constants
+│   │   │   └── utils.ts          # Utilities
+│   │   ├── pages/                # Page components
+│   │   │   ├── HandoverPage.tsx  # FA + Admin role-specific tabs
+│   │   │   ├── SettingsPage.tsx  # T&C rich editor + checkbox manager
+│   │   │   ├── StadiumsPage.tsx  # Bulk venue import
+│   │   │   └── UsersPage.tsx     # FA credential editing
+│   │   ├── stores/               # Zustand stores
+│   │   └── styles/globals.css    # TipTap editor styles
 │   └── package.json
 ├── docker-compose.yml
+├── docker-compose.dev.yml
 └── README.md
 ```
 
@@ -279,16 +296,16 @@ GCMS/
 
 ### SuperAdmin
 - ✅ Full system access
-- ✅ Manage all stadiums
+- ✅ Manage all stadiums (including bulk import)
 - ✅ Create/manage all users
-- ✅ Configure system settings
+- ✅ Configure system settings and T&C
 - ✅ View all data across stadiums
 - ✅ Generate request links
 - ✅ Manage all car requests
 
 ### Admin
 - ✅ Stadium-specific management
-- ✅ Create/manage users in their stadium
+- ✅ Create/manage users in their stadium (including FA credential edits)
 - ✅ Manage fleet and departments
 - ✅ Process handovers
 - ✅ View reports for their stadium
@@ -298,11 +315,12 @@ GCMS/
 
 ### FA (Field Assistant)
 - ✅ Check-in/out carts
-- ✅ Report maintenance issues
-- ✅ View own handover history
-- ✅ View assigned carts
+- ✅ Report maintenance issues (scoped to own reports)
+- ✅ View own handover usage history
+- ✅ Manage additional drivers on their assigned cart (post-signing)
+- ✅ View personal notifications
 - ❌ Cannot manage users or settings
-- ❌ Cannot access reports
+- ❌ Cannot access other FAs' data
 
 ### Observer
 - ✅ View dashboard
@@ -312,7 +330,17 @@ GCMS/
 - ❌ Cannot create/edit data
 - ❌ Cannot process handovers
 
-## Modules
+### Contracts
+- ✅ Logistics department scoped (All Stadiums)
+- ✅ Review and approve maintenance quotations
+- ❌ Cannot modify fleet or user data
+
+### MaintenanceTeam
+- ✅ Logistics department scoped (All Stadiums)
+- ✅ Submit maintenance quotations and resolve issues after approval
+- ❌ Cannot modify fleet or user data
+
+## API Reference
 
 ### Authentication (`/auth`)
 
@@ -340,6 +368,8 @@ GCMS/
 | `/fleet/bulk-assign` | POST | Bulk assign carts |
 | `/fleet/assignment-history` | GET | Get assignment history |
 | `/fleet/my-carts` | GET | Get user's assigned carts |
+| `/fleet/:id/drivers` | GET | Get additional drivers for a cart |
+| `/fleet/:id/drivers` | PATCH | Update additional drivers (FA: own cart only; Admin: any) |
 
 ### Handover (`/handover`)
 
@@ -355,10 +385,12 @@ GCMS/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/maintenance` | GET | List all maintenance issues |
+| `/maintenance` | GET | List issues (FA: own only; Admin/Contracts/MT: all) |
 | `/maintenance` | POST | Report new issue |
 | `/maintenance/fleet/:fleetId` | GET | Get issues for cart |
 | `/maintenance/:id/status` | PATCH | Update issue status |
+| `/maintenance/:id/quote` | POST | Submit quotation (MaintenanceTeam) |
+| `/maintenance/:id/approve` | POST | Approve quotation (Contracts) |
 | `/maintenance/export` | GET | Export maintenance log |
 
 ### Requests (`/requests`)
@@ -394,6 +426,7 @@ GCMS/
 |----------|--------|-------------|
 | `/settings` | GET | Get system settings |
 | `/settings` | PUT | Update settings (SuperAdmin) |
+| `/public/settings/branding` | GET | Get branding + T&C (no auth, used by handover form) |
 
 ### Stadiums (`/stadiums`)
 
@@ -402,6 +435,7 @@ GCMS/
 | `/stadiums` | GET | List all stadiums |
 | `/stadiums/:id` | GET | Get stadium by ID |
 | `/stadiums` | POST | Create stadium |
+| `/stadiums/bulk` | POST | Bulk create venues (skips existing codes) |
 | `/stadiums/:id` | PUT | Update stadium |
 | `/stadiums/:id` | DELETE | Delete stadium |
 
@@ -434,7 +468,7 @@ GCMS/
 
 ```
 Stadium ─┬─ Department ─┬─ User
-         │              └─ Fleet
+         │              └─ Fleet ── additionalDrivers (JSON)
          │
          └─ CarRequest
 
@@ -443,10 +477,14 @@ User ────┬─ RefreshToken
          ├─ MaintenanceLog
          └─ CarRequest (reviewer)
 
-Fleet ───┬─ HandoverLog
+Fleet ───┬─ HandoverLog (tcData JSON)
          └─ MaintenanceLog
 
 SystemSettings
+  ├─ handoverTcEnTitle / handoverTcEnBody (HTML)
+  ├─ handoverTcArTitle / handoverTcArBody (HTML)
+  └─ handoverTcCheckboxes (JSON: [{id, en, ar}])
+
 AuditLog
 ```
 
@@ -455,10 +493,11 @@ AuditLog
 - **Stadium** has many: Departments, Users, Fleets, CarRequests
 - **Department** belongs to: Stadium, has many: Users, Fleets, CarRequests
 - **User** belongs to: Stadium (optional), Department (optional)
-- **Fleet** belongs to: Stadium, Department (optional), User (assigned)
-- **HandoverLog** belongs to: Fleet, User
+- **Fleet** belongs to: Stadium, Department (optional), User (assigned); stores additional drivers as JSON
+- **HandoverLog** belongs to: Fleet, User; stores dynamic T&C checkbox state as `tcData` JSON
 - **MaintenanceLog** belongs to: Fleet, User (reporter)
 - **CarRequest** belongs to: Stadium, Department, User (reviewer)
+- **SystemSettings** stores T&C content (titles + TipTap HTML bodies) and dynamic checkbox definitions
 
 ## Configuration
 
@@ -468,21 +507,21 @@ AuditLog
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `DATABASE_URL` | PostgreSQL or SQLite connection string | Yes |
 | `JWT_SECRET` | JWT signing secret | Yes |
 | `JWT_REFRESH_SECRET` | Refresh token secret | Yes |
-| `MINIO_ENDPOINT` | MinIO endpoint | Yes |
-| `MINIO_PORT` | MinIO port | Yes |
-| `MINIO_ACCESS_KEY` | MinIO access key | Yes |
-| `MINIO_SECRET_KEY` | MinIO secret key | Yes |
-| `MINIO_BUCKET` | MinIO bucket name | Yes |
+| `CORS_ORIGIN` | Allowed CORS origin(s) | Yes |
+| `MINIO_ENDPOINT` | MinIO endpoint | Prod only |
+| `MINIO_PORT` | MinIO port | Prod only |
+| `MINIO_ACCESS_KEY` | MinIO access key | Prod only |
+| `MINIO_SECRET_KEY` | MinIO secret key | Prod only |
+| `MINIO_BUCKET` | MinIO bucket name | Prod only |
 | `MINIO_USE_SSL` | Use SSL for MinIO | No |
 | `SMTP_HOST` | SMTP host | Yes |
 | `SMTP_PORT` | SMTP port | Yes |
 | `SMTP_USER` | SMTP username | No |
 | `SMTP_PASS` | SMTP password | No |
 | `SMTP_FROM` | From email address | Yes |
-| `CORS_ORIGIN` | Allowed CORS origin | Yes |
 
 #### Frontend
 
@@ -580,4 +619,4 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ## Support
 
-For issues and feature requests, please use the [GitHub Issues](https://github.com/O96a/GCMS/issues) page.
+For issues and feature requests, please use the [GitHub Issues](https://github.com/cyberlifeboy-design/GCMS-v2/issues) page.

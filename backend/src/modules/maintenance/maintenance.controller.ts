@@ -8,6 +8,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 const reportIssueSchema = z.object({
     fleetId: z.string().min(1),
+    issueType: z.string().optional(),
     issueDescription: z.string().min(1),
 });
 
@@ -140,6 +141,7 @@ export class MaintenanceController {
             const log = await maintenanceService.reportIssue({
                 fleetId: validatedData.fleetId,
                 reportedById: userId,
+                issueType: validatedData.issueType,
                 issueDescription: validatedData.issueDescription,
                 photosUrls,
             });

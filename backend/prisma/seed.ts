@@ -154,13 +154,14 @@ async function main() {
 
     const observer = await prisma.user.upsert({
         where: { email: 'observer@gcms.com' },
-        update: {},
+        update: { assignAllStadiums: true },
         create: {
             name: 'Observer',
             email: 'observer@gcms.com',
             passwordHash: await bcrypt.hash('Observer@2024!', 10),
             role: 'Observer',
             isActive: true,
+            assignAllStadiums: true,
         },
     });
     console.log(`✅ Observer: ${observer.email}`);

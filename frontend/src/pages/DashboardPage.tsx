@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { reportsApi, notificationsApi, stadiumsApi, handoverApi } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck, Bell, AlertCircle, ArrowRightLeft } from 'lucide-react';
+import { reportsApi, notificationsApi, stadiumsApi, handoverApi, fleetApi } from '@/lib/api';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, MapPin, UserCheck, Bell, AlertCircle, ArrowRightLeft, Users, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuthStore } from '@/stores/authStore';
@@ -11,100 +11,203 @@ import { Badge } from '@/components/ui/badge';
 import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
 import { formatDate } from '@/lib/dateUtils';
 
+const cartStatusColors: Record<string, string> = {
+    Available: 'bg-green-100 text-green-800',
+    Dispatched: 'bg-blue-100 text-blue-800',
+    'Under Maintenance': 'bg-red-100 text-red-800',
+    Active: 'bg-purple-100 text-purple-800',
+    Returned: 'bg-indigo-100 text-indigo-800',
+};
+
+function CartCard({ cart }: { cart: any }) {
+    const [expanded, setExpanded] = useState(false);
+    const [drivers, setDrivers] = useState<any[]>([]);
+    const [dLoading, setDLoading] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+
+    const toggle = async () => {
+        if (!loaded) {
+            setDLoading(true);
+            try {
+                const res = await fleetApi.getDrivers(cart.id);
+                setDrivers(res.data.additionalDrivers || []);
+            } catch { setDrivers([]); }
+            finally { setDLoading(false); setLoaded(true); }
+        }
+        setExpanded(p => !p);
+    };
+
+    return (
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Car className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                        <p className="font-bold text-base font-mono">{cart.carNumber}</p>
+                        <p className="text-xs text-muted-foreground">{cart.carType}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <Badge className={`text-[10px] font-semibold ${cartStatusColors[cart.status] ?? 'bg-muted text-muted-foreground'}`}>
+                        {cart.status}
+                    </Badge>
+                    <button
+                        onClick={toggle}
+                        className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+                    >
+                        <Users className="w-3.5 h-3.5" />
+                        Drivers
+                        {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                </div>
+            </div>
+            {expanded && (
+                <div className="border-t bg-muted/20 px-4 py-3">
+                    {dLoading ? (
+                        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin" /></div>
+                    ) : drivers.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-1">No additional drivers assigned</p>
+                    ) : (
+                        <div className="space-y-2">
+                            <p className="text-[10px] font-semibold uppercase text-muted-foreground">Additional Drivers ({drivers.length})</p>
+                            {drivers.map((d: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between text-xs">
+                                    <span className="font-medium">{d.name}</span>
+                                    <span className="text-muted-foreground">{d.phone || d.accreditationNumber || '—'}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // FA User focused dashboard
 function FADashboard({ user }: { user: { name?: string; email?: string; stadium?: { id: string; name: string }; stadiumId?: string } }) {
     const navigate = useNavigate();
     const [poolDashboard, setPoolDashboard] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [unreadNotifs, setUnreadNotifs] = useState(0);
 
     useEffect(() => {
-        handoverApi.getPoolDashboard().then(res => {
-            setPoolDashboard(res.data);
+        Promise.all([
+            handoverApi.getPoolDashboard(),
+            notificationsApi.getAll({ limit: 50 }),
+        ]).then(([poolRes, notifRes]) => {
+            setPoolDashboard(poolRes.data);
+            const notifs = notifRes.data.data || [];
+            setUnreadNotifs(notifs.filter((n: any) => !n.isRead).length);
         }).catch(console.error).finally(() => setLoading(false));
     }, []);
 
-    const userCarts = poolDashboard?.userAssignedCarts || [];
+    const userCarts: any[] = poolDashboard?.userAssignedCarts || [];
     const typeBreakdown = userCarts.reduce((acc: Record<string, number>, cart: any) => {
         acc[cart.carType] = (acc[cart.carType] || 0) + 1;
         return acc;
     }, {});
 
+    const statCards = [
+        { label: 'Assigned Carts', value: userCarts.length, icon: Car, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { label: 'Available', value: userCarts.filter(c => c.status === 'Available').length, icon: Shield, color: 'text-green-600', bg: 'bg-green-50' },
+        { label: 'In Use / Active', value: userCarts.filter(c => ['Dispatched', 'Active'].includes(c.status)).length, icon: ArrowRightLeft, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { label: 'Unread Notifications', value: unreadNotifs, icon: Bell, color: 'text-purple-600', bg: 'bg-purple-50', onClick: () => navigate('/notifications') },
+    ];
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in duration-500">
             <div>
-                <h1 className="text-3xl font-bold">Dashboard</h1>
-                <p className="text-muted-foreground mt-1">
+                <h1 className="text-3xl font-extrabold tracking-tight">Dashboard</h1>
+                <p className="text-muted-foreground mt-1 flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
                     Venue: <span className="font-semibold">{user.stadium?.name || 'Unassigned'}</span>
                 </p>
             </div>
 
-            {/* Assigned Venue Summary */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-cyan-500" />
-                        {user.stadium?.name || 'My Venue'}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 animate-spin" /></div>
-                    ) : (
-                        <div className="space-y-4">
-                            {Object.keys(typeBreakdown).length > 0 ? (
-                                <>
-                                    <p className="text-sm text-muted-foreground font-medium">My Assigned Cars by Type</p>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                        {Object.entries(typeBreakdown).map(([type, count]) => (
-                                            <div key={type} className="bg-muted/50 rounded-lg p-3 text-center">
-                                                <Car className="w-5 h-5 mx-auto mb-1 text-primary" />
-                                                <p className="text-2xl font-bold">{count as number}</p>
-                                                <p className="text-xs text-muted-foreground">{type}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="space-y-2 mt-4">
-                                        <p className="text-sm font-medium">My Cars</p>
-                                        {userCarts.map((cart: any) => (
-                                            <div key={cart.id} className="flex items-center justify-between p-3 rounded-lg border">
-                                                <div className="flex items-center gap-3">
-                                                    <Car className="w-4 h-4 text-muted-foreground" />
-                                                    <div>
-                                                        <p className="font-medium">{cart.carNumber}</p>
-                                                        <p className="text-xs text-muted-foreground">{cart.carType}</p>
-                                                    </div>
-                                                </div>
-                                                <Badge variant={
-                                                    cart.status === 'Dispatched' ? 'default' : 
-                                                    cart.status === 'Active' ? 'secondary' : 
-                                                    cart.status === 'Returned' ? 'outline' : 
-                                                    'outline'
-                                                } className={
-                                                    cart.status === 'Active' ? 'bg-purple-100 text-purple-800' :
-                                                    cart.status === 'Returned' ? 'bg-indigo-100 text-indigo-800' :
-                                                    ''
-                                                }>
-                                                    {cart.status}
-                                                </Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
+            {/* Analytics cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {statCards.map(s => (
+                    <Card
+                        key={s.label}
+                        className={`border-none shadow-sm cursor-pointer transition-shadow hover:shadow-md ${s.bg}`}
+                        onClick={s.onClick}
+                    >
+                        <CardContent className="pt-5 pb-4 px-5 flex flex-col gap-2">
+                            <s.icon className={`w-5 h-5 ${s.color}`} />
+                            {loading ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                             ) : (
-                                <p className="text-center py-8 text-muted-foreground">No cars assigned to you yet</p>
+                                <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                             )}
+                            <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            {/* Cart type breakdown */}
+            {!loading && Object.keys(typeBreakdown).length > 1 && (
+                <Card className="border-none shadow-sm">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Fleet by Type</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {Object.entries(typeBreakdown).map(([type, count]) => (
+                            <div key={type} className="bg-muted/40 rounded-lg p-3 text-center">
+                                <p className="text-2xl font-black text-primary">{count as number}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{type}</p>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Cart list with additional drivers */}
+            <Card className="border-none shadow-md overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent border-b py-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <Car className="w-4 h-4 text-primary" /> My Assigned Carts
+                    </CardTitle>
+                    <CardDescription>Click "Drivers" on any cart to view assigned additional drivers</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4">
+                    {loading ? (
+                        <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                    ) : userCarts.length === 0 ? (
+                        <div className="text-center py-10 text-muted-foreground">
+                            <Car className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                            <p>No carts assigned to you yet</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {userCarts.map((cart: any) => <CartCard key={cart.id} cart={cart} />)}
                         </div>
                     )}
                 </CardContent>
             </Card>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-4">
-                <Button className="h-16 text-base" onClick={() => navigate('/handover')}>
-                    <ArrowRightLeft className="w-5 h-5 mr-2" /> Check-In / Check-Out
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Button className="h-14 text-sm flex-col gap-1" onClick={() => navigate('/handover')}>
+                    <ArrowRightLeft className="w-5 h-5" /> Check-In / Out
                 </Button>
-                <Button variant="outline" className="h-16 text-base" onClick={() => navigate('/handover')}>
-                    <TrendingUp className="w-5 h-5 mr-2" /> View Activity
+                <Button variant="outline" className="h-14 text-sm flex-col gap-1" onClick={() => navigate('/usage-history')}>
+                    <Clock className="w-5 h-5" /> Usage History
+                </Button>
+                <Button variant="outline" className="h-14 text-sm flex-col gap-1" onClick={() => navigate('/my-reports')}>
+                    <FileText className="w-5 h-5" /> My Reports
+                </Button>
+                <Button variant="outline" className="h-14 text-sm flex-col gap-1 relative" onClick={() => navigate('/notifications')}>
+                    <Bell className="w-5 h-5" />
+                    Notifications
+                    {unreadNotifs > 0 && (
+                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
+                            {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                        </span>
+                    )}
                 </Button>
             </div>
         </div>
@@ -171,10 +274,11 @@ export function DashboardPage() {
     const [notifStats, setNotifStats] = useState<NotificationStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
-    const [stadiumFilter, setStadiumFilter] = useState<string>(() => {
-        if (user?.role === 'Admin' && user?.stadiumId) return user.stadiumId;
-        return '';
-    });
+    const isAdmin = user?.role === 'Admin';
+    // Admin is always scoped to their venue — no filter control
+    const [stadiumFilter, setStadiumFilter] = useState<string>(
+        isAdmin && user?.stadiumId ? user.stadiumId : ''
+    );
 
     const loadStats = async (stadiumId?: string) => {
         try {
@@ -201,7 +305,8 @@ export function DashboardPage() {
                 setStadiums(res.data?.data || res.data || []);
             } catch (e) { /* ignore */ }
         };
-        if (user?.role !== 'Admin') loadStadiums();
+        // Admin is venue-locked; others need the full list for the filter dropdown
+        if (!isAdmin) loadStadiums();
         loadStats(stadiumFilter || undefined);
     }, []);
 
@@ -212,7 +317,7 @@ export function DashboardPage() {
     const totalCarts = stats?.fleetByStatus.reduce((acc, curr) => acc + curr.count, 0) || 0;
 
     const summaryCards = [
-        { label: 'Active Stadiums', value: stats?.activeStadiumsCount || 0, icon: MapPin, color: 'text-cyan-500', bg: 'bg-cyan-50', path: '/stadiums' },
+        ...(!isAdmin ? [{ label: 'Active Stadiums', value: stats?.activeStadiumsCount || 0, icon: MapPin, color: 'text-cyan-500', bg: 'bg-cyan-50', path: '/stadiums' }] : []),
         { label: 'Total Carts', value: totalCarts, icon: Car, color: 'text-blue-500', bg: 'bg-blue-50', path: '/fleet' },
         { label: 'Active FAs', value: stats?.activeUsersCount || 0, icon: UserCheck, color: 'text-green-500', bg: 'bg-green-50', path: '/users' },
         { label: 'Open Issues', value: stats?.openIssuesCount || 0, icon: Wrench, color: 'text-red-500', bg: 'bg-red-50', path: '/maintenance' },
@@ -289,12 +394,18 @@ export function DashboardPage() {
                 <div>
                     <h1 className="text-3xl font-bold">Dashboard</h1>
                     <p className="text-muted-foreground mt-1">
-                        Site: <span className="font-semibold">{user?.stadiumId ? 'Venue Scoped' : 'All Venues'}</span> —
+                        Viewing: <span className="font-semibold">
+                            {isAdmin
+                                ? (user?.stadium?.name ?? 'My Venue')
+                                : stadiumFilter
+                                    ? (stadiums.find(s => s.id === stadiumFilter)?.name ?? 'Filtered Venue')
+                                    : 'All Venues'}
+                        </span> —
                         Role: <span className="text-xs uppercase px-1.5 py-0.5 bg-muted rounded">{user?.role}</span>
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    {user?.role !== 'Admin' && stadiums.length > 0 && (
+                    {!isAdmin && stadiums.length > 0 && (
                         <Select value={stadiumFilter || '__all__'} onValueChange={v => setStadiumFilter(v === '__all__' ? '' : v)}>
                             <SelectTrigger className="w-44"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
                             <SelectContent>
@@ -409,13 +520,14 @@ export function DashboardPage() {
 
             {/* Stadium Information & FA Fleet Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Active Stadiums List */}
+                {/* Active Stadiums List — Admin sees only their venue */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                            <MapPin className="w-5 h-5 text-cyan-500" /> Active Stadiums
+                            <MapPin className="w-5 h-5 text-cyan-500" />
+                            {isAdmin ? 'My Venue' : 'Active Stadiums'}
                         </CardTitle>
-                        <Badge variant="secondary">{stats?.activeStadiumsCount || 0} venues</Badge>
+                        {!isAdmin && <Badge variant="secondary">{stats?.activeStadiumsCount || 0} venues</Badge>}
                     </CardHeader>
                     <CardContent className="pt-4">
                         <div className="space-y-3 max-h-[400px] overflow-y-auto">

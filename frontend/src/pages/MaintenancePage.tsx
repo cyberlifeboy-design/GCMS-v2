@@ -17,6 +17,7 @@ interface MaintenanceLog {
     id: string;
     fleetId: string;
     fleet: { carNumber: string; carType: string; stadium?: { id: string; name: string; code: string } };
+    issueType?: string;
     issueDescription: string;
     status: 'Open' | 'InProgress' | 'Resolved' | 'PendingQuotation' | 'PendingApproval';
     quotationStatus?: 'Requested' | 'Submitted' | 'Approved' | 'Rejected';
@@ -94,7 +95,7 @@ export function MaintenancePage() {
     const [exporting, setExporting] = useState(false);
 
     // Forms
-    const [reportForm, setReportForm] = useState({ fleetId: '', issueDescription: '' });
+    const [reportForm, setReportForm] = useState({ fleetId: '', issueType: '', issueDescription: '' });
     const [statusForm, setStatusForm] = useState({ status: '', resolutionNotes: '' });
     const [costForm, setCostForm] = useState({ fixCost: '' });
     const [photoFiles, setPhotoFiles] = useState<File[]>([]);
@@ -179,11 +180,12 @@ export function MaintenancePage() {
         try {
             const fd = new FormData();
             fd.append('fleetId', reportForm.fleetId);
+            if (reportForm.issueType) fd.append('issueType', reportForm.issueType);
             fd.append('issueDescription', reportForm.issueDescription);
             photoFiles.forEach(f => fd.append('photos', f));
             await maintenanceApi.report(fd);
             setReportOpen(false);
-            setReportForm({ fleetId: '', issueDescription: '' });
+            setReportForm({ fleetId: '', issueType: '', issueDescription: '' });
             setPhotoFiles([]);
             loadData();
         } catch (err: any) {
@@ -284,7 +286,7 @@ export function MaintenancePage() {
                         </Button>
                     )}
                     {canReport && (
-                        <Button onClick={() => { setReportForm({ fleetId: '', issueDescription: '' }); setPhotoFiles([]); setReportOpen(true); }}>
+                        <Button onClick={() => { setReportForm({ fleetId: '', issueType: '', issueDescription: '' }); setPhotoFiles([]); setReportOpen(true); }}>
                             <Plus className="w-4 h-4 mr-2" />Report Issue
                         </Button>
                     )}
@@ -357,6 +359,7 @@ export function MaintenancePage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Cart #</TableHead>
+                                <TableHead>Issue Type</TableHead>
                                 <TableHead>Issue</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Quotation</TableHead>
@@ -368,12 +371,13 @@ export function MaintenancePage() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
                             ) : filtered.length === 0 ? (
-                                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
                             ) : filtered.map(issue => (
                                 <TableRow key={issue.id}>
                                     <TableCell className="font-mono font-semibold">{issue.fleet?.carNumber}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{issue.issueType || '—'}</TableCell>
                                     <TableCell className="max-w-xs truncate" title={issue.issueDescription}>{issue.issueDescription}</TableCell>
                                     <TableCell><Badge className={issueStatusColors[issue.status]}>{issue.status}</Badge></TableCell>
                                     <TableCell>
@@ -458,6 +462,7 @@ export function MaintenancePage() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Approve Maintenance Cost</DialogTitle></DialogHeader>
                     <div className="py-4 space-y-2">
+                        {selectedIssue?.issueType && <p><strong>Type:</strong> {selectedIssue.issueType}</p>}
                         <p><strong>Issue:</strong> {selectedIssue?.issueDescription}</p>
                         <p><strong>Cost:</strong> <span className="text-lg font-bold text-green-600">${selectedIssue?.fixCost?.toFixed(2)}</span></p>
                     </div>
@@ -479,6 +484,21 @@ export function MaintenancePage() {
                                 <SelectTrigger><SelectValue placeholder="Select cart" /></SelectTrigger>
                                 <SelectContent>{fleet.map(v => <SelectItem key={v.id} value={v.id}>{v.carNumber} ({v.carType})</SelectItem>)}</SelectContent>
                             </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Issue Type (optional)</Label>
+                            <select
+                                className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+                                value={reportForm.issueType}
+                                onChange={e => setReportForm(f => ({ ...f, issueType: e.target.value }))}
+                            >
+                                <option value="">— Select issue type —</option>
+                                <option value="Battery and electrical issue">Battery and electrical issue</option>
+                                <option value="Body damage">Body damage</option>
+                                <option value="Tyre issue">Tyre issue</option>
+                                <option value="Brake issue">Brake issue</option>
+                                <option value="Other">Other</option>
+                            </select>
                         </div>
                         <div className="space-y-2">
                             <Label>Issue Description *</Label>

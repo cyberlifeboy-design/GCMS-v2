@@ -40,12 +40,14 @@ const navItems = [
     { name: 'Fleet', href: '/fleet', icon: Car, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'fleet' },
     { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin', 'Contracts', 'MaintenanceTeam'], pageKey: 'fleet' },
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
+    { name: 'Usage History', href: '/usage-history', icon: Clock, roles: ['FA'], pageKey: null },
+    { name: 'My Reports', href: '/my-reports', icon: FileText, roles: ['FA'], pageKey: null },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'maintenance' },
     { name: 'Requests', href: '/requests', icon: Inbox, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'requests' },
     { name: 'Departments', href: '/departments', icon: Building2, roles: ['SuperAdmin', 'Admin'], pageKey: 'departments' },
     { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'], pageKey: 'stadiums' },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'reports' },
-    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'notifications' },
+    { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam', 'FA'], pageKey: 'notifications' },
     { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'], pageKey: 'users' },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'], pageKey: 'settings' },
 ];
@@ -149,8 +151,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                                     key={item.name}
                                     to={item.href}
                                     onClick={handleNavClick}
-                                    className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-                                        }`}
+                                    className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
                                 >
                                     <Icon className="w-5 h-5 flex-shrink-0" />
                                     {item.name}

@@ -194,7 +194,7 @@ export function UsersPage() {
         e.preventDefault();
         setSubmitting(true);
         try {
-            const isFixed = formData.role === 'Contracts' || formData.role === 'MaintenanceTeam';
+            const isFixed = formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer';
             const logisticsDept = departments.find(d => d.name.toLowerCase() === 'logistics');
 
             const payload = {
@@ -260,7 +260,7 @@ export function UsersPage() {
         if (!editUser) return;
         setSubmitting(true);
         try {
-            const isFixed = editData.role === 'Contracts' || editData.role === 'MaintenanceTeam';
+            const isFixed = editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer';
             const logisticsDept = departments.find(d => d.name.toLowerCase() === 'logistics');
 
             const payload = {
@@ -671,17 +671,17 @@ export function UsersPage() {
                             {isSuperAdmin && (
                                 <div className="space-y-2">
                                     <Label className="text-sm font-semibold">Stadium / Venue</Label>
-                                    <Select 
-                                        value={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' ? '__none__' : (formData.stadiumId || '__none__')} 
+                                    <Select
+                                        value={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer' ? '__none__' : (formData.stadiumId || '__none__')}
                                         onValueChange={v => {
                                             const val = v === '__none__' ? '' : v;
                                             setFormData(f => ({ ...f, stadiumId: val, departmentId: '' }));
                                         }}
-                                        disabled={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam'}
+                                        disabled={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer'}
                                     >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select stadium">
-                                                {(formData.role === 'Contracts' || formData.role === 'MaintenanceTeam') ? 'All Stadiums' : undefined}
+                                                {(formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer') ? 'All Stadiums' : undefined}
                                             </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
@@ -694,13 +694,13 @@ export function UsersPage() {
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold">Department</Label>
                                 <Select
-                                    value={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' ? '__none__' : (formData.departmentId || '__none__')}
+                                    value={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer' ? '__none__' : (formData.departmentId || '__none__')}
                                     onValueChange={v => setFormData(f => ({ ...f, departmentId: v === '__none__' ? '' : v }))}
-                                    disabled={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam'}
+                                    disabled={formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer'}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select department">
-                                            {(formData.role === 'Contracts' || formData.role === 'MaintenanceTeam') ? 'Logistics' : undefined}
+                                            {(formData.role === 'Contracts' || formData.role === 'MaintenanceTeam' || formData.role === 'Observer') ? 'Logistics' : undefined}
                                         </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
@@ -849,16 +849,16 @@ export function UsersPage() {
                                         <div className="space-y-2">
                                             <Label className="text-sm font-semibold">Stadium / Venue</Label>
                                             <Select
-                                                value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' ? '__none__' : (editData.stadiumId || '__none__')}
+                                                value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer' ? '__none__' : (editData.stadiumId || '__none__')}
                                                 onValueChange={v => {
                                                     const val = v === '__none__' ? '' : v;
                                                     setEditData(d => ({ ...d, stadiumId: val, departmentId: '' }));
                                                 }}
-                                                disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam'}
+                                                disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer'}
                                             >
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Select stadium">
-                                                        {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam') ? 'All Stadiums' : undefined}
+                                                        {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer') ? 'All Stadiums' : undefined}
                                                     </SelectValue>
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -871,13 +871,13 @@ export function UsersPage() {
                                     <div className="space-y-2">
                                         <Label className="text-sm font-semibold">Department</Label>
                                         <Select
-                                            value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' ? '__none__' : (editData.departmentId || '__none__')}
+                                            value={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer' ? '__none__' : (editData.departmentId || '__none__')}
                                             onValueChange={v => setEditData(d => ({ ...d, departmentId: v === '__none__' ? '' : v }))}
-                                            disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam'}
+                                            disabled={editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer'}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Select department">
-                                                    {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam') ? 'Logistics' : undefined}
+                                                    {(editData.role === 'Contracts' || editData.role === 'MaintenanceTeam' || editData.role === 'Observer') ? 'Logistics' : undefined}
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>

@@ -254,6 +254,19 @@ export class HandoverController {
         }
     }
 
+    static async listForms(req: AuthRequest, res: Response) {
+        try {
+            const { page, limit, status } = req.query as Record<string, string>;
+            const result = await handoverService.listForms(
+                { userId: req.user!.userId, role: req.user!.role, stadiumId: req.user!.stadiumId },
+                { page: page ? parseInt(page) : 1, limit: limit ? parseInt(limit) : 20, status }
+            );
+            res.status(200).json(result);
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    }
+
     static async getPendingHandovers(req: AuthRequest, res: Response) {
         try {
             const role = req.user?.role;
@@ -287,6 +300,33 @@ export class HandoverController {
             res.status(200).json(result);
         } catch (error: any) {
             res.status(400).json({ error: error.message });
+        }
+    }
+
+    static async saveAfterUse(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId, conditionData, additionalDrivers, afteruseSignatureData } = req.body;
+            if (!fleetId) return res.status(400).json({ error: 'fleetId required' });
+            const result = await handoverService.saveAfterUse(fleetId, req.user!.userId, {
+                conditionData, additionalDrivers, afteruseSignatureData,
+            });
+            res.status(200).json(result);
+        } catch (err: any) {
+            res.status(400).json({ error: err.message });
+        }
+    }
+
+    static async adminSignReturn(req: AuthRequest, res: Response) {
+        try {
+            const { fleetId, conditionData, returnSignatureData, returnNotes } = req.body;
+            if (!fleetId) return res.status(400).json({ error: 'fleetId required' });
+            const adminId = req.user!.userId;
+            const log = await handoverService.adminSignReturn(fleetId, adminId, {
+                conditionData, returnSignatureData, returnNotes,
+            });
+            res.status(200).json(log);
+        } catch (err: any) {
+            res.status(400).json({ error: err.message });
         }
     }
 

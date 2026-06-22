@@ -8,11 +8,11 @@ const router = Router();
 
 router.use(authenticate);
 
-// Export audit logs (SuperAdmin only)
-router.get('/audit', requireRole('SuperAdmin'), auditLog(), ReportsController.exportAuditLogs);
+// Export audit logs (SuperAdmin + Observer)
+router.get('/audit', requireRole('SuperAdmin', 'Observer'), auditLog(), ReportsController.exportAuditLogs);
 
-// FA user audit trail (Admin + SuperAdmin)
-router.get('/fa-trail', requireRole('SuperAdmin', 'Admin'), ReportsController.getFaAuditTrail);
+// FA user audit trail (SuperAdmin + Admin + Observer)
+router.get('/fa-trail', requireRole('SuperAdmin', 'Admin', 'Observer'), ReportsController.getFaAuditTrail);
 
 // Get utilization stats (SuperAdmin/Admin/Observer)
 router.get('/utilization', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUtilization);
@@ -33,7 +33,7 @@ router.get('/fleet/export', requireRole('SuperAdmin', 'Admin', 'Observer'), audi
 router.get('/activity/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportActivityTimeline);
 
 // Export full system report
-router.get('/full', requireRole('SuperAdmin', 'Admin'), auditLog(), ReportsController.exportFullReport);
+router.get('/full', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportFullReport);
 
 // ==================== STADIUM REPORTS ====================
 

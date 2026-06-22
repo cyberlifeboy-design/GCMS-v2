@@ -90,13 +90,12 @@ export class ReportsController {
     static async getUtilization(req: AuthRequest, res: Response) {
         try {
             const { stadiumId } = req.query as any;
+            // Admin is scoped to their venue; SuperAdmin/Observer/Contracts/MaintenanceTeam see all
             let filterStadiumId = stadiumId;
-
             if (req.user?.role === 'Admin') {
                 filterStadiumId = req.user.stadiumId;
             }
-
-            const stats = await reportsService.getDashboardStats({ stadiumId: filterStadiumId });
+            const stats = await reportsService.getDashboardStats({ stadiumId: filterStadiumId || undefined });
             res.status(200).json(stats);
         } catch (error) {
             res.status(500).json({ error: 'Failed to get utilization stats' });

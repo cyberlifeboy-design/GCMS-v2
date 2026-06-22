@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi, reportsApi, handoverApi } from '@/lib/api';
+import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi, reportsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download, RotateCcw } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
+import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
 import { toast } from 'sonner';
 
 interface FleetCart {
@@ -171,6 +172,7 @@ export function FleetPage() {
     const [deleteModal, setDeleteModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
     const [bulkModal, setBulkModal] = useState(false);
     const [maintModal, setMaintModal] = useState<{ open: boolean; cart?: FleetCart }>({ open: false });
+    const [returnModal, setReturnModal] = useState<{ open: boolean; fleetId: string } | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     // Form state
@@ -579,19 +581,6 @@ export function FleetPage() {
         }
     };
 
-    const handleAcceptHandback = async (fleetId: string) => {
-        setSubmitting(true);
-        try {
-            await handoverApi.acceptHandback(fleetId);
-            toast.success('Cart released to available pool');
-            loadFleet(true);
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Action failed');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
     const CartTable = ({ data }: { data: FleetCart[] }) => (
         <div className="flex flex-col">
             <div className="max-h-[600px] overflow-y-auto">
@@ -638,8 +627,8 @@ export function FleetPage() {
                                             {isAdmin && (
                                                 <>
                                                     {(cart.status === 'Returned' || cart.status === 'HandbackPending') && (
-                                                        <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleAcceptHandback(cart.id)} title="Accept Handback">
-                                                            <CheckCircle2 className="w-4 h-4" />
+                                                        <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" onClick={() => setReturnModal({ open: true, fleetId: cart.id })} title="Inspect & Sign Return Form">
+                                                            <RotateCcw className="w-4 h-4" />
                                                         </Button>
                                                     )}
                                                     <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
@@ -1057,6 +1046,17 @@ export function FleetPage() {
                     </form>
                 </DialogContent>
             </Dialog>
+
+            {/* Return Inspection Modal */}
+            {returnModal && (
+                <HandoverFormModal
+                    open={returnModal.open}
+                    onClose={() => setReturnModal(null)}
+                    mode="admin-return"
+                    fleetId={returnModal.fleetId}
+                    onComplete={() => { setReturnModal(null); loadFleet(true); }}
+                />
+            )}
         </div>
     );
 }

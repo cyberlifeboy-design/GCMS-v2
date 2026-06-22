@@ -138,6 +138,12 @@ export const handoverApi = {
         apiClient.get('/handover/forms/pending'),
     userSignHandoverForm: (data: Record<string, unknown>) =>
         apiClient.post('/handover/forms/user-sign', data),
+    saveAfterUse: (data: Record<string, unknown>) =>
+        apiClient.post('/handover/forms/afteruse', data),
+    adminReturn: (data: Record<string, unknown>) =>
+        apiClient.post('/handover/forms/admin-return', data),
+    listForms: (params?: Record<string, unknown>) =>
+        apiClient.get('/handover/forms/list', { params }),
 
     // Pool management endpoints
     getPoolStatus: () =>
@@ -156,9 +162,7 @@ export const maintenanceApi = {
     getById: (id: string) => apiClient.get(`/maintenance/${id}`),
     getByFleet: (fleetId: string) => apiClient.get(`/maintenance/fleet/${fleetId}`),
     report: (data: FormData) =>
-        apiClient.post('/maintenance', data, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+        apiClient.post('/maintenance', data),
     requestQuotation: (id: string) => apiClient.post(`/maintenance/${id}/request-quotation`),
     submitCost: (id: string, fixCost: number) => apiClient.post(`/maintenance/${id}/submit-cost`, { fixCost }),
     approveCost: (id: string) => apiClient.post(`/maintenance/${id}/approve-cost`),

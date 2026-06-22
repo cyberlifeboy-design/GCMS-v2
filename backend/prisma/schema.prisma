@@ -58,6 +58,7 @@ model Fleet {
   // Handover state
   handoverSigned   Boolean         @default(false)
   handoverSignedAt DateTime?
+  checkedInAt      DateTime?       // set when FA check-in starts, cleared on check-out
 
   // Additional drivers added by FA user after handover is complete
   // JSON: [{ name, phone, accreditationNumber }]
@@ -103,6 +104,7 @@ model User {
   assignedCarts         Fleet[]         @relation("FleetAssignedUser")
   adminSignedForms      HandoverForm[]  @relation("HandoverFormAdminSigner")
   userSignedForms       HandoverForm[]  @relation("HandoverFormUserSigner")
+  afteruseSignedForms   HandoverForm[]  @relation("HandoverFormAfteruseSigner")
   maintenanceLogs       MaintenanceLog[] @relation("MaintenanceReporter")
   approvedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceApprover")
   reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
@@ -152,6 +154,7 @@ model MaintenanceLog {
   reportedById     String
   reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
   issueDescription String
+  issueType        String?   // Battery and electrical issue, Body damage, Tyre issue, Brake issue, Other
   photosUrls       String?   @default("[]") // SQLite fallback: Store as JSON string
   reportedAt       DateTime  @default(now())
   status           String    @default("Open") // Open, InProgress, Resolved, PendingQuotation, PendingApproval
@@ -366,7 +369,13 @@ model HandoverForm {
   userSignedById        String?
   userSignedByUser      User?    @relation("HandoverFormUserSigner", fields: [userSignedById], references: [id])
 
-  // PENDING | ADMIN_SIGNED | COMPLETE
+  // ── After-Use Signature (FA signs off after usage — handback) ──
+  afteruseSignatureData String?
+  afteruseSignedAt      DateTime?
+  afteruseSignedById    String?
+  afteruseSignedByUser  User?    @relation("HandoverFormAfteruseSigner", fields: [afteruseSignedById], references: [id])
+
+  // PENDING | ADMIN_SIGNED | COMPLETE | HANDBACK_PENDING
   status                String   @default("PENDING")
 
   createdAt   DateTime @default(now())

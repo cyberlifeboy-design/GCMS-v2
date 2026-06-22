@@ -48,8 +48,13 @@ export const checkStadiumAccess = (stadiumIdFromRequest: (req: AuthRequest) => s
             return;
         }
 
-        // SuperAdmin and Observer have access to all stadiums
-        if (req.user.role === 'SuperAdmin' || req.user.role === 'Observer') {
+        // SuperAdmin, Observer, Contracts, and MaintenanceTeam have access to all stadiums
+        if (
+            req.user.role === 'SuperAdmin' ||
+            req.user.role === 'Observer' ||
+            req.user.role === 'Contracts' ||
+            req.user.role === 'MaintenanceTeam'
+        ) {
             next();
             return;
         }

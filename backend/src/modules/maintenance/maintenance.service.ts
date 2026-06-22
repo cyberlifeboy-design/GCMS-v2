@@ -121,17 +121,20 @@ export class MaintenanceService {
     async reportIssue(data: {
         fleetId: string;
         reportedById: string;
+        issueType?: string;
         issueDescription: string;
         photosUrls?: string[];
         updateFleetStatus?: boolean;
     }) {
-        return prisma.$transaction(async (tx) => {
-            const log = await tx.maintenanceLog.create({
+        // Keep the transaction short — only atomic DB writes
+        const log = await prisma.$transaction(async (tx) => {
+            const created = await tx.maintenanceLog.create({
                 data: {
                     fleetId: data.fleetId,
                     reportedById: data.reportedById,
+                    issueType: data.issueType || null,
                     issueDescription: data.issueDescription,
-                    photosUrls: data.photosUrls || [],
+                    photosUrls: JSON.stringify(data.photosUrls || []),
                     status: 'Open',
                 },
                 include: {
@@ -147,25 +150,30 @@ export class MaintenanceService {
                 });
             }
 
-            // Create notifications for all admins and the reporter
-            const reporter = log.reportedBy;
+            return created;
+        });
+
+        // Send notifications outside the transaction so they can't time it out
+        try {
             const stadiumId = log.fleet?.stadiumId;
-            
-            // Notify all admins (SuperAdmin and Admin roles)
+            const issueLabel = data.issueType ? `[${data.issueType}] ` : '';
+            const shortDesc = data.issueDescription.length > 80 ? data.issueDescription.substring(0, 80) + '...' : data.issueDescription;
             await notificationService.createForRoles(
                 {
                     type: 'IssueReported',
-                    title: 'New Maintenance Issue Reported',
-                    message: `${log.fleet?.carNumber || 'Cart'}: ${data.issueDescription.substring(0, 100)}${data.issueDescription.length > 100 ? '...' : ''}`,
+                    title: `Issue Reported — ${log.fleet?.carNumber || 'Cart'}`,
+                    message: `${issueLabel}${shortDesc}`,
                     entityType: 'MaintenanceLog',
                     entityId: log.id,
                 },
                 ['SuperAdmin', 'Admin'],
                 stadiumId || undefined,
             );
+        } catch (notifErr) {
+            console.error('Notification failed (non-fatal):', notifErr);
+        }
 
-            return log;
-        });
+        return log;
     }
 
     async updateStatus(id: string, data: {

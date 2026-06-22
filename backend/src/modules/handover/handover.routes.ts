@@ -27,8 +27,11 @@ router.post('/bulk-checkout', authenticate, HandoverController.bulkCheckOut);
 // Handover Form
 router.post('/forms', authenticate, requireRole('Admin', 'SuperAdmin'), HandoverController.createHandoverForm);
 router.get('/forms/pending', authenticate, requireRole('Admin', 'SuperAdmin'), HandoverController.getPendingHandovers);
+router.get('/forms/list', authenticate, HandoverController.listForms);
 router.get('/forms/:fleetId', authenticate, HandoverController.getHandoverForm);
 router.post('/forms/user-sign', authenticate, HandoverController.userSignHandoverForm);
+router.post('/forms/afteruse', authenticate, HandoverController.saveAfterUse);
+router.post('/forms/admin-return', authenticate, requireRole('Admin', 'SuperAdmin'), HandoverController.adminSignReturn);
 
 // History
 router.get('/history', authenticate, HandoverController.getHistory);

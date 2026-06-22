@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { handoverApi, fleetApi, maintenanceApi, notificationsApi } from '@/lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { handoverApi, fleetApi, maintenanceApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock, UserPlus, Trash2, Plus, Phone, Hash, Bell, Wrench, Clock } from 'lucide-react';
+import { LogOut, LogIn, History, Loader2, AlertTriangle, Car, FileSignature, CheckCircle2, RotateCcw, ClipboardList, Lock, UserPlus, Trash2, Plus, Phone, Hash, Timer } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/dateUtils';
 import { toast } from 'sonner';
@@ -18,6 +19,28 @@ import { publicSettingsApi } from '@/lib/api';
 import { Separator } from '@/components/ui/separator';
 import { Pagination } from '@/components/shared/Pagination';
 import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
+
+function useElapsedTime(startIso: string | null): string {
+    const [elapsed, setElapsed] = useState('');
+    const ref = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => {
+        if (!startIso) { setElapsed(''); return; }
+        const update = () => {
+            const diff = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
+            const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
+            setElapsed(h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`);
+        };
+        update();
+        ref.current = setInterval(update, 1000);
+        return () => { if (ref.current) clearInterval(ref.current); };
+    }, [startIso]);
+    return elapsed;
+}
+
+function ElapsedDisplay({ startIso }: { startIso: string }) {
+    const elapsed = useElapsedTime(startIso);
+    return <span>{elapsed}</span>;
+}
 
 interface HandoverLog {
     id: string;
@@ -42,6 +65,7 @@ interface UserAssignedCart {
     departmentName?: string;
     handoverSigned: boolean;
     handoverSignedAt: string | null;
+    checkedInAt: string | null;
     handoverFormStatus: string | null;  // PENDING | ADMIN_SIGNED | COMPLETE | null
     handoverFormId: string | null;
 }
@@ -126,7 +150,8 @@ export function HandoverPage() {
     const isFA = role === 'FA';
     const isAdmin = role === 'Admin' || role === 'SuperAdmin';
 
-    const [activeTab, setActiveTab] = useState(isFA ? 'fa-history' : 'pending');
+    const [searchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'pending');
     const [poolDashboard, setPoolDashboard] = useState<PoolDashboard | null>(null);
     const [poolLoading, setPoolLoading] = useState(true);
     const [history, setHistory] = useState<HandoverLog[]>([]);
@@ -142,17 +167,20 @@ export function HandoverPage() {
     const [checkoutOpen, setCheckoutOpen] = useState(false);
 
     // Handover Form Modal
-    const [formModal, setFormModal] = useState<{ open: boolean; fleetId: string; mode: 'admin' | 'user' | 'view' } | null>(null);
+    const [formModal, setFormModal] = useState<{ open: boolean; fleetId: string; mode: 'admin' | 'user' | 'view' | 'afteruse' | 'admin-return' } | null>(null);
+
+    // HandbackPending / Returned carts for admin
+    const [handbackCarts, setHandbackCarts] = useState<Array<{ id: string; carNumber: string; carType: string; status: string; stadium: { name: string; code: string }; assignedUser?: { name: string; email: string } | null }>>([]);
+    const [handbackLoading, setHandbackLoading] = useState(false);
+
+    // Report Issue modal (FA while cart is Dispatched)
+    const [reportIssueModal, setReportIssueModal] = useState<{ open: boolean; fleetId: string; carNumber: string } | null>(null);
+    const [issueForm, setIssueForm] = useState({ issueType: '', issueDescription: '', photos: [] as File[] });
+    const [issueSaving, setIssueSaving] = useState(false);
     const [pendingHandovers, setPendingHandovers] = useState<{ formsInProgress: HandoverFormRecord[]; cartsWithoutForm: PendingHandoverCart[] } | null>(null);
     const [pendingLoading, setPendingLoading] = useState(false);
     const [systemLogoUrl, setSystemLogoUrl] = useState<string | null>(null);
 
-    // FA-specific: my reports + notifications
-    const [myReports, setMyReports] = useState<any[]>([]);
-    const [reportsLoading, setReportsLoading] = useState(false);
-    const [notifications, setNotifications] = useState<any[]>([]);
-    const [notifsLoading, setNotifsLoading] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
 
     // Additional drivers modal
     const [driversModal, setDriversModal] = useState<{ open: boolean; fleetId: string; carNumber: string } | null>(null);
@@ -173,6 +201,22 @@ export function HandoverPage() {
             console.error('Failed to load pending handovers');
         } finally {
             setPendingLoading(false);
+        }
+    };
+
+    const loadHandbackCarts = async () => {
+        if (!isAdmin) return;
+        setHandbackLoading(true);
+        try {
+            const [r, h] = await Promise.all([
+                fleetApi.getAll({ status: 'Returned', limit: 100 }),
+                fleetApi.getAll({ status: 'HandbackPending', limit: 100 }),
+            ]);
+            setHandbackCarts([...(r.data.data || []), ...(h.data.data || [])]);
+        } catch {
+            // silently fail
+        } finally {
+            setHandbackLoading(false);
         }
     };
 
@@ -207,34 +251,6 @@ export function HandoverPage() {
         }
     };
 
-    const loadMyReports = async () => {
-        if (!isFA) return;
-        setReportsLoading(true);
-        try {
-            const res = await maintenanceApi.getAll({ limit: 100 } as any);
-            setMyReports(res.data.data || []);
-        } catch { /* silent */ }
-        finally { setReportsLoading(false); }
-    };
-
-    const loadNotifications = async () => {
-        if (!isFA) return;
-        setNotifsLoading(true);
-        try {
-            const res = await notificationsApi.getAll({ limit: 50 });
-            setNotifications(res.data.data || []);
-            setUnreadCount((res.data.data || []).filter((n: any) => !n.isRead).length);
-        } catch { /* silent */ }
-        finally { setNotifsLoading(false); }
-    };
-
-    const markNotifRead = async (id: string) => {
-        try {
-            await notificationsApi.markAsRead(id);
-            setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-            setUnreadCount(prev => Math.max(0, prev - 1));
-        } catch { /* silent */ }
-    };
 
     const openDriversModal = async (fleetId: string, carNumber: string) => {
         setDriversModal({ open: true, fleetId, carNumber });
@@ -260,15 +276,14 @@ export function HandoverPage() {
 
     useEffect(() => {
         loadPoolDashboard();
-        if (isAdmin) loadPendingHandovers();
-        if (isFA) { loadMyReports(); loadNotifications(); }
+        if (isAdmin) { loadPendingHandovers(); loadHandbackCarts(); }
         publicSettingsApi.getBranding().then(res => {
             if (res.data?.logoUrl) setSystemLogoUrl(res.data.logoUrl);
         }).catch(() => {});
     }, []);
 
     useEffect(() => {
-        loadHistory();
+        if (isAdmin) loadHistory();
     }, [page, actionFilter, stadiumFilter]);
 
     const handleSignHandover = async () => {
@@ -324,18 +339,29 @@ export function HandoverPage() {
         }
     };
 
-    const handleRequestHandback = async (fleetId: string) => {
-        setSubmitting(true);
+    const handleReportIssue = async () => {
+        if (!reportIssueModal || !issueForm.issueDescription.trim()) {
+            toast.error('Please describe the issue');
+            return;
+        }
+        setIssueSaving(true);
         try {
-            await handoverApi.requestHandback(fleetId);
-            toast.success('Handback requested. Please return keys to Admin.');
-            loadPoolDashboard();
+            const fd = new FormData();
+            fd.append('fleetId', reportIssueModal.fleetId);
+            if (issueForm.issueType) fd.append('issueType', issueForm.issueType);
+            fd.append('issueDescription', issueForm.issueDescription);
+            issueForm.photos.forEach(p => fd.append('photos', p));
+            await maintenanceApi.report(fd);
+            toast.success('Issue reported. The admin has been notified.');
+            setReportIssueModal(null);
+            setIssueForm({ issueType: '', issueDescription: '', photos: [] });
         } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Request failed');
+            toast.error(err.response?.data?.error || 'Failed to report issue');
         } finally {
-            setSubmitting(false);
+            setIssueSaving(false);
         }
     };
+
 
     const filteredActivity = poolDashboard?.recentActivity.filter(a => 
         a.carNumber.toLowerCase().includes(search.toLowerCase()) ||
@@ -417,29 +443,79 @@ export function HandoverPage() {
                                         )}
                                     </CardContent>
                                     <CardFooter className="bg-muted/10 border-t p-4 flex flex-col gap-2">
-                                        {readyForUserSign ? (
+                                        {/* Sign handover (pre-usage) */}
+                                        {readyForUserSign && (
                                             <Button className="w-full bg-purple-600 hover:bg-purple-700 h-11 rounded-xl font-bold" onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'user' })}>
                                                 <FileSignature className="w-4 h-4 mr-2" /> Sign Handover Form
                                             </Button>
-                                        ) : awaitingAdminSign ? (
+                                        )}
+                                        {awaitingAdminSign && (
                                             <Button variant="outline" className="w-full h-11 rounded-xl font-bold opacity-60" disabled>
                                                 <Lock className="w-4 h-4 mr-2" /> Awaiting Admin Signature
                                             </Button>
-                                        ) : handoverComplete && cart.status === 'Active' ? (
-                                            <Button className="w-full bg-blue-600 hover:bg-blue-700 h-11 rounded-xl font-bold" onClick={() => handleCheckIn(cart.id)} disabled={submitting}>
-                                                <LogIn className="w-4 h-4 mr-2" /> Start Usage (Check-In)
+                                        )}
+
+                                        {/* TWO side-by-side usage buttons shown once handover is complete */}
+                                        {handoverComplete && (cart.status === 'Active' || cart.status === 'Dispatched') && (
+                                            <div className="grid grid-cols-2 gap-2 w-full">
+                                                <Button
+                                                    className={`h-11 rounded-xl font-bold text-xs flex-col gap-0.5 ${cart.status === 'Active' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-200 text-blue-700 cursor-not-allowed'}`}
+                                                    onClick={() => cart.status === 'Active' && handleCheckIn(cart.id)}
+                                                    disabled={submitting || cart.status === 'Dispatched'}
+                                                >
+                                                    <span className="flex items-center gap-1"><LogIn className="w-3.5 h-3.5" /> Check In</span>
+                                                    <span className="text-[9px] font-normal opacity-80">Start Using</span>
+                                                </Button>
+                                                <Button
+                                                    className={`h-11 rounded-xl font-bold text-xs flex-col gap-0.5 text-white ${cart.status === 'Dispatched' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-muted text-muted-foreground cursor-not-allowed'}`}
+                                                    onClick={() => cart.status === 'Dispatched' && (() => { setSelectedCart(cart); setCheckoutOpen(true); })()}
+                                                    disabled={submitting || cart.status === 'Active'}
+                                                >
+                                                    <span className="flex items-center gap-1"><LogOut className="w-3.5 h-3.5" /> Check Out</span>
+                                                    <span className="text-[9px] font-normal opacity-80">Stop Using</span>
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {/* Timer display when dispatched */}
+                                        {handoverComplete && cart.status === 'Dispatched' && cart.checkedInAt && (
+                                            <div className="w-full flex items-center justify-center gap-2 text-xs text-amber-700 font-semibold bg-amber-50 rounded-lg py-2 border border-amber-100">
+                                                <Timer className="w-3.5 h-3.5 animate-pulse" />
+                                                <ElapsedDisplay startIso={cart.checkedInAt} />
+                                                <span className="font-normal text-amber-600">session active</span>
+                                            </div>
+                                        )}
+
+                                        {/* Hand Back - after check-out */}
+                                        {handoverComplete && cart.status === 'Returned' && (
+                                            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 rounded-xl font-bold" onClick={() => {
+                                                handoverApi.requestHandback(cart.id).then(() => {
+                                                    toast.success('Hand back request sent to admin.');
+                                                    loadPoolDashboard();
+                                                }).catch((err: any) => toast.error(err.response?.data?.error || 'Failed'));
+                                            }} disabled={submitting}>
+                                                <RotateCcw className="w-4 h-4 mr-2" /> Hand Back (Return the Car)
                                             </Button>
-                                        ) : handoverComplete && cart.status === 'Dispatched' ? (
-                                            <Button className="w-full bg-amber-600 hover:bg-amber-700 h-11 rounded-xl font-bold text-white" onClick={() => { setSelectedCart(cart); setCheckoutOpen(true); }}>
-                                                <LogOut className="w-4 h-4 mr-2" /> Finish Usage (Check-Out)
+                                        )}
+
+                                        {/* Awaiting admin return sign-off */}
+                                        {cart.status === 'HandbackPending' && (
+                                            <Button variant="outline" className="w-full h-11 rounded-xl font-bold opacity-70 cursor-not-allowed border-indigo-200 text-indigo-700" disabled>
+                                                <CheckCircle2 className="w-4 h-4 mr-2" /> Return Sent — Awaiting Admin Sign-Off
                                             </Button>
-                                        ) : handoverComplete && cart.status === 'Returned' ? (
-                                            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 rounded-xl font-bold" onClick={() => handleRequestHandback(cart.id)} disabled={submitting}>
-                                                <RotateCcw className="w-4 h-4 mr-2" /> Handback to Admin
-                                            </Button>
-                                        ) : (
+                                        )}
+
+                                        {/* Fallback */}
+                                        {!readyForUserSign && !awaitingAdminSign && !handoverComplete && cart.status !== 'HandbackPending' && (
                                             <Button variant="secondary" className="w-full h-11 rounded-xl font-bold opacity-50 cursor-not-allowed" disabled>
                                                 Waiting for Admin
+                                            </Button>
+                                        )}
+
+                                        {/* Report Issue (while dispatched) */}
+                                        {handoverComplete && cart.status === 'Dispatched' && (
+                                            <Button variant="outline" size="sm" className="w-full text-xs border-red-200 text-red-700 hover:bg-red-50" onClick={() => { setReportIssueModal({ open: true, fleetId: cart.id, carNumber: cart.carNumber }); setIssueForm({ issueType: '', issueDescription: '', photos: [] }); }}>
+                                                <AlertTriangle className="w-3 h-3 mr-1" /> Report Issue
                                             </Button>
                                         )}
                                         {cart.handoverFormStatus && (
@@ -472,35 +548,60 @@ export function HandoverPage() {
                 <div className="space-y-6">
                     <h2 className="text-2xl font-bold flex items-center gap-2"><History className="text-primary w-6 h-6" /> Releases & Returns</h2>
                     <Card className="border-none shadow-md overflow-hidden">
-                         <CardHeader className="bg-muted/10">
-                            <CardTitle className="text-lg">Handback Requests</CardTitle>
-                            <CardDescription>Carts that users have finished using and are ready to be returned to the general fleet.</CardDescription>
+                         <CardHeader className="bg-muted/10 flex flex-row items-center justify-between space-y-0 pb-4">
+                            <div>
+                                <CardTitle className="text-lg">Handback Requests</CardTitle>
+                                <CardDescription>Carts returned by users awaiting admin inspection and sign-off before re-entering the pool.</CardDescription>
+                            </div>
+                            {handbackCarts.length > 0 && (
+                                <span className="bg-indigo-600 text-white text-[11px] font-black rounded-full px-2.5 py-1">{handbackCarts.length}</span>
+                            )}
                          </CardHeader>
                          <CardContent className="p-0">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Cart #</TableHead>
-                                        <TableHead>Current Status</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Returned By</TableHead>
                                         <TableHead>Venue</TableHead>
+                                        <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {poolLoading ? (
-                                        <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
-                                    ) : !poolDashboard?.stadiums ? (
-                                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Error loading data</TableCell></TableRow>
-                                    ) : (
+                                    {handbackLoading ? (
+                                        <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
+                                    ) : handbackCarts.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
+                                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <CheckCircle2 className="w-8 h-8 opacity-20" />
-                                                    <p className="font-medium italic">Use the 'Venue Status' tab below to release carts by venue.</p>
+                                                    <p className="font-medium">No pending returns</p>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
-                                    )}
+                                    ) : handbackCarts.map(cart => (
+                                        <TableRow key={cart.id}>
+                                            <TableCell className="font-black font-mono text-primary">{cart.carNumber}</TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">{cart.carType}</TableCell>
+                                            <TableCell>
+                                                <div className="text-sm font-medium">{cart.assignedUser?.name ?? '—'}</div>
+                                                <div className="text-[10px] text-muted-foreground">{cart.assignedUser?.email}</div>
+                                            </TableCell>
+                                            <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium?.code}</Badge></TableCell>
+                                            <TableCell>
+                                                {cart.status === 'Returned' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px]">Checked Out</Badge>}
+                                                {cart.status === 'HandbackPending' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Handback Pending</Badge>}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                    onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'admin-return' })}>
+                                                    <FileSignature className="w-3 h-3 mr-1" /> Inspect &amp; Sign Return
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
                                 </TableBody>
                             </Table>
                          </CardContent>
@@ -508,34 +609,18 @@ export function HandoverPage() {
                 </div>
             )}
 
-            {/* TABS: Admin gets operational views, FA gets personal history/reports/notifications */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            {/* TABS: Admin operational views */}
+            {isAdmin && <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-muted/50 p-1 rounded-xl flex-wrap">
-                    {/* ── Admin tabs ── */}
-                    {isAdmin && <>
-                        <TabsTrigger value="pending" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                            <ClipboardList className="w-3 h-3 mr-1" /> Pending Handovers
-                            {pendingHandovers && (pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length) > 0 && (
-                                <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="activity" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
-                        <TabsTrigger value="history" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>
-                        <TabsTrigger value="venues" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
-                    </>}
-                    {/* ── FA-only tabs ── */}
-                    {isFA && <>
-                        <TabsTrigger value="fa-history" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                            <Clock className="w-3 h-3 mr-1" /> Usage History
-                        </TabsTrigger>
-                        <TabsTrigger value="fa-reports" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                            <Wrench className="w-3 h-3 mr-1" /> My Reports
-                        </TabsTrigger>
-                        <TabsTrigger value="fa-notifications" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                            <Bell className="w-3 h-3 mr-1" /> Notifications
-                            {unreadCount > 0 && <span className="ml-1.5 bg-red-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{unreadCount}</span>}
-                        </TabsTrigger>
-                    </>}
+                    <TabsTrigger value="pending" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                        <ClipboardList className="w-3 h-3 mr-1" /> Pending Handovers
+                        {pendingHandovers && (pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length) > 0 && (
+                            <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
+                        )}
+                    </TabsTrigger>
+                    <TabsTrigger value="activity" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
+                    <TabsTrigger value="history" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>
+                    <TabsTrigger value="venues" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
                 </TabsList>
 
                 {/* ── Pending Handovers (Admin) ── */}
@@ -770,148 +855,8 @@ export function HandoverPage() {
                     </div>
                 </TabsContent>
 
-                {/* ── FA: Usage History ── */}
-                {isFA && (
-                <TabsContent value="fa-history" className="space-y-4">
-                    <Card className="border-none shadow-md overflow-hidden">
-                        <CardHeader className="bg-gradient-to-r from-blue-50/50 to-transparent border-b py-4">
-                            <CardTitle className="flex items-center gap-2 text-blue-800"><Clock className="w-5 h-5" /> My Usage History</CardTitle>
-                            <CardDescription>All check-in / check-out activity for carts assigned to you.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            {histLoading ? (
-                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-                            ) : (
-                                <Table>
-                                    <TableHeader className="bg-muted/30">
-                                        <TableRow>
-                                            <TableHead>Cart</TableHead>
-                                            <TableHead>Action</TableHead>
-                                            <TableHead>Venue</TableHead>
-                                            <TableHead>Date &amp; Time</TableHead>
-                                            <TableHead>Notes</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {history.length === 0 ? (
-                                            <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No usage history yet</TableCell></TableRow>
-                                        ) : history.map(log => (
-                                            <TableRow key={log.id}>
-                                                <TableCell className="font-bold font-mono text-primary">{log.fleet?.carNumber}</TableCell>
-                                                <TableCell>
-                                                    <Badge className={`${actionColors[log.action] ?? 'bg-muted text-muted-foreground'} text-[10px]`}>
-                                                        {actionLabels[log.action] ?? log.action}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-xs text-muted-foreground">{log.fleet?.stadium?.name}</TableCell>
-                                                <TableCell className="text-xs">{formatDateTime(log.createdAt)}</TableCell>
-                                                <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{log.conditionNotes || log.issueDescription || '—'}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-                )}
 
-                {/* ── FA: My Reports ── */}
-                {isFA && (
-                <TabsContent value="fa-reports" className="space-y-4">
-                    <Card className="border-none shadow-md overflow-hidden">
-                        <CardHeader className="bg-gradient-to-r from-red-50/50 to-transparent border-b py-4">
-                            <CardTitle className="flex items-center gap-2 text-red-800"><Wrench className="w-5 h-5" /> My Reported Issues</CardTitle>
-                            <CardDescription>Maintenance and incident reports you've submitted on assigned carts.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            {reportsLoading ? (
-                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-                            ) : (
-                                <Table>
-                                    <TableHeader className="bg-muted/30">
-                                        <TableRow>
-                                            <TableHead>Cart</TableHead>
-                                            <TableHead>Description</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Reported</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {myReports.length === 0 ? (
-                                            <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No issues reported yet</TableCell></TableRow>
-                                        ) : myReports.map((r: any) => (
-                                            <TableRow key={r.id}>
-                                                <TableCell className="font-bold font-mono text-primary">{r.fleet?.carNumber}</TableCell>
-                                                <TableCell className="text-sm max-w-[300px] truncate">{r.issueDescription}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className={`text-[10px] ${
-                                                        r.status === 'Resolved' ? 'border-green-300 text-green-700' :
-                                                        r.status === 'Open' ? 'border-red-300 text-red-700' :
-                                                        'border-amber-300 text-amber-700'
-                                                    }`}>{r.status}</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-xs text-muted-foreground">{formatDateTime(r.reportedAt)}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-                )}
-
-                {/* ── FA: Notifications ── */}
-                {isFA && (
-                <TabsContent value="fa-notifications" className="space-y-4">
-                    <Card className="border-none shadow-md overflow-hidden">
-                        <CardHeader className="bg-gradient-to-r from-purple-50/50 to-transparent border-b py-4 flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle className="flex items-center gap-2 text-purple-800"><Bell className="w-5 h-5" /> Notifications</CardTitle>
-                                <CardDescription>Messages and alerts from the system and your administrators.</CardDescription>
-                            </div>
-                            {unreadCount > 0 && (
-                                <Button variant="outline" size="sm" onClick={async () => {
-                                    try { await notificationsApi.markAllAsRead(); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))); setUnreadCount(0); } catch { /* silent */ }
-                                }}>Mark all read</Button>
-                            )}
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            {notifsLoading ? (
-                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-                            ) : notifications.length === 0 ? (
-                                <div className="text-center py-16 text-muted-foreground">
-                                    <Bell className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                                    <p>No notifications yet</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y">
-                                    {notifications.map((n: any) => (
-                                        <div key={n.id} className={`flex items-start gap-4 px-5 py-4 cursor-pointer transition-colors hover:bg-muted/30 ${!n.isRead ? 'bg-purple-50/40' : ''}`}
-                                            onClick={() => !n.isRead && markNotifRead(n.id)}>
-                                            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${!n.isRead ? 'bg-purple-500' : 'bg-muted-foreground/30'}`} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm ${!n.isRead ? 'font-semibold text-foreground' : 'text-foreground/80'}`}>{n.title}</p>
-                                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-                                                <p className="text-[10px] text-muted-foreground/60 mt-1">{formatDateTime(n.createdAt)}</p>
-                                            </div>
-                                            <Badge variant="outline" className={`text-[9px] flex-shrink-0 ${
-                                                n.type === 'warning' ? 'border-amber-300 text-amber-700' :
-                                                n.type === 'success' ? 'border-green-300 text-green-700' :
-                                                n.type === 'error' ? 'border-red-300 text-red-700' :
-                                                'border-blue-200 text-blue-600'
-                                            }`}>{n.type ?? 'info'}</Badge>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-                )}
-
-            </Tabs>
+            </Tabs>}
 
             {/* ADDITIONAL DRIVERS MODAL */}
             <Dialog open={!!driversModal} onOpenChange={open => !open && setDriversModal(null)}>
@@ -990,10 +935,68 @@ export function HandoverPage() {
                     logoUrl={systemLogoUrl ?? undefined}
                     onComplete={() => {
                         loadPoolDashboard();
-                        if (isAdmin) loadPendingHandovers();
+                        if (isAdmin) { loadPendingHandovers(); loadHandbackCarts(); }
                     }}
                 />
             )}
+
+            {/* REPORT ISSUE MODAL */}
+            <Dialog open={!!reportIssueModal?.open} onOpenChange={open => !open && setReportIssueModal(null)}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-700">
+                            <AlertTriangle className="w-5 h-5" /> Report Issue — Cart {reportIssueModal?.carNumber}
+                        </DialogTitle>
+                        <DialogDescription>Describe the issue with this cart. The maintenance team will be notified.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div>
+                            <Label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Issue Type (optional)</Label>
+                            <select
+                                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-300 bg-white"
+                                value={issueForm.issueType}
+                                onChange={e => setIssueForm(p => ({ ...p, issueType: e.target.value }))}
+                            >
+                                <option value="">— Select issue type —</option>
+                                <option value="Battery and electrical issue">Battery and electrical issue</option>
+                                <option value="Body damage">Body damage</option>
+                                <option value="Tyre issue">Tyre issue</option>
+                                <option value="Brake issue">Brake issue</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <Label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Description *</Label>
+                            <textarea
+                                className="w-full border rounded-lg px-3 py-2 text-sm min-h-[90px] resize-none outline-none focus:ring-2 focus:ring-red-300"
+                                placeholder="Describe the problem in detail..."
+                                value={issueForm.issueDescription}
+                                onChange={e => setIssueForm(p => ({ ...p, issueDescription: e.target.value }))}
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Photos (optional)</Label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="text-sm w-full border rounded-lg px-3 py-2 cursor-pointer"
+                                onChange={e => setIssueForm(p => ({ ...p, photos: Array.from(e.target.files || []) }))}
+                            />
+                            {issueForm.photos.length > 0 && (
+                                <p className="text-xs text-green-600 mt-1 font-medium">{issueForm.photos.length} photo(s) selected</p>
+                            )}
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setReportIssueModal(null)} disabled={issueSaving}>Cancel</Button>
+                        <Button className="bg-red-700 hover:bg-red-600 text-white" onClick={handleReportIssue} disabled={issueSaving || !issueForm.issueDescription.trim()}>
+                            {issueSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <AlertTriangle className="w-4 h-4 mr-2" />}
+                            Submit Report
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* HANDOVER SIGNING MODAL (legacy — kept for backward compat) */}
             <Dialog open={!!signingCart} onOpenChange={open => !open && setSigningCart(null)}>
