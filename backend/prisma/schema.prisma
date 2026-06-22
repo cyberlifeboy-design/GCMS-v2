@@ -64,9 +64,13 @@ model Fleet {
   // JSON: [{ name, phone, accreditationNumber }]
   additionalDrivers String?        @default("[]")
 
+  // Pool: cart is part of shared pool — no dedicated FA assignment needed
+  isPool           Boolean          @default(false)
+
   handoverForm     HandoverForm?
   handoverLogs    HandoverLog[]
   maintenanceLogs MaintenanceLog[]
+  poolBookings    PoolBooking[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -107,7 +111,10 @@ model User {
   afteruseSignedForms   HandoverForm[]  @relation("HandoverFormAfteruseSigner")
   maintenanceLogs       MaintenanceLog[] @relation("MaintenanceReporter")
   approvedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceApprover")
+  escalatedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceEscalatedBy")
   reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
+  createdPoolBookings  PoolBooking[] @relation("PoolBookingCreatedBy")
+  returnedPoolBookings PoolBooking[] @relation("PoolBookingReturnedBy")
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -165,11 +172,24 @@ model MaintenanceLog {
   quotationStatus  String?   // Requested, Submitted, Approved, Rejected
   fixCost          Float?    // The submitted cost for the fix
   
+  // Quotation details (submitted by Maintenance Team)
+  quotationDescription String?   // Description of work to be done
+  quotationTimeline    String?   // Estimated timeline (e.g. "3 days")
+
   // Auditing timestamps
   quotationRequestedAt DateTime?
   costSubmittedAt      DateTime?
   costApprovedAt       DateTime?
-  
+
+  // Admin → Contracts escalation
+  contractsEscalatedAt     DateTime?
+  contractsEscalatedById   String?
+  contractsEscalatedBy     User?     @relation("MaintenanceEscalatedBy", fields: [contractsEscalatedById], references: [id])
+
+  // Rejection
+  rejectionReason      String?
+  rejectedAt           DateTime?
+
   // Relations
   approvedById         String?
   approvedBy           User?     @relation("MaintenanceApprover", fields: [approvedById], references: [id])
@@ -383,6 +403,39 @@ model HandoverForm {
 
   @@index([fleetId])
   @@index([status])
+}
+
+// Pool Booking — short-term checkout of shared pool carts (no handover form needed)
+// Status: Active | Returned
+model PoolBooking {
+  id                  String    @id @default(cuid())
+  fleetId             String
+  fleet               Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+
+  driverName          String
+  driverPhone         String?
+  accreditationNumber String?
+  purpose             String?
+
+  checkoutAt          DateTime  @default(now())
+  expectedReturnAt    DateTime?
+  returnedAt          DateTime?
+
+  status              String    @default("Active") // Active, Returned
+  returnNotes         String?
+
+  createdById         String
+  createdBy           User      @relation("PoolBookingCreatedBy", fields: [createdById], references: [id])
+  returnedById        String?
+  returnedBy          User?     @relation("PoolBookingReturnedBy", fields: [returnedById], references: [id])
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([fleetId])
+  @@index([status])
+  @@index([createdById])
+  @@index([checkoutAt])
 }
 
 // Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected

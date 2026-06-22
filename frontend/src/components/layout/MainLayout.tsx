@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { settingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle, Layers } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { formatDate } from '@/lib/dateUtils';
 
@@ -40,6 +40,7 @@ const navItems = [
     { name: 'Fleet', href: '/fleet', icon: Car, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'fleet' },
     { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin', 'Contracts', 'MaintenanceTeam'], pageKey: 'fleet' },
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
+    { name: 'Pool Booking', href: '/pool-booking', icon: Layers, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'], pageKey: null },
     { name: 'Usage History', href: '/usage-history', icon: Clock, roles: ['FA'], pageKey: null },
     { name: 'My Reports', href: '/my-reports', icon: FileText, roles: ['FA'], pageKey: null },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'maintenance' },

@@ -163,13 +163,22 @@ export const maintenanceApi = {
     getByFleet: (fleetId: string) => apiClient.get(`/maintenance/fleet/${fleetId}`),
     report: (data: FormData) =>
         apiClient.post('/maintenance', data),
-    requestQuotation: (id: string) => apiClient.post(`/maintenance/${id}/request-quotation`),
-    submitCost: (id: string, fixCost: number) => apiClient.post(`/maintenance/${id}/submit-cost`, { fixCost }),
-    approveCost: (id: string) => apiClient.post(`/maintenance/${id}/approve-cost`),
+    escalateToContracts: (id: string) =>
+        apiClient.post(`/maintenance/${id}/escalate`),
+    requestQuotation: (id: string) =>
+        apiClient.post(`/maintenance/${id}/request-quotation`),
+    submitCost: (id: string, data: { fixCost: number; quotationDescription: string; quotationTimeline?: string }) =>
+        apiClient.post(`/maintenance/${id}/submit-cost`, data),
+    approveCost: (id: string) =>
+        apiClient.post(`/maintenance/${id}/approve-cost`),
+    rejectQuotation: (id: string, rejectionReason: string) =>
+        apiClient.post(`/maintenance/${id}/reject-quotation`, { rejectionReason }),
     updateStatus: (id: string, data: { status: string; resolutionNotes?: string }) =>
         apiClient.patch(`/maintenance/${id}/status`, data),
     exportCsv: () =>
         apiClient.get('/maintenance/export', { responseType: 'blob' }),
+    getPdfReportUrl: (id: string) =>
+        `${(import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:3005/api/v1'}/maintenance/${id}/pdf`,
 };
 
 // Stadiums
@@ -372,6 +381,25 @@ export const announcementsApi = {
         apiClient.post(`/announcements/${id}/deactivate`),
     delete: (id: string) =>
         apiClient.delete(`/announcements/${id}`),
+};
+
+export const poolBookingsApi = {
+    getPoolFleet: (params?: { stadiumId?: string }) =>
+        apiClient.get('/pool-bookings/fleet', { params }),
+    getBookings: (params?: { fleetId?: string; stadiumId?: string; status?: string; limit?: number }) =>
+        apiClient.get('/pool-bookings', { params }),
+    checkout: (data: {
+        fleetId: string;
+        driverName: string;
+        driverPhone?: string;
+        accreditationNumber?: string;
+        purpose?: string;
+        expectedReturnAt?: string;
+    }) => apiClient.post('/pool-bookings/checkout', data),
+    returnCart: (bookingId: string, returnNotes?: string) =>
+        apiClient.patch(`/pool-bookings/${bookingId}/return`, { returnNotes }),
+    togglePool: (fleetId: string, isPool: boolean) =>
+        apiClient.patch(`/pool-bookings/fleet/${fleetId}/toggle-pool`, { isPool }),
 };
 
 export default apiClient;

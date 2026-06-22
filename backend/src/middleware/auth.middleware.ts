@@ -23,13 +23,15 @@ export const authenticate = async (
 ): Promise<void> => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        const queryToken = req.query['token'] as string | undefined;
+
+        if (!authHeader?.startsWith('Bearer ') && !queryToken) {
             console.warn(`[AUTH] Missing or invalid Authorization header for path: ${req.path}`);
             res.status(401).json({ error: 'No authentication token provided' });
             return;
         }
 
-        const token = authHeader.substring(7);
+        const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : queryToken!;
 
         const decoded = jwt.verify(token, authConfig.jwt.accessTokenSecret) as {
             userId: string;

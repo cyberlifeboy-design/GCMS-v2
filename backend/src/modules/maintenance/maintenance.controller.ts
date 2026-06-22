@@ -19,6 +19,12 @@ const updateStatusSchema = z.object({
 
 const submitCostSchema = z.object({
     fixCost: z.number().min(0),
+    quotationDescription: z.string().min(1, 'Work description is required'),
+    quotationTimeline: z.string().optional(),
+});
+
+const rejectSchema = z.object({
+    rejectionReason: z.string().min(1, 'Rejection reason is required'),
 });
 
 export class MaintenanceController {
@@ -61,6 +67,16 @@ export class MaintenanceController {
         }
     }
 
+    static async escalateToContracts(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const log = await maintenanceService.escalateToContracts(id, req.user!.userId);
+            res.status(200).json(log);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message || 'Failed to escalate to Contracts' });
+        }
+    }
+
     static async requestQuotation(req: AuthRequest, res: Response) {
         try {
             const id = req.params['id'] as string;
@@ -74,14 +90,14 @@ export class MaintenanceController {
     static async submitCost(req: AuthRequest, res: Response) {
         try {
             const id = req.params['id'] as string;
-            const validatedData = submitCostSchema.parse(req.body);
-            const log = await maintenanceService.submitCost(id, validatedData.fixCost);
+            const data = submitCostSchema.parse(req.body);
+            const log = await maintenanceService.submitCost(id, data);
             res.status(200).json(log);
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
-                res.status(500).json({ error: 'Failed to submit cost' });
+                res.status(500).json({ error: 'Failed to submit quotation' });
             }
         }
     }
@@ -89,11 +105,40 @@ export class MaintenanceController {
     static async approveCost(req: AuthRequest, res: Response) {
         try {
             const id = req.params['id'] as string;
-            const userId = req.user!.userId;
-            const log = await maintenanceService.approveCost(id, userId);
+            const log = await maintenanceService.approveCost(id, req.user!.userId);
             res.status(200).json(log);
         } catch (error) {
             res.status(500).json({ error: 'Failed to approve cost' });
+        }
+    }
+
+    static async rejectQuotation(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const { rejectionReason } = rejectSchema.parse(req.body);
+            const log = await maintenanceService.rejectQuotation(id, rejectionReason, req.user!.userId);
+            res.status(200).json(log);
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                res.status(500).json({ error: 'Failed to reject quotation' });
+            }
+        }
+    }
+
+    static async getPdfReport(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+            const host = req.headers['x-forwarded-host'] || req.headers['host'];
+            const apiBaseUrl = `${protocol}://${host}`;
+
+            const html = await maintenanceService.generatePdfReport(id, apiBaseUrl);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.status(200).send(html);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message || 'Failed to generate report' });
         }
     }
 
@@ -101,17 +146,14 @@ export class MaintenanceController {
         try {
             const fleetId = req.params['fleetId'] as string;
 
-            // RBAC check: Admin can only view history for carts in their assigned stadium
-            // SuperAdmin and Observer have full access
             if (req.user?.role === 'Admin' && req.user.stadiumId) {
-                // First verify the fleet belongs to the admin's stadium
                 const { prisma } = await import('../../config/database');
                 const fleet = await prisma.fleet.findUnique({
                     where: { id: fleetId },
                     select: { stadiumId: true },
                 });
                 if (!fleet || fleet.stadiumId !== req.user.stadiumId) {
-                    res.status(403).json({ error: 'Access denied: You can only view maintenance history for carts in your assigned venue' });
+                    res.status(403).json({ error: 'Access denied' });
                     return;
                 }
             }
@@ -128,7 +170,6 @@ export class MaintenanceController {
             const validatedData = reportIssueSchema.parse(req.body);
             const userId = req.user!.userId;
 
-            // Upload photos if present
             let photosUrls: string[] = [];
             if (req.files && Array.isArray(req.files) && req.files.length > 0) {
                 const filenames = (req.files as Express.Multer.File[]).map(

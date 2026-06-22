@@ -23,6 +23,7 @@ const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage
 const UsageHistoryPage = lazy(() => import('@/pages/UsageHistoryPage').then(m => ({ default: m.UsageHistoryPage })));
 const MyReportsPage = lazy(() => import('@/pages/MyReportsPage').then(m => ({ default: m.MyReportsPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const PoolBookingPage = lazy(() => import('@/pages/PoolBookingPage').then(m => ({ default: m.PoolBookingPage })));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
@@ -75,6 +76,7 @@ function AppContent() {
                                     <Route path="/notifications" element={<PageGuard pageKey="notifications"><NotificationCenterPage /></PageGuard>} />
                                     <Route path="/settings" element={<PageGuard pageKey="settings"><SettingsPage /></PageGuard>} />
                                     <Route path="/requests" element={<PageGuard pageKey="requests"><RequestsManagementPage /></PageGuard>} />
+                                    <Route path="/pool-booking" element={<PoolBookingPage />} />
                                     <Route path="/usage-history" element={<UsageHistoryPage />} />
                                     <Route path="/my-reports" element={<MyReportsPage />} />
                                     <Route path="/profile" element={<ProfilePage />} />

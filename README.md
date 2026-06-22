@@ -1,6 +1,6 @@
 # GCMS - Golf Cart Management System
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/O96a/GCMS/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cyberlifeboy-design/GCMS-v2/blob/main/LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/postgresql-16-blue)](https://www.postgresql.org/)
 
@@ -23,7 +23,7 @@ A production-grade fleet management system for tournament operations, built with
 
 ## Overview
 
-GCMS is a comprehensive fleet management system designed for golf cart operations during tournaments and events. It provides complete fleet tracking, handover management, maintenance reporting, and administrative tools across multiple stadiums and venues.
+GCMS is a comprehensive fleet management system designed for golf cart operations during tournaments and events. It provides complete fleet tracking, handover management, pool booking, maintenance reporting with full quotation workflow, incident reporting, and administrative tools across multiple stadiums and venues.
 
 ### Key Capabilities
 
@@ -31,8 +31,10 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Role-Based Access Control**: SuperAdmin, Admin, FA, Observer, Contracts, and MaintenanceTeam roles
 - **Fleet Management**: Track carts, assignments, and status across locations
 - **Handover Workflow**: Complete check-in/check-out system with auto-fill, bilingual PDF, two-party digital signing, and photo documentation
+- **Pool Booking**: Shared cart pool system — checkout/return without full handover; simple timed usage log
 - **Terms & Conditions**: Rich text T&C editor (TipTap) with dynamic confirmation checkboxes, bilingual EN/AR
-- **Maintenance Tracking**: Report, track, resolve, and quote maintenance issues with automated approval workflow
+- **Maintenance Tracking**: Full workflow from issue report → Admin escalation → Contracts quotation request → Maintenance quotation submission (QAR) → Contracts approval/rejection → resolution; PDF report generation with embedded photos
+- **Incident Report**: Standalone bilingual HTML incident report form with system logo, vehicle inspection checklist, and print-to-PDF
 - **Reporting**: Export reports in Excel, PDF, or Word formats
 - **Public Request System**: Allow department leads to request carts without login
 - **System Configuration**: Comprehensive settings for customization
@@ -59,6 +61,7 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Assignment Matrix**: Visual view of cart assignments by FA and department
 - **Assignment History**: Track all assignment changes
 - **Additional Drivers**: FA can register additional drivers per assigned cart (name, phone, accreditation number) after handover is signed
+- **Pool Flag**: Admin can mark any cart as a pool cart (`isPool`) for shared fleet use
 
 ### 🔄 Handover System
 
@@ -74,14 +77,65 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Return Queue (Admin)**: HandoverPage "Releases & Returns" section shows all carts in Returned/HandbackPending status with "Inspect & Sign Return" button per row; FleetPage also provides one-click return inspection via RotateCcw button
 - **Return Signature Stored**: Admin return sign-off saved to `returnAdminSigData` field with `returnDate`; form status progresses to `RETURNED`; visible in view mode when reopening the form
 
+### 🏊 Pool Booking
+
+Shared pool carts can be checked out and returned without a full handover form — designed for short-duration shared use.
+
+- **Pool Cart Marking**: Admin/SuperAdmin toggle `isPool` on any fleet cart via the Manage Pool dialog; blocked if an active booking exists
+- **Checkout**: Record driver name, phone (optional), accreditation number (optional), purpose, and expected return time; Fleet status automatically set to `Dispatched`
+- **Return**: Record return notes; Fleet status automatically set back to `Available`
+- **Pool Fleet View**: Card grid shows all pool carts — green = Available, orange = Checked Out (shows active driver info)
+- **History Tab**: Full paginated booking log with driver, timestamps, and return notes
+- **Stats**: Total pool carts, available, checked-out counts
+- **Roles**: SuperAdmin, Admin, FA, Observer can access Pool Booking page; only Admin/SuperAdmin can toggle pool status
+
 ### 🔧 Maintenance Management
 
-- **Issue Reporting**: Report maintenance issues with photos
-- **Status Tracking**: Open → In Progress → Resolved
-- **Contracts & MaintenanceTeam Workflow**: Automated quotation submission and approval by Contracts role before MaintenanceTeam resolves
-- **Admin Dashboard**: Monitor all maintenance issues
+Full multi-party workflow from issue report through quotation approval to resolution.
+
+#### Workflow
+
+```
+FA/Admin reports issue (Open)
+    ↓
+Admin reviews → clicks "Escalate to Contracts"
+    ↓
+Contracts notified → clicks "Request Quotation" (PendingQuotation)
+    ↓
+MaintenanceTeam notified → submits full quotation: cost (QAR) + description + timeline (PendingApproval)
+    ↓
+Contracts reviews → Approve (InProgress) OR Reject (back to Open)
+    ↓
+MaintenanceTeam completes work → marks Resolved
+```
+
+- **Issue Reporting**: FA/Admin report issues with issue type, description, and up to 5 photos
+- **Escalate to Contracts**: Admin explicitly escalates Open issues; Contracts team is notified in-app
+- **Quotation Request**: Contracts requests quotation from Maintenance Team
+- **Full Quotation Submission**: MaintenanceTeam submits fix cost (QAR), work description, and estimated timeline
+- **Approve / Reject**: Contracts approves (starts work) or rejects with reason; rejection sends issue back to Open for Admin to re-evaluate
+- **Notifications**: In-app push notifications at every workflow step to relevant roles
+- **Detail Modal**: Full view of all issue data — cart/venue, reporter, escalation info, quotation block, rejection banner, resolution notes, photo gallery with lightbox
+- **Cart History**: Timeline of all past issues per cart (Admin/Observer)
+- **PDF Report**: Server-generated HTML report opened in new browser tab for print/save as PDF; includes system logo, full cart and venue details, escalation info, QAR quotation highlight, work description, embedded photos, rejection/resolution notes
+- **CSV Export**: Full maintenance log export
 - **FA Scoped View**: FA users see only their own reported issues
-- **Photo Evidence**: Document issues with multiple photos
+- **QAR Currency**: All cost displays use QAR throughout
+
+### 📋 Incident Report
+
+A standalone HTML form for recording golf cart incidents during operations.
+
+- **System Logo**: Fetched from `GET /api/v1/settings/public` on load — matches tournament branding
+- **Incident Types**: Collision, Near-Miss, Property Damage, Personal Injury, Illness, Other (checkboxes)
+- **Core Fields**: Date, time, location, incident description
+- **Cart User Info**: Name, designation, accreditation number, contact number
+- **Witness Information**: Name, designation, contact number
+- **Injury/Illness Details**: Body part affected, designation, nature of injury/illness, treatment type checkboxes (First Aid, Medical Center, Hospital, No Treatment)
+- **Vehicle Inspection Checklist**: Table-format Yes/No check for headlights, tail lights, tires, battery, brakes, windshield, horn
+- **Road Test**: Pass/Fail with remarks
+- **Signatures**: Reported To, Completed By, Inspector fields
+- **Print-to-PDF**: Print button + `window.print()` with `@media print` CSS; page break before inspection checklist
 
 ### 📊 Reports & Analytics
 
@@ -94,8 +148,8 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
   - Full system reports
 - **Activity Audit Log**: Track all system actions
 - **FA Personal Reports**: FA users have a dedicated "My Reports" tab scoped to their own submissions
-- **Signed Handover Forms (FA)**: "My Reports" page includes a "Signed Handover Forms" card listing all the FA's completed/returned forms with Cart#, type, venue, status badge, signed date, and "View & PDF" button — opens the full form in view mode with a "Print / Save PDF" button
-- **Handover Forms Tab (Admin)**: Admin "Reports" page includes a "Handover Forms" tab with search by cart/FA name, filter by COMPLETE / HANDBACK_PENDING / RETURNED, paginated table, and "View & PDF" per row; same print-to-PDF flow via `window.print()` with `@media print` CSS
+- **Signed Handover Forms (FA)**: "My Reports" page includes a "Signed Handover Forms" card listing all the FA's completed/returned forms with Cart#, type, venue, status badge, signed date, and "View & PDF" button
+- **Handover Forms Tab (Admin)**: Admin "Reports" page includes a "Handover Forms" tab with search, filter, paginated table, and "View & PDF" per row
 
 ### 📝 Car Request System (Public)
 
@@ -224,7 +278,7 @@ npx prisma db seed
 ```bash
 # Terminal 1 — Backend (port 3005)
 cd backend
-npx tsx src/server.ts
+npm run dev
 
 # Terminal 2 — Frontend (port 3000)
 cd frontend
@@ -243,6 +297,8 @@ Access the application at **http://localhost:3000**
 | Admin | admin@gcms.com | Admin@2024! |
 | FA | fa@gcms.com | FA@2024! |
 | Observer | observer@gcms.com | Observer@2024! |
+| Contracts | contracts@gcms.com | Contracts@2024! |
+| MaintenanceTeam | maintenance@gcms.com | Maint@2024! |
 
 ## Project Structure
 
@@ -250,43 +306,48 @@ Access the application at **http://localhost:3000**
 GCMS-v2/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma         # Database schema
-│   │   ├── seed.ts               # Seed data
-│   │   └── migrations/           # Migration files
+│   │   ├── schema.prisma             # Database schema
+│   │   ├── seed.ts                   # Seed data
+│   │   └── migrations/               # Migration files
 │   ├── src/
-│   │   ├── config/               # Configuration files
-│   │   ├── middleware/           # Express middleware (RBAC, auth)
-│   │   └── modules/              # Feature modules
-│   │       ├── auth/             # Authentication
-│   │       ├── departments/      # Department management
-│   │       ├── fleet/            # Fleet management + additional drivers
-│   │       ├── handover/         # Handover operations
-│   │       ├── maintenance/      # Maintenance + Contracts/MT workflow
-│   │       ├── notifications/    # Push notifications
-│   │       ├── reports/          # Reporting & exports
-│   │       ├── requests/         # Public car requests
-│   │       ├── settings/         # System settings + T&C
-│   │       ├── stadiums/         # Stadium management + bulk import
-│   │       └── users/            # User management
+│   │   ├── config/                   # Configuration files
+│   │   ├── middleware/               # Express middleware (RBAC, auth — supports ?token= query param)
+│   │   └── modules/                  # Feature modules
+│   │       ├── auth/                 # Authentication
+│   │       ├── departments/          # Department management
+│   │       ├── fleet/                # Fleet management + additional drivers
+│   │       ├── handover/             # Handover operations
+│   │       ├── maintenance/          # Maintenance + full Contracts/MT quotation workflow
+│   │       ├── notifications/        # Push notifications
+│   │       ├── pool-bookings/        # Pool cart checkout/return system
+│   │       ├── reports/              # Reporting & exports
+│   │       ├── requests/             # Public car requests
+│   │       ├── settings/             # System settings + T&C
+│   │       ├── stadiums/             # Stadium management + bulk import
+│   │       └── users/                # User management
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── handover/         # HandoverFormModal (auto-fill, dynamic T&C)
-│   │   │   ├── layout/           # Layout components
-│   │   │   └── ui/               # UI primitives + rich-editor (TipTap)
+│   │   │   ├── handover/             # HandoverFormModal (auto-fill, dynamic T&C)
+│   │   │   ├── layout/               # Layout components
+│   │   │   └── ui/                   # UI primitives + rich-editor (TipTap)
 │   │   ├── lib/
-│   │   │   ├── api.ts            # API client
-│   │   │   ├── constants.ts      # Constants
-│   │   │   └── utils.ts          # Utilities
-│   │   ├── pages/                # Page components
-│   │   │   ├── HandoverPage.tsx  # FA + Admin role-specific tabs
-│   │   │   ├── SettingsPage.tsx  # T&C rich editor + checkbox manager
-│   │   │   ├── StadiumsPage.tsx  # Bulk venue import
-│   │   │   └── UsersPage.tsx     # FA credential editing
-│   │   ├── stores/               # Zustand stores
-│   │   └── styles/globals.css    # TipTap editor styles
+│   │   │   ├── api.ts                # API client (maintenanceApi, poolBookingsApi)
+│   │   │   ├── constants.ts          # Constants
+│   │   │   └── utils.ts              # Utilities
+│   │   ├── pages/                    # Page components
+│   │   │   ├── HandoverPage.tsx      # FA + Admin role-specific tabs
+│   │   │   ├── MaintenancePage.tsx   # Full quotation workflow, QAR, PDF report
+│   │   │   ├── PoolBookingPage.tsx   # Pool cart checkout/return
+│   │   │   ├── SettingsPage.tsx      # T&C rich editor + checkbox manager
+│   │   │   ├── StadiumsPage.tsx      # Bulk venue import
+│   │   │   └── UsersPage.tsx         # FA credential editing
+│   │   ├── stores/                   # Zustand stores
+│   │   └── styles/globals.css        # TipTap editor styles
 │   └── package.json
+├── documents/
+│   └── incident_report.html          # Standalone bilingual incident report form
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
 └── README.md
@@ -302,6 +363,7 @@ GCMS-v2/
 - ✅ View all data across stadiums
 - ✅ Generate request links
 - ✅ Manage all car requests
+- ✅ Full access to Pool Booking and Maintenance workflow
 
 ### Admin
 - ✅ Stadium-specific management
@@ -310,12 +372,15 @@ GCMS-v2/
 - ✅ Process handovers
 - ✅ View reports for their stadium
 - ✅ Manage car requests for their stadium
+- ✅ Escalate maintenance issues to Contracts
+- ✅ Manage pool cart fleet (mark/unmark as pool)
 - ❌ Cannot access other stadiums
 - ❌ Cannot manage SuperAdmin users
 
 ### FA (Field Assistant)
 - ✅ Check-in/out carts
 - ✅ Report maintenance issues (scoped to own reports)
+- ✅ Pool cart checkout/return
 - ✅ View own handover usage history
 - ✅ Manage additional drivers on their assigned cart (post-signing)
 - ✅ View personal notifications
@@ -327,17 +392,23 @@ GCMS-v2/
 - ✅ View fleet status
 - ✅ View reports
 - ✅ View car requests
+- ✅ View maintenance issues and PDF reports
+- ✅ View pool booking history
 - ❌ Cannot create/edit data
 - ❌ Cannot process handovers
 
 ### Contracts
 - ✅ Logistics department scoped (All Stadiums)
-- ✅ Review and approve maintenance quotations
+- ✅ View all escalated maintenance issues
+- ✅ Request quotation from MaintenanceTeam
+- ✅ Approve or reject submitted quotations (with rejection reason)
+- ✅ Download/print full maintenance PDF report
 - ❌ Cannot modify fleet or user data
 
 ### MaintenanceTeam
 - ✅ Logistics department scoped (All Stadiums)
-- ✅ Submit maintenance quotations and resolve issues after approval
+- ✅ Submit full quotations (cost in QAR + work description + timeline)
+- ✅ Mark assigned issues as resolved after approval
 - ❌ Cannot modify fleet or user data
 
 ## API Reference
@@ -369,7 +440,7 @@ GCMS-v2/
 | `/fleet/assignment-history` | GET | Get assignment history |
 | `/fleet/my-carts` | GET | Get user's assigned carts |
 | `/fleet/:id/drivers` | GET | Get additional drivers for a cart |
-| `/fleet/:id/drivers` | PATCH | Update additional drivers (FA: own cart only; Admin: any) |
+| `/fleet/:id/drivers` | PATCH | Update additional drivers |
 
 ### Handover (`/handover`)
 
@@ -381,17 +452,32 @@ GCMS-v2/
 | `/handover/bulk-checkin` | POST | Bulk check in |
 | `/handover/history` | GET | Get handover history |
 
+### Pool Bookings (`/pool-bookings`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/pool-bookings/fleet` | GET | List pool carts (with active booking status) |
+| `/pool-bookings` | GET | List all pool booking records |
+| `/pool-bookings/checkout` | POST | Checkout a pool cart |
+| `/pool-bookings/:id/return` | PATCH | Return a pool cart |
+| `/pool-bookings/fleet/:id/toggle-pool` | PATCH | Mark/unmark cart as pool (Admin) |
+
 ### Maintenance (`/maintenance`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/maintenance` | GET | List issues (FA: own only; Admin/Contracts/MT: all) |
-| `/maintenance` | POST | Report new issue |
-| `/maintenance/fleet/:fleetId` | GET | Get issues for cart |
-| `/maintenance/:id/status` | PATCH | Update issue status |
-| `/maintenance/:id/quote` | POST | Submit quotation (MaintenanceTeam) |
-| `/maintenance/:id/approve` | POST | Approve quotation (Contracts) |
-| `/maintenance/export` | GET | Export maintenance log |
+| `/maintenance` | GET | List issues (FA: own only; others: all) |
+| `/maintenance` | POST | Report new issue (with photo upload) |
+| `/maintenance/:id` | GET | Get issue details |
+| `/maintenance/fleet/:fleetId` | GET | Get issue history for a cart |
+| `/maintenance/:id/escalate` | POST | Admin escalates issue to Contracts |
+| `/maintenance/:id/request-quotation` | POST | Contracts requests quotation from Maintenance |
+| `/maintenance/:id/submit-cost` | POST | MaintenanceTeam submits quotation (QAR + description + timeline) |
+| `/maintenance/:id/approve-cost` | POST | Contracts approves quotation |
+| `/maintenance/:id/reject-quotation` | POST | Contracts rejects quotation (issue returns to Open) |
+| `/maintenance/:id/status` | PATCH | Update issue status (Admin/MT) |
+| `/maintenance/:id/pdf` | GET | Generate full HTML report (supports `?token=` auth) |
+| `/maintenance/export` | GET | Export maintenance log as CSV |
 
 ### Requests (`/requests`)
 
@@ -426,7 +512,7 @@ GCMS-v2/
 |----------|--------|-------------|
 | `/settings` | GET | Get system settings |
 | `/settings` | PUT | Update settings (SuperAdmin) |
-| `/public/settings/branding` | GET | Get branding + T&C (no auth, used by handover form) |
+| `/settings/public` | GET | Get public branding/T&C (no auth) |
 
 ### Stadiums (`/stadiums`)
 
@@ -468,17 +554,38 @@ GCMS-v2/
 
 ```
 Stadium ─┬─ Department ─┬─ User
-         │              └─ Fleet ── additionalDrivers (JSON)
+         │              └─ Fleet ─┬─ additionalDrivers (JSON)
+         │                        ├─ isPool (Boolean)
+         │                        └─ PoolBooking[]
          │
          └─ CarRequest
 
 User ────┬─ RefreshToken
          ├─ HandoverLog
-         ├─ MaintenanceLog
+         ├─ MaintenanceLog (reportedBy)
+         ├─ MaintenanceLog (escalatedBy — contractsEscalatedBy relation)
+         ├─ PoolBooking (createdBy / returnedBy)
          └─ CarRequest (reviewer)
 
 Fleet ───┬─ HandoverLog (tcData JSON)
-         └─ MaintenanceLog
+         ├─ MaintenanceLog
+         └─ PoolBooking
+
+MaintenanceLog
+  ├─ status: Open | PendingQuotation | PendingApproval | InProgress | Resolved
+  ├─ quotationStatus: Requested | Submitted | Approved | Rejected
+  ├─ fixCost (QAR)
+  ├─ quotationDescription
+  ├─ quotationTimeline
+  ├─ contractsEscalatedAt / contractsEscalatedById
+  ├─ rejectionReason / rejectedAt
+  └─ photosUrls (JSON array)
+
+PoolBooking
+  ├─ status: Active | Returned
+  ├─ driverName / driverPhone / accreditationNumber / purpose
+  ├─ checkoutAt / expectedReturnAt / returnedAt
+  └─ returnNotes
 
 SystemSettings
   ├─ handoverTcEnTitle / handoverTcEnBody (HTML)
@@ -493,9 +600,10 @@ AuditLog
 - **Stadium** has many: Departments, Users, Fleets, CarRequests
 - **Department** belongs to: Stadium, has many: Users, Fleets, CarRequests
 - **User** belongs to: Stadium (optional), Department (optional)
-- **Fleet** belongs to: Stadium, Department (optional), User (assigned); stores additional drivers as JSON
+- **Fleet** belongs to: Stadium, Department (optional), User (assigned); has `isPool` flag; stores additional drivers as JSON
 - **HandoverLog** belongs to: Fleet, User; stores dynamic T&C checkbox state as `tcData` JSON
-- **MaintenanceLog** belongs to: Fleet, User (reporter)
+- **MaintenanceLog** belongs to: Fleet, reportedBy User, contractsEscalatedBy User; tracks full quotation workflow in QAR
+- **PoolBooking** belongs to: Fleet, createdBy User, returnedBy User
 - **CarRequest** belongs to: Stadium, Department, User (reviewer)
 - **SystemSettings** stores T&C content (titles + TipTap HTML bodies) and dynamic checkbox definitions
 
