@@ -633,7 +633,8 @@ export class HandoverService {
         if (params.status) {
             where.status = params.status;
         } else {
-            where.status = { in: ['COMPLETE', 'HANDBACK_PENDING', 'RETURNED'] };
+            // All active handover & handback forms (excludes bare PENDING with no signatures)
+            where.status = { in: ['ADMIN_SIGNED', 'COMPLETE', 'HANDBACK_PENDING', 'RETURNED'] };
         }
 
         const [forms, total] = await Promise.all([
@@ -788,6 +789,7 @@ export class HandoverService {
         conditionData?: string;
         returnSignatureData?: string;
         returnNotes?: string;
+        approvedReturnDate?: string;
     }) {
         const vehicle = await prisma.fleet.findUnique({ where: { id: fleetId } });
         if (!vehicle) throw new Error('Vehicle not found');
@@ -796,6 +798,7 @@ export class HandoverService {
         }
 
         // Upsert: create form record if none exists, update if one does
+        const returnDate = new Date().toISOString().split('T')[0];
         await prisma.handoverForm.upsert({
             where: { fleetId },
             create: {
@@ -803,14 +806,16 @@ export class HandoverService {
                 status: 'RETURNED',
                 conditionData: data.conditionData ?? undefined,
                 returnAdminSigData: data.returnSignatureData ?? undefined,
-                returnDate: new Date().toISOString().split('T')[0],
+                returnDate,
+                approvedReturnDate: data.approvedReturnDate ?? returnDate,
                 adminSignedById: adminId,
                 adminSignedAt: new Date(),
             },
             update: {
                 conditionData: data.conditionData ?? undefined,
                 returnAdminSigData: data.returnSignatureData ?? undefined,
-                returnDate: new Date().toISOString().split('T')[0],
+                returnDate,
+                approvedReturnDate: data.approvedReturnDate ?? returnDate,
                 status: 'RETURNED',
             },
         });

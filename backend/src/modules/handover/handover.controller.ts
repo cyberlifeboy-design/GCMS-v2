@@ -318,11 +318,11 @@ export class HandoverController {
 
     static async adminSignReturn(req: AuthRequest, res: Response) {
         try {
-            const { fleetId, conditionData, returnSignatureData, returnNotes } = req.body;
+            const { fleetId, conditionData, returnSignatureData, returnNotes, approvedReturnDate } = req.body;
             if (!fleetId) return res.status(400).json({ error: 'fleetId required' });
             const adminId = req.user!.userId;
             const log = await handoverService.adminSignReturn(fleetId, adminId, {
-                conditionData, returnSignatureData, returnNotes,
+                conditionData, returnSignatureData, returnNotes, approvedReturnDate,
             });
             res.status(200).json(log);
         } catch (err: any) {

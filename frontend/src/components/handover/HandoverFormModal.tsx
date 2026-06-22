@@ -290,6 +290,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const [afteruseSig, setAfteruseSig] = useState('');
     const [returnSig, setReturnSig] = useState('');
     const [returnNotes, setReturnNotes] = useState('');
+    const [returnSubmitted, setReturnSubmitted] = useState(false);
 
     const isReadonly = mode === 'view' || mode === 'admin-return' || (mode === 'user' && form?.status === 'COMPLETE');
     const isComplete = form?.status === 'COMPLETE';
@@ -318,7 +319,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                     serialNumber: data.serialNumber || data.fleet?.carNumber || '',
                     faCode: data.faCode || data.fleet?.assignedUser?.accreditationNumber || '',
                     handoverDate: data.handoverDate || today,
-                    approvedReturnDate: data.approvedReturnDate || '',
+                    approvedReturnDate: mode === 'admin-return' ? today : (data.approvedReturnDate || ''),
                     handoverLocation: data.handoverLocation || data.fleet?.stadium?.code || '',
                     receiverLicenseNo: data.receiverLicenseNo || '',
                     handoverBy: data.handoverBy || adminName || '',
@@ -364,6 +365,10 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 if (fleet?.carType) {
                     setCartType(prev => ({ ...prev, ...cartTypeFromString(fleet.carType) }));
                 }
+            }
+            // In admin-return mode always stamp today's date as the approved return date
+            if (mode === 'admin-return') {
+                setF(prev => ({ ...prev, approvedReturnDate: today }));
             }
         } catch {
             toast.error('Failed to load handover form');
@@ -454,10 +459,16 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 conditionData: JSON.stringify(condition),
                 returnSignatureData: returnSig,
                 returnNotes,
+                approvedReturnDate: f.approvedReturnDate,
             });
             toast.success('Return form signed. Cart released to the pool.');
             onComplete?.();
-            onClose();
+            // Stay open so admin can print — optimistically update form state to RETURNED
+            setReturnSubmitted(true);
+            setForm(prev => prev
+                ? { ...prev, status: 'RETURNED', returnAdminSigData: returnSig, returnDate: today }
+                : { fleetId, status: 'RETURNED', returnAdminSigData: returnSig, returnDate: today }
+            );
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to sign return form');
         } finally {
@@ -560,7 +571,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                         onChange={e => setF(p => ({ ...p, handoverDate: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" />
                                 </FormField>
                                 <FormField label="Approved Return Date" ar="تاريخ الإرجاع المعتمد">
-                                    <input type="date" value={f.approvedReturnDate} readOnly={isAdminReadonly}
+                                    <input type="date" value={f.approvedReturnDate} readOnly={isAdminReadonly && mode !== 'admin-return'}
                                         onChange={e => setF(p => ({ ...p, approvedReturnDate: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" />
                                 </FormField>
                                 <FormField label="Handover At (Site Location)" ar="تم التسليم في">
@@ -892,10 +903,15 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                             Submit After-Use Inspection
                                         </Button>
                                     )}
-                                    {mode === 'admin-return' && (
+                                    {mode === 'admin-return' && !returnSubmitted && (
                                         <Button className="bg-indigo-700 hover:bg-indigo-600 text-white px-8" onClick={handleAdminReturnSubmit} disabled={submitting}>
                                             {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
                                             Sign &amp; Release Cart to Pool
+                                        </Button>
+                                    )}
+                                    {mode === 'admin-return' && returnSubmitted && (
+                                        <Button variant="outline" className="border-indigo-300 text-indigo-700" onClick={onClose}>
+                                            Close
                                         </Button>
                                     )}
                                 </div>

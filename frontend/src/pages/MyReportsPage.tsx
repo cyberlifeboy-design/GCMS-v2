@@ -128,6 +128,7 @@ export function MyReportsPage() {
                                         <TableCell className="text-xs text-muted-foreground">{f.fleet?.carType}</TableCell>
                                         <TableCell><Badge variant="outline" className="font-mono text-[10px]">{f.fleet?.stadium?.code}</Badge></TableCell>
                                         <TableCell>
+                                            {f.status === 'ADMIN_SIGNED' && <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[9px]">Admin Signed</Badge>}
                                             {f.status === 'COMPLETE' && <Badge className="bg-green-100 text-green-800 border-green-200 text-[9px]">Complete</Badge>}
                                             {f.status === 'HANDBACK_PENDING' && <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-[9px]">Handback Pending</Badge>}
                                             {f.status === 'RETURNED' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Returned</Badge>}

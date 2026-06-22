@@ -903,6 +903,7 @@ export function ReportsPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="__all__">All Statuses</SelectItem>
+                                            <SelectItem value="ADMIN_SIGNED">Admin Signed</SelectItem>
                                             <SelectItem value="COMPLETE">Complete</SelectItem>
                                             <SelectItem value="HANDBACK_PENDING">Handback Pending</SelectItem>
                                             <SelectItem value="RETURNED">Returned</SelectItem>
@@ -958,6 +959,7 @@ export function ReportsPage() {
                                                 </TableCell>
                                                 <TableCell><Badge variant="outline" className="font-mono text-[10px]">{f.fleet?.stadium?.code}</Badge></TableCell>
                                                 <TableCell>
+                                                    {f.status === 'ADMIN_SIGNED' && <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[9px]">Admin Signed</Badge>}
                                                     {f.status === 'COMPLETE' && <Badge className="bg-green-100 text-green-800 border-green-200 text-[9px]">Complete</Badge>}
                                                     {f.status === 'HANDBACK_PENDING' && <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-[9px]">Handback Pending</Badge>}
                                                     {f.status === 'RETURNED' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Returned</Badge>}
