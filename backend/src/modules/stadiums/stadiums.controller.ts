@@ -66,6 +66,38 @@ export class StadiumController {
         }
     }
 
+    static async getPoolBookingHours(req: AuthRequest, res: Response): Promise<void> {
+        try {
+            const id = parseParam(req.params.id);
+            if (!id) {
+                res.status(400).json({ error: 'Stadium ID is required' });
+                return;
+            }
+            const result = await stadiumsService.getPoolBookingHours(id);
+            res.json(result);
+        } catch (error) {
+            res.status(404).json({ error: (error as Error).message });
+        }
+    }
+
+    static async updatePoolBookingHours(req: AuthRequest, res: Response): Promise<void> {
+        try {
+            const id = parseParam(req.params.id);
+            if (!id) {
+                res.status(400).json({ error: 'Stadium ID is required' });
+                return;
+            }
+            const { poolBookingStartTime, poolBookingEndTime } = req.body;
+            const result = await stadiumsService.updatePoolBookingHours(id, {
+                poolBookingStartTime: poolBookingStartTime ?? null,
+                poolBookingEndTime: poolBookingEndTime ?? null,
+            });
+            res.json(result);
+        } catch (error) {
+            res.status(400).json({ error: (error as Error).message });
+        }
+    }
+
     static async bulkCreate(req: AuthRequest, res: Response): Promise<void> {
         try {
             const { venues } = req.body;

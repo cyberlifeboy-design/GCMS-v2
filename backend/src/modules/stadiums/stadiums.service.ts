@@ -140,6 +140,23 @@ export class StadiumsService {
         });
     }
 
+    async getPoolBookingHours(id: string) {
+        const stadium = await this.prisma.stadium.findUnique({
+            where: { id },
+            select: { id: true, name: true, poolBookingStartTime: true, poolBookingEndTime: true },
+        });
+        if (!stadium) throw new Error('Stadium not found');
+        return stadium;
+    }
+
+    async updatePoolBookingHours(id: string, data: { poolBookingStartTime: string | null; poolBookingEndTime: string | null }) {
+        return this.prisma.stadium.update({
+            where: { id },
+            data,
+            select: { id: true, name: true, poolBookingStartTime: true, poolBookingEndTime: true },
+        });
+    }
+
     async bulkCreate(venues: { name: string; code: string; location: string }[]): Promise<{ created: number; skipped: number; details: { name: string; code: string; status: 'created' | 'skipped' }[] }> {
         const existing = await this.prisma.stadium.findMany({ select: { code: true } });
         const existingCodes = new Set(existing.map(s => s.code.toUpperCase()));
