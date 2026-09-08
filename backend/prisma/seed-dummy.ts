@@ -264,6 +264,49 @@ async function main() {
     console.log('✅ Announcement: 1 demo record created');
   }
 
+  // ── Pool booking requests (demo) ────────────────────────────────────────────
+  let bookingCount = 0;
+  const poolCartsForBooking = allFleet.filter((f) => f.carNumber.endsWith('-GC-06'));
+  const bookingStatuses = ['Pending', 'Approved', 'Rejected'];
+
+  for (const [idx, fleet] of poolCartsForBooking.entries()) {
+    const faUsers = faUsersByStadium[fleet.stadiumId];
+    const fa = faUsers?.[0];
+    if (!fa) continue;
+
+    const requestToken = `demo-booking-${fleet.stadiumId}-${idx}`;
+    const existing = await prisma.poolBookingRequest.findUnique({ where: { requestToken } });
+    if (existing) continue;
+
+    const status = pick(bookingStatuses, idx);
+    const startDate = '2026-09-15';
+    const isReviewed = status !== 'Pending';
+
+    await prisma.poolBookingRequest.create({
+      data: {
+        stadiumId: fleet.stadiumId,
+        fleetId: fleet.id,
+        requesterName: `Demo Booker ${idx + 1}`,
+        requesterEmail: `booker${idx + 1}@example.com`,
+        requesterPhone: `+974 5700${1000 + idx}`,
+        faUserId: fa.id,
+        bookingType: 'Single',
+        startDate,
+        endDate: startDate,
+        startTime: '09:00',
+        endTime: '13:00',
+        purpose: 'Demo pool booking request for local testing.',
+        requestToken,
+        status,
+        reviewedById: isReviewed ? fa.id : null,
+        reviewedAt: isReviewed ? new Date() : null,
+        reviewComment: status === 'Rejected' ? 'Cart needed for maintenance that day.' : status === 'Approved' ? 'Approved — enjoy.' : null,
+      },
+    });
+    bookingCount++;
+  }
+  console.log(`✅ PoolBookingRequests: ${bookingCount} records created`);
+
   console.log('\n🎉 Dummy data seeding complete!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('Extra login credentials (per venue):');
