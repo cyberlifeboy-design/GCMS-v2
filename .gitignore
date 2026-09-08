@@ -36,3 +36,6 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Git worktrees (local dev isolation)
+.worktrees/
