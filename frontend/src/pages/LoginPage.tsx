@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function LoginPage() {
     const [email, setEmail] = useState('');
@@ -86,6 +87,25 @@ export function LoginPage() {
                             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</> : 'Sign In'}
                         </Button>
                     </form>
+
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full mt-3"
+                        onClick={() => toast.info('Coming soon — Microsoft sign-in for @sc.qa accounts.')}
+                    >
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        Sign in with Microsoft Authenticator
+                    </Button>
+
+                    <div className="mt-4 flex flex-col items-center gap-2 text-sm">
+                        <Link to="/request" className="text-primary hover:underline font-medium">
+                            Submit a Request
+                        </Link>
+                        <Link to="/book-pool" className="text-primary hover:underline font-medium">
+                            Bookings
+                        </Link>
+                    </div>
                 </CardContent>
             </Card>
             </div>
