@@ -197,6 +197,10 @@ export const stadiumsApi = {
         apiClient.put(`/stadiums/${id}`, { isActive }),
     bulkCreate: (venues: { name: string; code: string; location: string }[]) =>
         apiClient.post('/stadiums/bulk', { venues }),
+    getPoolBookingHours: (id: string) =>
+        apiClient.get(`/stadiums/${id}/pool-booking-hours`),
+    updatePoolBookingHours: (id: string, data: { poolBookingStartTime: string | null; poolBookingEndTime: string | null }) =>
+        apiClient.patch(`/stadiums/${id}/pool-booking-hours`, data),
 };
 
 // Departments
@@ -400,6 +404,45 @@ export const poolBookingsApi = {
         apiClient.patch(`/pool-bookings/${bookingId}/return`, { returnNotes }),
     togglePool: (fleetId: string, isPool: boolean) =>
         apiClient.patch(`/pool-bookings/fleet/${fleetId}/toggle-pool`, { isPool }),
+};
+
+// Pool Booking Requests (public submission + admin/FA review — replaces the old
+// no-approval immediate-checkout PoolBooking flow for new bookings)
+export const poolBookingRequestsApi = {
+    // Public endpoints — apiClient still attaches a Bearer token automatically
+    // when the caller happens to be logged in, so createdById gets captured.
+    getFAs: (stadiumId: string) =>
+        apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/fas`),
+    getAvailableCarts: (
+        stadiumId: string,
+        params: { startDate: string; endDate: string; startTime: string; endTime: string; excludeBookingId?: string },
+    ) => apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/available-carts`, { params }),
+    createPublic: (data: {
+        stadiumId: string;
+        fleetId: string;
+        requesterName: string;
+        requesterEmail: string;
+        requesterPhone: string;
+        faUserId: string;
+        bookingType: 'Single' | 'Recurring';
+        startDate: string;
+        endDate: string;
+        startTime: string;
+        endTime: string;
+        purpose?: string;
+    }) => apiClient.post('/public/pool-booking-requests', data),
+    getByTokenPublic: (token: string) =>
+        apiClient.get(`/public/pool-booking-requests/${token}`),
+
+    // Admin/FA/Observer endpoints (auth required)
+    getAll: (params?: { status?: string; stadiumId?: string }) =>
+        apiClient.get('/pool-booking-requests', { params }),
+    approve: (id: string, comment?: string) =>
+        apiClient.patch(`/pool-booking-requests/${id}/approve`, { comment }),
+    reject: (id: string, comment: string) =>
+        apiClient.patch(`/pool-booking-requests/${id}/reject`, { comment }),
+    amend: (id: string, data: Record<string, unknown>) =>
+        apiClient.patch(`/pool-booking-requests/${id}`, data),
 };
 
 export default apiClient;
