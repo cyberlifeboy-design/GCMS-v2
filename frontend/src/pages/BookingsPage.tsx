@@ -195,6 +195,10 @@ export function BookingsPage() {
 
     const handleSaveEdit = async () => {
         if (!selected) return;
+        if (!editForm.fleetId) {
+            toast.error('Please select an available cart before saving');
+            return;
+        }
         setActionLoading(true);
         try {
             await poolBookingRequestsApi.amend(selected.id, editForm);
@@ -509,7 +513,7 @@ export function BookingsPage() {
                         <Button variant="outline" onClick={() => setEditOpen(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSaveEdit} disabled={actionLoading}>
+                        <Button onClick={handleSaveEdit} disabled={actionLoading || !editForm.fleetId}>
                             {actionLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                             Save Changes
                         </Button>

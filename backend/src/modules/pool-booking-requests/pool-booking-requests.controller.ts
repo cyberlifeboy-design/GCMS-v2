@@ -146,11 +146,14 @@ export class PoolBookingRequestsController {
             const booking = await poolBookingRequestsService.approve(id, req.user!.userId, comment);
             res.json({ message: 'Booking approved', data: booking });
         } catch (error) {
-            const err = error as Error & { status?: number; conflict?: unknown };
+            const err = error as Error & { status?: number; conflict?: unknown; code?: string };
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else if (err.status === 409) {
                 res.status(409).json({ error: err.message, conflict: err.conflict });
+            } else if (err.code === 'P2003') {
+                console.error('Approve pool booking error:', error);
+                res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
             } else {
                 console.error('Approve pool booking error:', error);
                 res.status(400).json({ error: err.message || 'Failed to approve booking' });
@@ -207,11 +210,14 @@ export class PoolBookingRequestsController {
             const booking = await poolBookingRequestsService.amend(id, rest, req.user!.userId, comment);
             res.json({ message: 'Booking updated', data: booking });
         } catch (error) {
-            const err = error as Error & { status?: number; conflict?: unknown };
+            const err = error as Error & { status?: number; conflict?: unknown; code?: string };
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else if (err.status === 409) {
                 res.status(409).json({ error: err.message, conflict: err.conflict });
+            } else if (err.code === 'P2003') {
+                console.error('Amend pool booking error:', error);
+                res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
             } else {
                 console.error('Amend pool booking error:', error);
                 res.status(400).json({ error: err.message || 'Failed to update booking' });
