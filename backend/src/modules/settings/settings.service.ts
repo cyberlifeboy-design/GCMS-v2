@@ -7,7 +7,7 @@ export class SettingsService {
         if (!settings) {
             // Auto-create default settings
             settings = await prisma.systemSettings.create({
-                data: { tournamentName: 'Golf Cart Management System' },
+                data: { tournamentName: 'SC - GCMS' },
             });
         }
         return settings;
