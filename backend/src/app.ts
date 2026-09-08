@@ -15,6 +15,7 @@ import requestRoutes from './modules/requests/requests.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import announcementRoutes from './modules/announcements/announcements.routes';
 import poolBookingsRoutes from './modules/pool-bookings/pool-bookings.routes';
+import poolBookingRequestsRoutes from './modules/pool-booking-requests/pool-booking-requests.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import { minioClient, BUCKETS, UPLOADS_DIR } from './config/storage';
@@ -137,6 +138,11 @@ app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/stadiums', stadiumRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/departments', departmentRoutes);
+// poolBookingRequestsRoutes is mounted before requestRoutes (both bare '/api/v1')
+// so its public routes aren't swallowed by requestRoutes' internal
+// `router.use(authenticate)` catch-all for paths it doesn't itself match —
+// see the comment in pool-booking-requests.routes.ts for details.
+app.use('/api/v1', poolBookingRequestsRoutes);
 app.use('/api/v1', requestRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/announcements', announcementRoutes);
