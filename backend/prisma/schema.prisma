@@ -13,12 +13,15 @@ model Stadium {
   code        String   @unique
   location    String
   isActive    Boolean  @default(true)
+  poolBookingStartTime String?  // "HH:mm", null = no restriction
+  poolBookingEndTime   String?  // "HH:mm", null = no restriction
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   fleet       Fleet[]
   users       User[]
   departments Department[]
   carRequests CarRequest[]
+  poolBookingRequests PoolBookingRequest[]
 }
 
 model Department {
@@ -71,6 +74,7 @@ model Fleet {
   handoverLogs    HandoverLog[]
   maintenanceLogs MaintenanceLog[]
   poolBookings    PoolBooking[]
+  poolBookingRequests PoolBookingRequest[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -115,6 +119,9 @@ model User {
   reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
   createdPoolBookings  PoolBooking[] @relation("PoolBookingCreatedBy")
   returnedPoolBookings PoolBooking[] @relation("PoolBookingReturnedBy")
+  faPoolBookingRequests       PoolBookingRequest[] @relation("PoolBookingRequestFA")
+  reviewedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReviewer")
+  createdPoolBookingRequests  PoolBookingRequest[] @relation("PoolBookingRequestCreatedBy")
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -454,4 +461,49 @@ model Notification {
   @@index([isRead])
   @@index([type])
   @@index([createdAt])
+}
+
+// Pool Booking Request — public/internal request to book a shared pool cart at a venue.
+// Every request requires explicit Admin/SuperAdmin approval; no auto-approval path.
+// Status: Pending | Approved | Rejected | Cancelled
+model PoolBookingRequest {
+  id            String   @id @default(cuid())
+
+  stadiumId     String
+  stadium       Stadium  @relation(fields: [stadiumId], references: [id])
+  fleetId       String
+  fleet         Fleet    @relation(fields: [fleetId], references: [id])
+
+  requesterName  String
+  requesterEmail String
+  requesterPhone String
+
+  faUserId       String
+  faUser         User     @relation("PoolBookingRequestFA", fields: [faUserId], references: [id])
+
+  bookingType    String   // "Single" | "Recurring"
+  startDate      String   // "YYYY-MM-DD"; equals startDate for Single
+  endDate        String   // "YYYY-MM-DD"
+  startTime      String   // "HH:mm", daily window start
+  endTime        String   // "HH:mm", daily window end
+  purpose        String?
+
+  status         String    @default("Pending") // Pending, Approved, Rejected, Cancelled
+  reviewedById   String?
+  reviewedBy     User?     @relation("PoolBookingRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  reviewComment  String?
+
+  requestToken   String    @unique
+
+  createdById    String?
+  createdByUser  User?     @relation("PoolBookingRequestCreatedBy", fields: [createdById], references: [id])
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([stadiumId])
+  @@index([fleetId])
+  @@index([status])
+  @@index([requestToken])
 }
