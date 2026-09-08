@@ -1,20 +1,6 @@
 import { Response } from 'express';
-import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { poolBookingsService } from './pool-bookings.service';
-
-const checkoutSchema = z.object({
-    fleetId: z.string().min(1),
-    driverName: z.string().min(1, 'Driver name is required'),
-    driverPhone: z.string().optional(),
-    accreditationNumber: z.string().optional(),
-    purpose: z.string().optional(),
-    expectedReturnAt: z.string().datetime({ offset: true }).optional(),
-});
-
-const returnSchema = z.object({
-    returnNotes: z.string().optional(),
-});
 
 export class PoolBookingsController {
     static async getPoolFleet(req: AuthRequest, res: Response) {
@@ -44,48 +30,6 @@ export class PoolBookingsController {
             res.json({ data: bookings });
         } catch (err: any) {
             res.status(500).json({ error: err.message || 'Failed to fetch bookings' });
-        }
-    }
-
-    static async checkout(req: AuthRequest, res: Response) {
-        try {
-            const body = checkoutSchema.parse(req.body);
-            const booking = await poolBookingsService.checkout(
-                body.fleetId,
-                {
-                    driverName: body.driverName,
-                    driverPhone: body.driverPhone,
-                    accreditationNumber: body.accreditationNumber,
-                    purpose: body.purpose,
-                    expectedReturnAt: body.expectedReturnAt ? new Date(body.expectedReturnAt) : undefined,
-                },
-                req.user!.userId,
-            );
-            res.status(201).json(booking);
-        } catch (err: any) {
-            if (err instanceof z.ZodError) {
-                res.status(400).json({ error: 'Validation error', details: err.errors });
-            } else {
-                res.status(400).json({ error: err.message || 'Checkout failed' });
-            }
-        }
-    }
-
-    static async returnCart(req: AuthRequest, res: Response) {
-        try {
-            const { returnNotes } = returnSchema.parse(req.body);
-            const booking = await poolBookingsService.returnCart(
-                req.params['id'] as string,
-                returnNotes,
-                req.user!.userId,
-            );
-            res.json(booking);
-        } catch (err: any) {
-            if (err instanceof z.ZodError) {
-                res.status(400).json({ error: 'Validation error', details: err.errors });
-            } else {
-                res.status(400).json({ error: err.message || 'Return failed' });
-            }
         }
     }
 

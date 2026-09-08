@@ -17,15 +17,9 @@ router.get('/', requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), (req: Requ
     PoolBookingsController.getBookings(req as any, res),
 );
 
-// POST /api/v1/pool-bookings/checkout — check out a pool cart
-router.post('/checkout', requireRole('SuperAdmin', 'Admin', 'FA'), auditLog(), (req: Request, res: Response) =>
-    PoolBookingsController.checkout(req as any, res),
-);
-
-// PATCH /api/v1/pool-bookings/:id/return — return a pool cart
-router.patch('/:id/return', requireRole('SuperAdmin', 'Admin', 'FA'), auditLog(), (req: Request, res: Response) =>
-    PoolBookingsController.returnCart(req as any, res),
-);
+// NOTE: the immediate no-approval checkout/return routes were removed — every pool
+// booking now goes through the approval workflow in the pool-booking-requests module.
+// The routes below are read-only history plus the pool-flag toggle.
 
 // PATCH /api/v1/pool-bookings/fleet/:id/toggle-pool — mark/unmark cart as pool
 router.patch('/fleet/:id/toggle-pool', requireRole('SuperAdmin', 'Admin'), auditLog(), (req: Request, res: Response) =>

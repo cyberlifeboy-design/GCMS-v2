@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi, reportsApi } from '@/lib/api';
+import { fleetApi, usersApi, stadiumsApi, departmentsApi, maintenanceApi, reportsApi, poolBookingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download, RotateCcw } from 'lucide-react';
+import { Plus, Search, Upload, Edit2, Trash2, UserCheck, Loader2, Shield, ChevronDown, Check, Wrench, Download, RotateCcw, Share2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
@@ -22,6 +22,7 @@ interface FleetCart {
     carType: string;
     status: string;
     requiresVAP: boolean;
+    isPool?: boolean;
     stadium?: { id: string; name: string; code: string };
     department?: { id: string; name: string; code?: string };
     assignedUser?: { id: string; name: string; email: string };
@@ -581,6 +582,19 @@ export function FleetPage() {
         }
     };
 
+    // Mark/unmark a cart as part of the bookable pool (drives /book-pool availability).
+    // Admin/SuperAdmin only — the backend enforces the same restriction.
+    const handleTogglePool = async (cart: FleetCart) => {
+        const next = !cart.isPool;
+        try {
+            await poolBookingsApi.togglePool(cart.id, next);
+            setFleet(prev => prev.map(c => (c.id === cart.id ? { ...c, isPool: next } : c)));
+            toast.success(next ? `Cart ${cart.carNumber} added to the booking pool` : `Cart ${cart.carNumber} removed from the booking pool`);
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to update pool status');
+        }
+    };
+
     const CartTable = ({ data }: { data: FleetCart[] }) => (
         <div className="flex flex-col">
             <div className="max-h-[600px] overflow-y-auto">
@@ -631,6 +645,15 @@ export function FleetPage() {
                                                             <RotateCcw className="w-4 h-4" />
                                                         </Button>
                                                     )}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className={cart.isPool ? 'text-teal-600 hover:text-teal-700 hover:bg-teal-50' : 'text-muted-foreground'}
+                                                        onClick={() => handleTogglePool(cart)}
+                                                        title={cart.isPool ? 'In booking pool — click to remove' : 'Not in booking pool — click to add'}
+                                                    >
+                                                        <Share2 className="w-4 h-4" />
+                                                    </Button>
                                                     <Button variant="ghost" size="sm" onClick={() => openAssign(cart)} title="Assign FA">
                                                         <UserCheck className="w-4 h-4" />
                                                     </Button>

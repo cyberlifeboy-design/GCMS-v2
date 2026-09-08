@@ -150,6 +150,11 @@ export class StadiumsService {
     }
 
     async updatePoolBookingHours(id: string, data: { poolBookingStartTime: string | null; poolBookingEndTime: string | null }) {
+        // Pre-check so a bad id yields a clean 'Stadium not found' (matching
+        // getPoolBookingHours) instead of a raw Prisma P2025 message.
+        const existing = await this.prisma.stadium.findUnique({ where: { id }, select: { id: true } });
+        if (!existing) throw new Error('Stadium not found');
+
         return this.prisma.stadium.update({
             where: { id },
             data,

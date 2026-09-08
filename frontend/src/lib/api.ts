@@ -392,16 +392,8 @@ export const poolBookingsApi = {
         apiClient.get('/pool-bookings/fleet', { params }),
     getBookings: (params?: { fleetId?: string; stadiumId?: string; status?: string; limit?: number }) =>
         apiClient.get('/pool-bookings', { params }),
-    checkout: (data: {
-        fleetId: string;
-        driverName: string;
-        driverPhone?: string;
-        accreditationNumber?: string;
-        purpose?: string;
-        expectedReturnAt?: string;
-    }) => apiClient.post('/pool-bookings/checkout', data),
-    returnCart: (bookingId: string, returnNotes?: string) =>
-        apiClient.patch(`/pool-bookings/${bookingId}/return`, { returnNotes }),
+    // checkout()/returnCart() were removed — the backend no-approval checkout routes
+    // no longer exist; all new bookings go through poolBookingRequestsApi.
     togglePool: (fleetId: string, isPool: boolean) =>
         apiClient.patch(`/pool-bookings/fleet/${fleetId}/toggle-pool`, { isPool }),
 };

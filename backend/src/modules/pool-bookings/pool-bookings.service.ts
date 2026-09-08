@@ -56,62 +56,9 @@ export class PoolBookingsService {
         });
     }
 
-    async checkout(
-        fleetId: string,
-        data: {
-            driverName: string;
-            driverPhone?: string;
-            accreditationNumber?: string;
-            purpose?: string;
-            expectedReturnAt?: Date;
-        },
-        userId: string,
-    ) {
-        const cart = await prisma.fleet.findUnique({ where: { id: fleetId } });
-        if (!cart) throw new Error('Cart not found');
-        if (!cart.isPool) throw new Error('Cart is not a pool cart');
-        if (cart.status !== 'Available') throw new Error('Cart is not available — it may already be checked out');
-
-        const [booking] = await prisma.$transaction([
-            prisma.poolBooking.create({
-                data: { fleetId, ...data, status: 'Active', createdById: userId },
-                include: BOOKING_INCLUDE,
-            }),
-            prisma.fleet.update({
-                where: { id: fleetId },
-                data: { status: 'Dispatched' },
-            }),
-        ]);
-
-        return booking;
-    }
-
-    async returnCart(bookingId: string, returnNotes: string | undefined, userId: string) {
-        const booking = await prisma.poolBooking.findUnique({
-            where: { id: bookingId },
-        });
-        if (!booking) throw new Error('Booking not found');
-        if (booking.status !== 'Active') throw new Error('Booking is already closed');
-
-        const [updated] = await prisma.$transaction([
-            prisma.poolBooking.update({
-                where: { id: bookingId },
-                data: {
-                    status: 'Returned',
-                    returnedAt: new Date(),
-                    returnNotes,
-                    returnedById: userId,
-                },
-                include: BOOKING_INCLUDE,
-            }),
-            prisma.fleet.update({
-                where: { id: booking.fleetId },
-                data: { status: 'Available' },
-            }),
-        ]);
-
-        return updated;
-    }
+    // NOTE: checkout()/returnCart() were removed alongside their routes — new pool
+    // bookings must go through the approval workflow in the pool-booking-requests
+    // module. Existing PoolBooking rows remain readable via getBookings().
 
     async togglePool(fleetId: string, isPool: boolean, requestorRole: string, requestorStadiumId?: string) {
         const cart = await prisma.fleet.findUnique({ where: { id: fleetId } });

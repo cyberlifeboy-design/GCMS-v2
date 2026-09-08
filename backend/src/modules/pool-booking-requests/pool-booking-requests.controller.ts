@@ -1,6 +1,7 @@
 import { Response, Request } from 'express';
 import { z } from 'zod';
 import { poolBookingRequestsService } from './pool-booking-requests.service';
+import { stadiumsService } from '../stadiums/stadiums.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 
 const createSchema = z.object({
@@ -38,6 +39,25 @@ const amendSchema = z.object({
 });
 
 export class PoolBookingRequestsController {
+    /**
+     * Checks a requested daily time window against the venue's configured pool-booking
+     * operating hours. Times are "HH:mm" strings, so plain string comparison is correct.
+     * Returns an error message when the window falls outside the configured hours, or
+     * null when it fits — or when the venue has no hours configured (no restriction).
+     */
+    private static async operatingHoursError(
+        stadiumId: string,
+        startTime: string,
+        endTime: string,
+    ): Promise<string | null> {
+        const { poolBookingStartTime, poolBookingEndTime } = await stadiumsService.getPoolBookingHours(stadiumId);
+        if (!poolBookingStartTime || !poolBookingEndTime) return null;
+        if (startTime < poolBookingStartTime || endTime > poolBookingEndTime) {
+            return `Booking time must be within this venue's operating hours (${poolBookingStartTime}–${poolBookingEndTime})`;
+        }
+        return null;
+    }
+
     /** POST /api/v1/public/pool-booking-requests */
     static async createPublic(req: AuthRequest, res: Response) {
         try {
@@ -50,11 +70,32 @@ export class PoolBookingRequestsController {
                 res.status(400).json({ error: 'End time must be after start time' });
                 return;
             }
+            const hoursError = await PoolBookingRequestsController.operatingHoursError(
+                data.stadiumId,
+                data.startTime,
+                data.endTime,
+            );
+            if (hoursError) {
+                res.status(400).json({ error: hoursError });
+                return;
+            }
             const booking = await poolBookingRequestsService.create({ ...data, createdById: req.user?.userId });
             res.status(201).json({ message: 'Booking request submitted', data: booking });
         } catch (error) {
+            const err = error as Error & { code?: string };
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (err.code === 'P2003') {
+                console.error('Create pool booking request error:', error);
+                res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
+            } else if (!err.code && err.message) {
+                // Validation failures raised by the service (cross-field integrity,
+                // unknown venue) are plain Errors with a safe message — surface them
+                // as a clean 400, consistent with approve/reject/amend. Anything
+                // carrying a driver error code falls through to the generic 500 so no
+                // raw Prisma text ever reaches a public caller.
+                console.error('Create pool booking request error:', error);
+                res.status(400).json({ error: err.message });
             } else {
                 console.error('Create pool booking request error:', error);
                 res.status(500).json({ error: 'Failed to submit booking request' });
@@ -116,7 +157,9 @@ export class PoolBookingRequestsController {
         try {
             const { status, stadiumId } = req.query;
             let filterStadiumId = stadiumId as string | undefined;
-            if (req.user?.role === 'Admin') {
+            // Admin and FA are both venue-scoped — they only ever see their own
+            // venue's requests (which carry requester PII).
+            if (req.user?.role === 'Admin' || req.user?.role === 'FA') {
                 filterStadiumId = req.user.stadiumId;
             }
             const data = await poolBookingRequestsService.getAll({ status: status as string, stadiumId: filterStadiumId });
@@ -207,6 +250,24 @@ export class PoolBookingRequestsController {
             }
 
             const { comment, ...rest } = data;
+
+            // Enforce the venue's operating hours against the merged (post-amend)
+            // window. Amend can't move a booking to another venue, so the booking's
+            // current stadium is the one whose hours apply.
+            const mergedStartTime = rest.startTime ?? existing.startTime;
+            const mergedEndTime = rest.endTime ?? existing.endTime;
+            if (mergedStartTime && mergedEndTime) {
+                const hoursError = await PoolBookingRequestsController.operatingHoursError(
+                    existing.stadiumId,
+                    mergedStartTime,
+                    mergedEndTime,
+                );
+                if (hoursError) {
+                    res.status(400).json({ error: hoursError });
+                    return;
+                }
+            }
+
             const booking = await poolBookingRequestsService.amend(id, rest, req.user!.userId, comment);
             res.json({ message: 'Booking updated', data: booking });
         } catch (error) {

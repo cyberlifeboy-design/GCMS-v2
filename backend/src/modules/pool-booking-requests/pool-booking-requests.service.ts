@@ -122,7 +122,36 @@ export class PoolBookingRequestsService {
         );
     }
 
+    /**
+     * Cross-field integrity: the chosen cart must be a pool cart at the chosen venue.
+     * Without this a crafted request could pair venue A's stadiumId with venue B's
+     * cart, which venue-scoped RBAC would then treat as venue A's booking.
+     */
+    private async assertFleetBelongsToStadium(fleetId: string, stadiumId: string) {
+        const fleet = await prisma.fleet.findUnique({
+            where: { id: fleetId },
+            select: { id: true, stadiumId: true, isPool: true },
+        });
+        if (!fleet || fleet.stadiumId !== stadiumId || !fleet.isPool) {
+            throw new Error("Selected cart does not belong to this venue's pool");
+        }
+    }
+
+    /** Cross-field integrity: the chosen FA must be an FA assigned to the chosen venue. */
+    private async assertFABelongsToStadium(faUserId: string, stadiumId: string) {
+        const user = await prisma.user.findUnique({
+            where: { id: faUserId },
+            select: { id: true, role: true, stadiumId: true },
+        });
+        if (!user || user.role !== 'FA' || user.stadiumId !== stadiumId) {
+            throw new Error('Selected FA is not assigned to this venue');
+        }
+    }
+
     async create(data: CreatePoolBookingRequestData) {
+        await this.assertFleetBelongsToStadium(data.fleetId, data.stadiumId);
+        await this.assertFABelongsToStadium(data.faUserId, data.stadiumId);
+
         const requestToken = this.generateRequestToken();
 
         const booking = await prisma.poolBookingRequest.create({
@@ -245,6 +274,11 @@ export class PoolBookingRequestsService {
         const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
         if (!existing) throw new Error('Booking request not found');
 
+        // amend can't move a booking to another venue, so any replacement cart/FA
+        // must belong to the booking's existing venue.
+        if (data.fleetId) await this.assertFleetBelongsToStadium(data.fleetId, existing.stadiumId);
+        if (data.faUserId) await this.assertFABelongsToStadium(data.faUserId, existing.stadiumId);
+
         const merged = { ...existing, ...data };
 
         if (merged.status === 'Approved') {
@@ -264,13 +298,24 @@ export class PoolBookingRequestsService {
             }
         }
 
+        // Reviewer metadata records a formal review decision, so it is only stamped
+        // when the caller is actually changing the review status. A plain
+        // schedule/cart/FA edit on a still-Pending booking leaves reviewedById,
+        // reviewedAt and reviewComment untouched.
+        const reviewFields =
+            data.status !== undefined
+                ? {
+                      reviewedById,
+                      reviewedAt: new Date(),
+                      ...(reviewComment !== undefined ? { reviewComment } : {}),
+                  }
+                : {};
+
         return prisma.poolBookingRequest.update({
             where: { id },
             data: {
                 ...data,
-                reviewedById,
-                reviewedAt: new Date(),
-                ...(reviewComment !== undefined ? { reviewComment } : {}),
+                ...reviewFields,
             },
             include: BOOKING_INCLUDE,
         });

@@ -1054,7 +1054,7 @@ function UserAccessControl() {
                                     {saving[u.id] && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-5 rounded-2xl bg-muted/5 border border-muted/30">
-                                    {['fleet', 'handover', 'maintenance', 'reports', 'requests', 'users', 'departments', 'stadiums', 'notifications'].map(page => {
+                                    {['fleet', 'handover', 'bookings', 'maintenance', 'reports', 'requests', 'users', 'departments', 'stadiums', 'notifications'].map(page => {
                                         const isGranted = (u.grantedPages || []).includes(page);
                                         return (
                                             <div key={page} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-muted/10 transition-colors">
