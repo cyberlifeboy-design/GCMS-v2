@@ -23,7 +23,8 @@ const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage
 const UsageHistoryPage = lazy(() => import('@/pages/UsageHistoryPage').then(m => ({ default: m.UsageHistoryPage })));
 const MyReportsPage = lazy(() => import('@/pages/MyReportsPage').then(m => ({ default: m.MyReportsPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
-const PoolBookingPage = lazy(() => import('@/pages/PoolBookingPage').then(m => ({ default: m.PoolBookingPage })));
+const PoolBookingRequestPage = lazy(() => import('@/pages/PoolBookingRequestPage').then(m => ({ default: m.PoolBookingRequestPage })));
+const BookingsPage = lazy(() => import('@/pages/BookingsPage').then(m => ({ default: m.BookingsPage })));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
@@ -54,6 +55,8 @@ function AppContent() {
                 {/* Public routes (no auth) */}
                 <Route path="/request" element={<PublicRequestPage />} />
                 <Route path="/request/confirm/:token" element={<PublicRequestPage />} />
+                <Route path="/book-pool" element={<PoolBookingRequestPage />} />
+                <Route path="/book-pool/confirm/:token" element={<PoolBookingRequestPage />} />
 
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -76,7 +79,7 @@ function AppContent() {
                                     <Route path="/notifications" element={<PageGuard pageKey="notifications"><NotificationCenterPage /></PageGuard>} />
                                     <Route path="/settings" element={<PageGuard pageKey="settings"><SettingsPage /></PageGuard>} />
                                     <Route path="/requests" element={<PageGuard pageKey="requests"><RequestsManagementPage /></PageGuard>} />
-                                    <Route path="/pool-booking" element={<PoolBookingPage />} />
+                                    <Route path="/bookings" element={<PageGuard pageKey="bookings"><BookingsPage /></PageGuard>} />
                                     <Route path="/usage-history" element={<UsageHistoryPage />} />
                                     <Route path="/my-reports" element={<MyReportsPage />} />
                                     <Route path="/profile" element={<ProfilePage />} />

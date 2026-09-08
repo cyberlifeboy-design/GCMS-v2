@@ -40,7 +40,7 @@ const navItems = [
     { name: 'Fleet', href: '/fleet', icon: Car, roles: ['SuperAdmin', 'Admin', 'Observer'], pageKey: 'fleet' },
     { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin', 'Contracts', 'MaintenanceTeam'], pageKey: 'fleet' },
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
-    { name: 'Pool Booking', href: '/pool-booking', icon: Layers, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'], pageKey: null },
+    { name: 'Bookings', href: '/bookings', icon: Layers, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'], pageKey: 'bookings' },
     { name: 'Usage History', href: '/usage-history', icon: Clock, roles: ['FA'], pageKey: null },
     { name: 'My Reports', href: '/my-reports', icon: FileText, roles: ['FA'], pageKey: null },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'maintenance' },
