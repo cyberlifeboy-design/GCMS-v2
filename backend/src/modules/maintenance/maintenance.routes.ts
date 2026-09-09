@@ -20,8 +20,15 @@ router.get('/fleet/:fleetId', requireRole('SuperAdmin', 'Admin', 'Observer', 'Co
 // GET /api/v1/maintenance/:id
 router.get('/:id', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam', 'FA'), MaintenanceController.getById);
 
-// GET /api/v1/maintenance/:id/pdf — full printable report
+// GET /api/v1/maintenance/:id/pdf — full printable report (self-printing HTML)
 router.get('/:id/pdf', requireRole('SuperAdmin', 'Admin', 'Contracts', 'Observer'), MaintenanceController.getPdfReport);
+
+// GET /api/v1/maintenance/:id/report.pdf — real branded PDF (workflow timeline)
+router.get('/:id/report.pdf', requireRole('SuperAdmin', 'Admin', 'Contracts', 'Observer'), MaintenanceController.downloadReportPdf);
+
+// POST /api/v1/maintenance/:id/email-report — email the PDF report
+// (the service writes an explicit 'EmailMaintenanceReport' AuditLog row on success)
+router.post('/:id/email-report', requireRole('SuperAdmin', 'Admin', 'Contracts', 'MaintenanceTeam'), MaintenanceController.emailReport);
 
 // POST /api/v1/maintenance — report issue
 router.post('/', requireRole('SuperAdmin', 'Admin', 'FA'), MaintenanceController.uploadMiddleware, auditLog(), MaintenanceController.reportIssue);

@@ -1,6 +1,9 @@
 import { prisma } from '../../config/database';
 import { uploadFile } from '../../config/storage';
 import { notificationService } from '../notifications/notification.service';
+import { maintenanceTimeline } from './maintenance-timeline';
+import { maintenanceReportPdf, makeReference } from '../../services/pdf.service';
+import { emailService } from '../../services/email.service';
 
 const FULL_INCLUDE = {
     fleet: { include: { stadium: true } },
@@ -415,6 +418,90 @@ export class MaintenanceService {
         const header = ['ID', 'Cart Number', 'Venue', 'Issue Type', 'Reporter', 'Phone', 'Issue', 'Status', 'Quotation Status', 'Fix Cost', 'Quotation Description', 'Timeline', 'Reported At', 'Escalated At', 'Escalated By', 'Quotation Requested At', 'Cost Submitted At', 'Cost Approved At', 'Approved By', 'Rejection Reason', 'Rejected At', 'Resolution Notes', 'Resolved At'];
         const csvLines = [header, ...rows].map(row => row.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(','));
         return csvLines.join('\n');
+    }
+
+    /**
+     * Real branded PDF of the maintenance fix report (workflow timeline).
+     * Throws Error('Maintenance log not found') when the id is unknown.
+     */
+    async getReportPdf(id: string): Promise<{ buffer: Buffer; reference: string; carNumber: string | null }> {
+        const log = await this.getById(id);
+        if (!log) throw new Error('Maintenance log not found');
+
+        const reference = makeReference('MNT', log.id);
+        let photoCount = 0;
+        try { photoCount = (JSON.parse((log.photosUrls as string) || '[]') as unknown[]).length; }
+        catch { photoCount = 0; }
+
+        const buffer = await maintenanceReportPdf({
+            reference,
+            data: {
+                id: log.id,
+                status: log.status,
+                quotationStatus: log.quotationStatus ?? null,
+                carNumber: log.fleet?.carNumber ?? null,
+                carType: log.fleet?.carType ?? null,
+                stadiumName: log.fleet?.stadium?.name ?? null,
+                stadiumCode: log.fleet?.stadium?.code ?? null,
+                reporterName: log.reportedBy?.name ?? null,
+                reporterRole: log.reportedBy?.role ?? null,
+                reporterPhone: log.reportedBy?.phone ?? null,
+                fixCost: log.fixCost ?? null,
+                photoCount,
+                timeline: maintenanceTimeline(log as any),
+            },
+        });
+        return { buffer, reference, carNumber: log.fleet?.carNumber ?? null };
+    }
+
+    /**
+     * Email the maintenance report PDF to the configured recipients plus any
+     * extras. Throws Error('NO_RECIPIENTS') when the merged list is empty; an
+     * emailService.send rejection propagates to the caller.
+     */
+    async emailReport(id: string, opts: { recipients?: string[]; note?: string; actorName?: string; actorUserId?: string }): Promise<{ sentTo: string[]; reference: string }> {
+        const { buffer, reference, carNumber } = await this.getReportPdf(id);
+
+        const settings = await prisma.systemSettings.findFirst();
+        const configured = (settings?.maintenanceNotificationEmails ?? '')
+            .split(',').map(s => s.trim()).filter(Boolean);
+        const extra = (opts.recipients ?? []).map(s => s.trim()).filter(Boolean);
+        const sentTo = [...new Set([...configured, ...extra])];
+        if (sentTo.length === 0) throw new Error('NO_RECIPIENTS');
+
+        const subject = `Maintenance report ${reference}${carNumber ? ` — Cart ${carNumber}` : ''}`;
+        const text = [
+            `Maintenance fix report ${reference}${carNumber ? ` for cart ${carNumber}` : ''} is attached as a PDF.`,
+            opts.note ? `\nNote from ${opts.actorName ?? 'the sender'}:\n${opts.note}` : '',
+            `\n— GCMS`,
+        ].filter(Boolean).join('\n');
+
+        await emailService.send({
+            to: sentTo,
+            subject,
+            text,
+            attachments: [{ filename: `${reference}.pdf`, content: buffer, contentType: 'application/pdf' }],
+        });
+
+        // Record the send explicitly (the generic request-audit middleware does not
+        // persist POST bodies reliably). Best-effort — never fail the send on this.
+        if (opts.actorUserId) {
+            try {
+                await prisma.auditLog.create({
+                    data: {
+                        userId: opts.actorUserId,
+                        action: 'EmailMaintenanceReport',
+                        entityType: 'MaintenanceLog',
+                        entityId: id,
+                        newValue: JSON.stringify({ reference, sentTo, note: opts.note ?? null }),
+                    },
+                });
+            } catch (err) {
+                console.error('Audit log for email-report failed (non-fatal):', err);
+            }
+        }
+
+        return { sentTo, reference };
     }
 
     // Generate full HTML report for PDF download (Contracts)

@@ -27,6 +27,11 @@ const rejectSchema = z.object({
     rejectionReason: z.string().min(1, 'Rejection reason is required'),
 });
 
+const emailReportSchema = z.object({
+    recipients: z.array(z.string().email()).optional(),
+    note: z.string().max(2000).optional(),
+});
+
 export class MaintenanceController {
     static uploadMiddleware = upload.array('photos', 5);
 
@@ -139,6 +144,65 @@ export class MaintenanceController {
             res.status(200).send(html);
         } catch (error: any) {
             res.status(500).json({ error: error.message || 'Failed to generate report' });
+        }
+    }
+
+    static async downloadReportPdf(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            if (req.user?.role === 'Admin' && req.user.stadiumId) {
+                const log = await maintenanceService.getById(id);
+                if (log && log.fleet?.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'Access denied' });
+                    return;
+                }
+            }
+            const { buffer, reference } = await maintenanceService.getReportPdf(id);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=${reference}.pdf`);
+            res.send(buffer);
+        } catch (error: any) {
+            if (error?.message === 'Maintenance log not found') {
+                res.status(404).json({ error: error.message });
+            } else {
+                console.error('Maintenance report PDF failed:', error);
+                res.status(500).json({ error: 'Failed to generate maintenance report PDF' });
+            }
+        }
+    }
+
+    static async emailReport(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params['id'] as string;
+            const body = emailReportSchema.parse(req.body);
+
+            if (req.user?.role === 'Admin' && req.user.stadiumId) {
+                const log = await maintenanceService.getById(id);
+                if (!log) { res.status(404).json({ error: 'Maintenance log not found' }); return; }
+                if (log.fleet?.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'Access denied' });
+                    return;
+                }
+            }
+
+            const result = await maintenanceService.emailReport(id, {
+                recipients: body.recipients,
+                note: body.note,
+                actorName: req.user?.email,
+                actorUserId: req.user?.userId,
+            });
+            res.status(200).json({ message: `Report emailed to ${result.sentTo.length} recipient(s)`, ...result });
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error?.message === 'Maintenance log not found') {
+                res.status(404).json({ error: error.message });
+            } else if (error?.message === 'NO_RECIPIENTS') {
+                res.status(400).json({ error: 'No recipients configured. Set maintenance notification emails in Settings or pass recipients.' });
+            } else {
+                console.error('Maintenance email-report failed:', error);
+                res.status(502).json({ error: 'Failed to send the report email.' });
+            }
         }
     }
 
