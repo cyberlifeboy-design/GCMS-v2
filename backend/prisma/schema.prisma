@@ -231,6 +231,11 @@ model SystemSettings {
   enableBulkOperations          Boolean   @default(true)
   enableAdvancedReports         Boolean   @default(true)
   enableAssignmentMatrix        Boolean   @default(true)
+  // Request / booking window control
+  requestWindowMode             String    @default("open") // open | closed | scheduled
+  requestWindowStart            DateTime?
+  requestWindowEnd              DateTime?
+  requestWindowClosedMessage    String?
   // System announcements (deprecated - use Announcement model)
   systemAnnouncement            String?   // Optional system-wide announcement text
   announcementExpiry            DateTime? // When announcement expires
@@ -306,7 +311,7 @@ model CarRequest {
   requesterEmail   String
   requesterPhone   String?
   accreditationNumber String? // Optional accreditation/badge number
-  requestType      String    @default("one-time") // one-time | dedicated
+  requestType      String    @default("pool-shared") // dedicated | pool-shared
   departmentId     String
   department       Department @relation(fields: [departmentId], references: [id])
   stadiumId        String
