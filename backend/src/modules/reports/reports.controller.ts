@@ -11,6 +11,7 @@ import { getFileBuffer } from '../../config/storage';
 import { poolReportPdf, makeReference } from '../../services/pdf.service';
 import { randomUUID } from 'crypto';
 import { possessionMinutes, formatDuration } from './fa-trail-detail';
+import { labelCarFontSize } from './label-layout';
 
 async function fetchImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
     if (!url) return null;
@@ -1042,128 +1043,77 @@ export class ReportsController {
                 fetchImageBuffer(settings?.footerUrl),
             ]);
 
-            // A4 landscape in points: 841.89 × 595.28
-            const doc = new PDFDocument({ margin: 0, size: 'A4', layout: 'landscape' });
+            // A5 portrait in points: ~419.5 × 595.28 — one car per page, print & laminate
+            const doc = new PDFDocument({ margin: 0, size: 'A5', layout: 'portrait' });
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'attachment; filename=labels.pdf');
             doc.pipe(res);
 
-            const pageW = doc.page.width;   // ~842
-            const pageH = doc.page.height;  // ~595
-            const margin = 36;
+            const pageW = doc.page.width;
+            const pageH = doc.page.height;
+            const margin = 28;
 
-            // Image sizing constants
-            const HEADER_IMG_H = 60;   // header banner max height
-            const LOGO_SIZE    = 52;   // logo square max dimension
-            const FOOTER_IMG_H = 44;   // footer banner max height
+            const HEADER_IMG_H = 64;   // event banner, full width, top
+            const LOGO_SIZE    = 46;   // event logo, centered under the banner
+            const FOOTER_IMG_H = 48;   // footer banner, full width, bottom
 
             labelsData.forEach((label, index) => {
                 if (index > 0) doc.addPage();
 
-                let contentTop = margin;
-
-                // ── Header banner image (full width) ──────────────────────
+                // ── Header banner (full width) ────────────────────────────
+                let top = margin;
                 if (headerBuffer) {
-                    doc.image(headerBuffer, 0, 0, {
-                        width: pageW,
-                        height: HEADER_IMG_H,
-                        cover: [pageW, HEADER_IMG_H],
-                    });
-                    contentTop = HEADER_IMG_H + 8;
+                    doc.image(headerBuffer, 0, 0, { width: pageW, height: HEADER_IMG_H, cover: [pageW, HEADER_IMG_H] });
+                    top = HEADER_IMG_H + 8;
                 }
 
-                // ── Logo + Tournament name row ────────────────────────────
-                const hasLogo = !!logoBuffer;
-                const logoX = margin;
-                const logoY = contentTop;
-                const nameX = hasLogo ? margin + LOGO_SIZE + 10 : margin;
-
-                if (hasLogo) {
-                    doc.image(logoBuffer!, logoX, logoY, {
-                        fit: [LOGO_SIZE, LOGO_SIZE],
-                    });
+                // ── Event logo (centered) + tournament name ───────────────
+                if (logoBuffer) {
+                    doc.image(logoBuffer, (pageW - LOGO_SIZE) / 2, top, { fit: [LOGO_SIZE, LOGO_SIZE] });
+                    top += LOGO_SIZE + 6;
                 }
-
                 if (settings?.tournamentName) {
-                    doc.fontSize(hasLogo ? 16 : 14)
-                        .font('Helvetica-Bold')
-                        .fillColor('#222222')
-                        .text(settings.tournamentName, nameX, logoY + (hasLogo ? (LOGO_SIZE - 20) / 2 : 0), {
-                            width: pageW - nameX - margin,
-                            align: hasLogo ? 'left' : 'center',
-                            lineBreak: false,
-                        });
+                    doc.font('Helvetica-Bold').fontSize(13).fillColor('#222222')
+                        .text(settings.tournamentName, margin, top, { width: pageW - margin * 2, align: 'center', lineBreak: false });
+                    top += 20;
                 }
 
-                contentTop = Math.max(contentTop, logoY + (hasLogo ? LOGO_SIZE : 20)) + 12;
+                // ── Footer block sits at the bottom ──────────────────────
+                const footerTextH = settings?.footerText ? 16 : 0;
+                const footerBlockH = (footerBuffer ? FOOTER_IMG_H : 0) + footerTextH + 10;
+                const footerTop = pageH - footerBlockH;
 
-                // ── Footer area ───────────────────────────────────────────
-                const footerTextH = settings?.footerText ? 20 : 0;
-                const footerH = (footerBuffer ? FOOTER_IMG_H : 0) + footerTextH + (footerBuffer || settings?.footerText ? 8 : 0);
-                const footerTop = pageH - margin - footerH;
-
-                // ── Car number – fills the space between header and footer ─
-                const carNum = label.carNumber;
-                const availH = footerTop - contentTop - 20;
+                // ── Car number — very large, centered in the free space ───
+                const faLineH = 42;
+                const availTop = top + 10;
+                const availH = footerTop - availTop - faLineH - 16;
                 const availW = pageW - margin * 2;
 
-                // Scale font to fit both width and height
-                let carFontSize = Math.min(availH * 0.75, 240);
-                // Reduce for longer numbers (>3 chars)
-                if (carNum.length > 3) {
-                    carFontSize = Math.min(carFontSize, Math.floor(availW * 0.72 / carNum.length));
-                }
-                carFontSize = Math.max(carFontSize, 60);
+                const carFont = labelCarFontSize(label.carNumber, availW, availH);
+                const carY = availTop + Math.max(0, (availH - carFont * 0.9) / 2);
+                doc.font('Helvetica-Bold').fontSize(carFont).fillColor('#000000')
+                    .text(label.carNumber, margin, carY, { width: availW, align: 'center', lineBreak: false });
 
-                const deptCode = label.departmentCode || '';
-                const deptFontSize = Math.min(Math.floor(carFontSize * 0.28), 56);
+                // ── FA code directly beneath the car number ──────────────
+                const faFont = Math.min(38, Math.max(24, Math.round(carFont * 0.22)));
+                doc.font('Helvetica-Bold').fontSize(faFont).fillColor('#333333')
+                    .text(`FA: ${label.faAccreditationNumber || '—'}`, margin, carY + carFont * 0.92, { width: availW, align: 'center', lineBreak: false });
 
-                const totalTextH = carFontSize * 0.85 + (deptCode ? deptFontSize + 8 : 0);
-                const textStartY = contentTop + (availH - totalTextH) / 2;
-
-                doc.fontSize(carFontSize)
-                    .font('Helvetica-Bold')
-                    .fillColor('#000000')
-                    .text(carNum, margin, textStartY, {
-                        width: availW,
-                        align: 'center',
-                        lineBreak: false,
-                    });
-
-                if (deptCode) {
-                    doc.fontSize(deptFontSize)
-                        .font('Helvetica-Bold')
-                        .fillColor('#444444')
-                        .text(deptCode, margin, textStartY + carFontSize * 0.82, {
-                            width: availW,
-                            align: 'center',
-                            lineBreak: false,
-                        });
-                }
-
-                // ── Footer image ──────────────────────────────────────────
-                let currentFooterY = footerTop;
+                // ── Footer banner + text ─────────────────────────────────
+                let fy = footerTop;
                 if (footerBuffer) {
-                    doc.image(footerBuffer, 0, currentFooterY, {
-                        width: pageW,
-                        height: FOOTER_IMG_H,
-                        cover: [pageW, FOOTER_IMG_H],
-                    });
-                    currentFooterY += FOOTER_IMG_H + 4;
+                    doc.image(footerBuffer, 0, fy, { width: pageW, height: FOOTER_IMG_H, cover: [pageW, FOOTER_IMG_H] });
+                    fy += FOOTER_IMG_H + 4;
                 }
-                if (settings?.footerText) {
-                    doc.fontSize(10)
-                        .font('Helvetica')
-                        .fillColor('#666666')
-                        .text(settings.footerText, margin, currentFooterY, {
-                            width: availW,
-                            align: 'center',
-                        });
+                if (settings?.footerText || settings?.tournamentName) {
+                    const footerLine = [settings?.footerText, settings?.tournamentName].filter(Boolean).join('  ·  ');
+                    doc.font('Helvetica').fontSize(8).fillColor('#666666')
+                        .text(footerLine, margin, fy, { width: pageW - margin * 2, align: 'center' });
                 }
             });
 
             if (labelsData.length === 0) {
-                doc.fontSize(16).font('Helvetica').fillColor('#666666')
+                doc.font('Helvetica').fontSize(14).fillColor('#666666')
                     .text('No assigned cars found for the selected criteria.', margin, pageH / 2, { align: 'center', width: doc.page.width - margin * 2 });
             }
 

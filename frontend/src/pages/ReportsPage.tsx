@@ -1143,7 +1143,7 @@ export function ReportsPage() {
                         <CardHeader>
                             <CardTitle>Print Labels</CardTitle>
                             <p className="text-sm text-muted-foreground">
-                                Generate printable labels for golf cars. Landscape orientation with car number, department code, and system branding.
+                                Generate printable labels for golf cars — one car per page (A5 portrait), sized for print &amp; laminate.
                             </p>
                         </CardHeader>
                         <CardContent>
@@ -1210,13 +1210,12 @@ export function ReportsPage() {
                                 <div className="bg-muted p-4 rounded-lg">
                                     <h4 className="font-medium mb-2">Label Format</h4>
                                     <ul className="text-sm text-muted-foreground space-y-1">
-                                        <li>• Page orientation: Landscape</li>
-                                        <li>• Content centered on each page</li>
-                                        <li>• Car number — large bold font (size 220, auto-adjusts for longer numbers)</li>
-                                        <li>• Department code — below car number</li>
-                                        <li>• Header logo — top left corner (from system branding)</li>
-                                        <li>• Footer logo — bottom of page (from system branding)</li>
-                                        <li>• Sequence continues for all assigned cars in selected stadium</li>
+                                        <li>• One car per page — A5 portrait</li>
+                                        <li>• Event logo &amp; banner across the top (from system branding)</li>
+                                        <li>• Car number — very large, centered</li>
+                                        <li>• FA code of the assigned FA directly beneath the car number</li>
+                                        <li>• Branded footer with footer text and tournament name</li>
+                                        <li>• One page for every assigned car in the selected stadium</li>
                                     </ul>
                                 </div>
                             </div>
