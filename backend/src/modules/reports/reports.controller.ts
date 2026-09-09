@@ -10,6 +10,7 @@ import { prisma } from '../../config/database';
 import { getFileBuffer } from '../../config/storage';
 import { poolReportPdf, makeReference } from '../../services/pdf.service';
 import { randomUUID } from 'crypto';
+import { possessionMinutes, formatDuration } from './fa-trail-detail';
 
 async function fetchImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
     if (!url) return null;
@@ -120,6 +121,14 @@ export class ReportsController {
             const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const logs = await reportsService.getHandoverReports({ stadiumId: filterStadiumId });
 
+            // Latest check-out timestamp per fleet (logs are sorted newest-first)
+            const latestCheckOut = new Map<string, Date>();
+            for (const l of logs) {
+                if (l.action === 'CheckedOut' && !latestCheckOut.has(l.fleetId)) {
+                    latestCheckOut.set(l.fleetId, l.timestamp);
+                }
+            }
+
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Handover Logs');
 
@@ -128,15 +137,25 @@ export class ReportsController {
                 { header: 'Car Number', key: 'carNumber', width: 15 },
                 { header: 'User', key: 'userName', width: 20 },
                 { header: 'Action', key: 'action', width: 15 },
+                { header: 'Checked In', key: 'checkedIn', width: 25 },
+                { header: 'Checked Out', key: 'checkedOut', width: 25 },
+                { header: 'Handover Signed', key: 'handoverSigned', width: 25 },
+                { header: 'Possession', key: 'possession', width: 14 },
                 { header: 'Condition', key: 'conditionNotes', width: 30 },
             ];
 
             logs.forEach((log) => {
+                const checkedInAt = log.fleet?.checkedInAt ?? null;
+                const checkOutAt = log.action === 'CheckedOut' ? log.timestamp : (latestCheckOut.get(log.fleetId) ?? null);
                 sheet.addRow({
                     timestamp: log.timestamp,
                     carNumber: log.fleet?.carNumber || '',
                     userName: log.user?.name || '',
                     action: log.action,
+                    checkedIn: checkedInAt ? new Date(checkedInAt).toLocaleString() : '—',
+                    checkedOut: checkOutAt ? new Date(checkOutAt).toLocaleString() : '—',
+                    handoverSigned: log.fleet?.handoverForm?.adminSignedAt ? new Date(log.fleet.handoverForm.adminSignedAt).toLocaleString() : '—',
+                    possession: formatDuration(possessionMinutes(checkedInAt, checkOutAt)),
                     conditionNotes: log.conditionNotes || '',
                 });
             });

@@ -966,6 +966,9 @@ export function ReportsPage() {
                                                         <TableHead>Action</TableHead>
                                                         <TableHead>Car #</TableHead>
                                                         <TableHead>Venue</TableHead>
+                                                        <TableHead>Checked in</TableHead>
+                                                        <TableHead>Checked out</TableHead>
+                                                        <TableHead>Possession</TableHead>
                                                         <TableHead>Notes</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
@@ -996,6 +999,9 @@ export function ReportsPage() {
                                                             </TableCell>
                                                             <TableCell className="font-mono font-semibold">{log.car?.carNumber}</TableCell>
                                                             <TableCell className="text-sm">{log.stadium?.code || log.stadium?.name}</TableCell>
+                                                            <TableCell className="text-xs whitespace-nowrap">{log.checkedInAt ? new Date(log.checkedInAt).toLocaleString() : '—'}</TableCell>
+                                                            <TableCell className="text-xs whitespace-nowrap">{log.checkOutAt ? new Date(log.checkOutAt).toLocaleString() : '—'}</TableCell>
+                                                            <TableCell className="text-xs whitespace-nowrap">{log.possessionLabel || '—'}</TableCell>
                                                             <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
                                                                 {log.conditionNotes || '—'}
                                                             </TableCell>

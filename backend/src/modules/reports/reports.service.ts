@@ -4,6 +4,7 @@ import { AuditLogFilters, HandoverFilters, MaintenanceFilters } from '../../type
 import { deriveBookingState } from '../pool-booking-requests/booking-state';
 import { summarizePoolBookings, PoolBookingSummary } from './pool-report';
 import { buildPublicBookerRows, PublicBookerRow } from './public-bookers';
+import { possessionMinutes, formatDuration } from './fa-trail-detail';
 
 interface ActivityLog {
     action: string;
@@ -136,8 +137,10 @@ export class ReportsService {
                         select: {
                             carNumber: true,
                             carType: true,
+                            checkedInAt: true,
                             stadium: { select: { id: true, name: true, code: true } },
                             department: { select: { code: true, name: true } },
+                            handoverForm: { select: { adminSignedAt: true, userSignedAt: true, afteruseSignedAt: true } },
                         },
                     },
                     user: {
@@ -158,31 +161,57 @@ export class ReportsService {
             this.prisma.handoverLog.count({ where: handoverWhere }),
         ]);
 
+        // Latest check-out timestamp per fleet among this page (for possession calc)
+        const fleetIds = [...new Set(handoverLogs.map(l => l.fleetId))];
+        const checkOutLogs = fleetIds.length
+            ? await this.prisma.handoverLog.findMany({
+                where: { fleetId: { in: fleetIds }, action: 'CheckedOut' },
+                orderBy: [{ fleetId: 'asc' }, { timestamp: 'desc' }],
+                select: { fleetId: true, timestamp: true },
+            })
+            : [];
+        const latestCheckOutMap = new Map<string, Date>();
+        for (const l of checkOutLogs) {
+            if (!latestCheckOutMap.has(l.fleetId)) latestCheckOutMap.set(l.fleetId, l.timestamp);
+        }
+
         return {
-            logs: handoverLogs.map(log => ({
-                id: log.id,
-                action: log.action,
-                timestamp: log.timestamp,
-                fa: {
-                    id: log.user.id,
-                    name: log.user.name,
-                    email: log.user.email,
-                    accreditationNumber: log.user.accreditationNumber,
-                    departmentCode: log.user.department?.code || null,
-                    departmentName: log.user.department?.name || null,
-                },
-                car: {
-                    carNumber: log.fleet.carNumber,
-                    carType: log.fleet.carType,
-                },
-                stadium: {
-                    id: log.fleet.stadium.id,
-                    name: log.fleet.stadium.name,
-                    code: log.fleet.stadium.code,
-                },
-                departmentCode: log.fleet.department?.code || log.user.department?.code || null,
-                conditionNotes: log.conditionNotes || null,
-            })),
+            logs: handoverLogs.map(log => {
+                const checkedInAt = log.fleet.checkedInAt ?? null;
+                const checkOutAt = log.action === 'CheckedOut' ? log.timestamp : (latestCheckOutMap.get(log.fleetId) ?? null);
+                const pm = possessionMinutes(checkedInAt, checkOutAt);
+                return {
+                    id: log.id,
+                    action: log.action,
+                    timestamp: log.timestamp,
+                    fa: {
+                        id: log.user.id,
+                        name: log.user.name,
+                        email: log.user.email,
+                        accreditationNumber: log.user.accreditationNumber,
+                        departmentCode: log.user.department?.code || null,
+                        departmentName: log.user.department?.name || null,
+                    },
+                    car: {
+                        carNumber: log.fleet.carNumber,
+                        carType: log.fleet.carType,
+                    },
+                    stadium: {
+                        id: log.fleet.stadium.id,
+                        name: log.fleet.stadium.name,
+                        code: log.fleet.stadium.code,
+                    },
+                    departmentCode: log.fleet.department?.code || log.user.department?.code || null,
+                    conditionNotes: log.conditionNotes || null,
+                    checkedInAt,
+                    checkOutAt,
+                    handoverSignedAt: log.fleet.handoverForm?.adminSignedAt ?? null,
+                    userSignedAt: log.fleet.handoverForm?.userSignedAt ?? null,
+                    afteruseSignedAt: log.fleet.handoverForm?.afteruseSignedAt ?? null,
+                    possessionMinutes: pm,
+                    possessionLabel: formatDuration(pm),
+                };
+            }),
             total,
         };
     }
@@ -204,7 +233,7 @@ export class ReportsService {
         return this.prisma.handoverLog.findMany({
             where,
             include: {
-                fleet: true,
+                fleet: { include: { handoverForm: { select: { adminSignedAt: true } } } },
                 user: { select: { name: true, email: true } },
             },
             orderBy: { timestamp: 'desc' },
