@@ -65,6 +65,17 @@ router.get('/users/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Cont
 // Export user report (PDF)
 router.get('/users/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportUserReportPdf);
 
+// ==================== POOL REPORT ====================
+
+// Pool car report (JSON)
+router.get('/pool', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.getPoolReport);
+
+// Export pool report (Excel)
+router.get('/pool/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportPoolReport);
+
+// Export pool report (PDF)
+router.get('/pool/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportPoolReportPdf);
+
 // ==================== PRINT LABELS ====================
 
 // Export print labels (Word)

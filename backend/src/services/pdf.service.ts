@@ -104,6 +104,72 @@ export async function bookingHistoryPdf(args: {
   );
 }
 
+export interface PoolReportPdfData {
+  scope: { stadiumId: string | null };
+  fleet: {
+    total: number;
+    byStatus: Record<string, number>;
+    byType: Record<string, number>;
+    byVenue: Array<{ stadiumName: string; total: number; inUse: number }>;
+  };
+  bookings: {
+    total: number;
+    byState: Record<string, number>;
+    byCar: Array<{ carNumber: string; count: number }>;
+    byVenue: Array<{ stadiumName: string; count: number }>;
+    overdueCount: number;
+    completedCount: number;
+    avgDurationHours: number | null;
+  };
+  requests: { pending: number; approved: number; rejected: number; poolShared: number; dedicated: number };
+  utilizationPct: number | null;
+}
+
+/**
+ * Pool car report as a branded PDF. The caller passes an already-assembled
+ * data object so this module stays leaf-level (no reports-module import).
+ */
+export async function poolReportPdf(args: { data: PoolReportPdfData; reference: string }): Promise<Buffer> {
+  const { data } = args;
+  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
+    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
+  };
+  const heading = (doc: PDFKit.PDFDocument, t: string) => {
+    doc.moveDown(0.6).font('Helvetica-Bold').fontSize(12).fillColor('#000').text(t).moveDown(0.2);
+    doc.font('Helvetica').fontSize(10);
+  };
+  const dict = (o: Record<string, number>) =>
+    Object.keys(o).length ? Object.entries(o).map(([k, v]) => `${k}: ${v}`).join('   ') : '—';
+
+  return renderPdf(
+    { title: 'Pool Car Report', subtitle: data.scope.stadiumId ? 'Venue-scoped' : 'All venues', reference: args.reference },
+    (doc) => {
+      heading(doc, 'Pool fleet');
+      kv(doc, 'Total pool cars', data.fleet.total);
+      kv(doc, 'By status', dict(data.fleet.byStatus));
+      kv(doc, 'By type', dict(data.fleet.byType));
+      kv(doc, 'Utilization', data.utilizationPct == null ? '—' : `${data.utilizationPct}%`);
+      data.fleet.byVenue.forEach(v => kv(doc, `  ${v.stadiumName}`, `${v.total} cars (${v.inUse} in use)`));
+
+      heading(doc, 'Bookings');
+      kv(doc, 'Total', data.bookings.total);
+      kv(doc, 'By state', dict(data.bookings.byState));
+      kv(doc, 'Overdue now', data.bookings.overdueCount);
+      kv(doc, 'Completed', data.bookings.completedCount);
+      kv(doc, 'Avg duration (h)', data.bookings.avgDurationHours ?? '—');
+      data.bookings.byCar.slice(0, 15).forEach(c => kv(doc, `  Car ${c.carNumber}`, `${c.count} bookings`));
+
+      heading(doc, 'Requests');
+      kv(doc, 'Pending', data.requests.pending);
+      kv(doc, 'Approved', data.requests.approved);
+      kv(doc, 'Rejected', data.requests.rejected);
+      kv(doc, 'Pool-shared', data.requests.poolShared);
+      kv(doc, 'Dedicated', data.requests.dedicated);
+    },
+  );
+}
+
 /**
  * Full handover & return form as a branded PDF. Takes the already-loaded form
  * (with `fleet`, `assignedUser`, signer relations) — the caller fetches it so

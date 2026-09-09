@@ -8,6 +8,8 @@ import { Document, Packer, Paragraph, TextRun, Header, Footer, PageOrientation, 
 import PptxGenJS from 'pptxgenjs';
 import { prisma } from '../../config/database';
 import { getFileBuffer } from '../../config/storage';
+import { poolReportPdf, makeReference } from '../../services/pdf.service';
+import { randomUUID } from 'crypto';
 
 async function fetchImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
     if (!url) return null;
@@ -763,6 +765,87 @@ export class ReportsController {
             doc.end();
         } catch (error) {
             res.status(500).json({ error: 'Failed to export user report PDF' });
+        }
+    }
+
+    // ==================== POOL REPORT ====================
+
+    static async getPoolReport(req: AuthRequest, res: Response) {
+        try {
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            if (stadiumId === '__none__') {
+                res.status(200).json({
+                    scope: { stadiumId: null },
+                    fleet: { total: 0, byStatus: {}, byType: {}, byVenue: [] },
+                    bookings: { total: 0, byState: {}, byCar: [], byVenue: [], overdueCount: 0, completedCount: 0, avgDurationHours: null },
+                    requests: { pending: 0, approved: 0, rejected: 0, poolShared: 0, dedicated: 0 },
+                    utilizationPct: null,
+                });
+                return;
+            }
+            const report = await reportsService.getPoolReport({ stadiumId });
+            res.status(200).json(report);
+        } catch (error) {
+            console.error('Failed to get pool report:', error);
+            res.status(500).json({ error: 'Failed to get pool report' });
+        }
+    }
+
+    static async exportPoolReport(req: AuthRequest, res: Response) {
+        try {
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const report = await reportsService.getPoolReport({ stadiumId });
+            const wb = new ExcelJS.Workbook();
+
+            const fleet = wb.addWorksheet('Pool Fleet');
+            fleet.columns = [{ header: 'Metric', key: 'k', width: 28 }, { header: 'Value', key: 'v', width: 40 }];
+            fleet.addRow({ k: 'Total pool cars', v: report.fleet.total });
+            fleet.addRow({ k: 'Utilization %', v: report.utilizationPct ?? '—' });
+            Object.entries(report.fleet.byStatus).forEach(([k, v]) => fleet.addRow({ k: `Status: ${k}`, v }));
+            Object.entries(report.fleet.byType).forEach(([k, v]) => fleet.addRow({ k: `Type: ${k}`, v }));
+
+            const venues = wb.addWorksheet('By Venue');
+            venues.columns = [
+                { header: 'Venue', key: 'stadiumName', width: 28 },
+                { header: 'Pool cars', key: 'total', width: 12 },
+                { header: 'In use', key: 'inUse', width: 12 },
+            ];
+            report.fleet.byVenue.forEach(v => venues.addRow(v));
+
+            const bookings = wb.addWorksheet('Bookings');
+            bookings.columns = [{ header: 'Metric', key: 'k', width: 28 }, { header: 'Value', key: 'v', width: 40 }];
+            bookings.addRow({ k: 'Total bookings', v: report.bookings.total });
+            bookings.addRow({ k: 'Overdue now', v: report.bookings.overdueCount });
+            bookings.addRow({ k: 'Completed', v: report.bookings.completedCount });
+            bookings.addRow({ k: 'Avg duration (h)', v: report.bookings.avgDurationHours ?? '—' });
+            Object.entries(report.bookings.byState).forEach(([k, v]) => bookings.addRow({ k: `State: ${k}`, v }));
+            report.bookings.byCar.forEach(c => bookings.addRow({ k: `Car ${c.carNumber}`, v: `${c.count} bookings` }));
+
+            const requests = wb.addWorksheet('Requests');
+            requests.columns = [{ header: 'Metric', key: 'k', width: 28 }, { header: 'Value', key: 'v', width: 20 }];
+            Object.entries(report.requests).forEach(([k, v]) => requests.addRow({ k, v }));
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=pool_report.xlsx');
+            await wb.xlsx.write(res);
+            res.end();
+        } catch (error) {
+            console.error('Failed to export pool report:', error);
+            res.status(500).json({ error: 'Failed to export pool report' });
+        }
+    }
+
+    static async exportPoolReportPdf(req: AuthRequest, res: Response) {
+        try {
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const report = await reportsService.getPoolReport({ stadiumId });
+            const buffer = await poolReportPdf({ data: report, reference: makeReference('POOL', randomUUID()) });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename=pool_report.pdf');
+            res.send(buffer);
+        } catch (error) {
+            console.error('Failed to export pool report PDF:', error);
+            res.status(500).json({ error: 'Failed to export pool report PDF' });
         }
     }
 
