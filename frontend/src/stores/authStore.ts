@@ -116,6 +116,12 @@ export const useAuthStore = create<AuthState>()(
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
                 set({ user: null, isAuthenticated: false });
+                // Full document load so no in-memory state (React Query caches,
+                // component state) survives. Guard against a reload loop when
+                // already on /login.
+                if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+                    window.location.assign('/login');
+                }
             },
             updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => {
                 set((state) => ({
