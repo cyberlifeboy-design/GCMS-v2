@@ -264,6 +264,7 @@ interface DashboardStats {
     activeStadiumsCount: number;
     stadiums: StadiumInfo[];
     faFleetOverview: FAFleetInfo[];
+    poolToday?: { bookings: number; available: number; booked: number; overdue: number };
 }
 
 const COLORS = ['#1E88E5', '#43A047', '#FDD835', '#E53935', '#8E24AA'];
@@ -445,6 +446,36 @@ export function DashboardPage() {
                     </Card>
                 ))}
             </div>
+
+            {/* Pool bookings today */}
+            {stats?.poolToday && (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                            <Car className="w-4 h-4 text-primary" /> Pool bookings today
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {([
+                                ['Today', stats.poolToday.bookings, ''],
+                                ['Available', stats.poolToday.available, 'text-green-600'],
+                                ['In use', stats.poolToday.booked, 'text-amber-600'],
+                                ['Overdue', stats.poolToday.overdue, 'text-red-600'],
+                            ] as const).map(([label, value, cls]) => (
+                                <button
+                                    key={label}
+                                    onClick={() => navigate('/bookings')}
+                                    className="rounded-md border p-3 text-left hover:bg-muted/50 transition-colors"
+                                >
+                                    <div className={`text-2xl font-bold ${cls}`}>{value}</div>
+                                    <div className="text-xs text-muted-foreground">{label}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* System Activity Summary — directly below stats banner */}
             <Card>
