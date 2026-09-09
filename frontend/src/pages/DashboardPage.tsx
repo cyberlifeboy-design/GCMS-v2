@@ -124,6 +124,7 @@ function FADashboard({ user }: { user: { name?: string; email?: string; stadium?
                 <p className="text-muted-foreground mt-1 flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
                     Venue: <span className="font-semibold">{user.stadium?.name || 'Unassigned'}</span>
+                    <span className="text-xs">· Showing: your activity</span>
                 </p>
             </div>
 
@@ -394,11 +395,11 @@ export function DashboardPage() {
                 <div>
                     <h1 className="text-3xl font-bold">Dashboard</h1>
                     <p className="text-muted-foreground mt-1">
-                        Viewing: <span className="font-semibold">
+                        Showing: <span className="font-semibold">
                             {isAdmin
-                                ? (user?.stadium?.name ?? 'My Venue')
+                                ? `${user?.stadium?.name ?? 'My Venue'} (your venue)`
                                 : stadiumFilter
-                                    ? (stadiums.find(s => s.id === stadiumFilter)?.name ?? 'Filtered Venue')
+                                    ? (stadiums.find(s => s.id === stadiumFilter)?.name ?? 'Selected venue')
                                     : 'All Venues'}
                         </span> —
                         Role: <span className="text-xs uppercase px-1.5 py-0.5 bg-muted rounded">{user?.role}</span>
