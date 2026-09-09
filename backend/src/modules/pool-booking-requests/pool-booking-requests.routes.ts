@@ -43,8 +43,19 @@ router.get('/public/pool-booking-requests/:token', (req: Request, res: Response)
 router.get('/pool-booking-requests', authenticate, requireRole('SuperAdmin', 'Admin', 'Observer', 'FA'), (req: Request, res: Response) =>
     PoolBookingRequestsController.getAll(req as any, res),
 );
+// History routes are registered right after the exact-match list route and before
+// any ':id' patterns so "/history" is never captured as an id.
+router.get('/pool-booking-requests/history', authenticate, requireRole('SuperAdmin', 'Admin', 'Observer', 'FA', 'Contracts', 'MaintenanceTeam'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.history(req as any, res),
+);
+router.get('/pool-booking-requests/history/export', authenticate, requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.exportHistory(req as any, res),
+);
 router.patch('/pool-booking-requests/:id/approve', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
     PoolBookingRequestsController.approve(req as any, res),
+);
+router.patch('/pool-booking-requests/:id/return', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.markReturned(req as any, res),
 );
 router.patch('/pool-booking-requests/:id/reject', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
     PoolBookingRequestsController.reject(req as any, res),

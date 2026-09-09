@@ -1,12 +1,12 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { poolBookingsService } from './pool-bookings.service';
+import { resolveStadiumScope } from '../reports/reports.scope';
 
 export class PoolBookingsController {
     static async getPoolFleet(req: AuthRequest, res: Response) {
         try {
-            let stadiumId = req.query.stadiumId as string | undefined;
-            if (req.user?.role === 'Admin') stadiumId = req.user.stadiumId;
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             const carts = await poolBookingsService.getPoolFleet(stadiumId);
             res.json({ data: carts });
@@ -18,8 +18,7 @@ export class PoolBookingsController {
     static async getBookings(req: AuthRequest, res: Response) {
         try {
             const { fleetId, status, limit } = req.query;
-            let stadiumId = req.query.stadiumId as string | undefined;
-            if (req.user?.role === 'Admin') stadiumId = req.user.stadiumId;
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             const bookings = await poolBookingsService.getBookings({
                 fleetId: fleetId as string,

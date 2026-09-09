@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { deriveBookingState } from '../pool-booking-requests/booking-state';
 
 const FLEET_INCLUDE = {
     stadium: { select: { id: true, name: true, code: true } },
@@ -19,18 +20,30 @@ export class PoolBookingsService {
             where,
             include: {
                 ...FLEET_INCLUDE,
-                poolBookings: {
-                    where: { status: 'Active' },
-                    take: 1,
-                    include: {
-                        createdBy: { select: { id: true, name: true } },
-                    },
+                assignedUser: { select: { id: true, name: true, accreditationNumber: true } },
+                poolBookingRequests: {
+                    where: { status: 'Approved', returnedAt: null },
+                    orderBy: { startDate: 'asc' },
+                    include: { faUser: { select: { id: true, name: true, accreditationNumber: true } } },
                 },
             },
             orderBy: { carNumber: 'asc' },
         });
 
-        return carts;
+        const now = new Date();
+        return carts.map((c) => {
+            const current =
+                c.poolBookingRequests.find((b) => {
+                    const s = deriveBookingState(b, now);
+                    return s === 'Active' || s === 'Overdue';
+                }) ?? null;
+            return {
+                ...c,
+                currentBooking: current
+                    ? { ...current, derivedState: deriveBookingState(current, now) }
+                    : null,
+            };
+        });
     }
 
     async getBookings(params: {

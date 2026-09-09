@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import crypto from 'crypto';
 import { notificationService } from '../notifications/notification.service';
+import { deriveBookingState } from './booking-state';
 
 export interface CreatePoolBookingRequestData {
     stadiumId: string;
@@ -31,8 +32,9 @@ export interface AmendPoolBookingRequestData {
 const BOOKING_INCLUDE = {
     stadium: { select: { id: true, name: true, code: true } },
     fleet: { select: { id: true, carNumber: true, carType: true } },
-    faUser: { select: { id: true, name: true } },
+    faUser: { select: { id: true, name: true, accreditationNumber: true, phone: true } },
     reviewedBy: { select: { id: true, name: true } },
+    returnedBy: { select: { id: true, name: true } },
     createdByUser: { select: { id: true, name: true } },
 };
 
@@ -198,11 +200,61 @@ export class PoolBookingRequestsService {
         return prisma.poolBookingRequest.findUnique({ where: { id }, include: BOOKING_INCLUDE });
     }
 
-    async getAll(filters: { status?: string; stadiumId?: string }) {
+    async getAll(filters: { status?: string; stadiumId?: string; derivedState?: string }) {
         const where: Record<string, unknown> = {};
         if (filters.status) where.status = filters.status;
         if (filters.stadiumId) where.stadiumId = filters.stadiumId;
-        return prisma.poolBookingRequest.findMany({ where, include: BOOKING_INCLUDE, orderBy: { createdAt: 'desc' } });
+        const rows = await prisma.poolBookingRequest.findMany({ where, include: BOOKING_INCLUDE, orderBy: { createdAt: 'desc' } });
+        const now = new Date();
+        const decorated = rows.map((r) => ({ ...r, derivedState: deriveBookingState(r, now) }));
+        return filters.derivedState
+            ? decorated.filter((r) => r.derivedState === filters.derivedState)
+            : decorated;
+    }
+
+    /**
+     * History view: same rows as getAll but with date-range / car / text filters,
+     * ordered by the booking window (most recent first).
+     */
+    async getHistory(filters: {
+        stadiumId?: string; fleetId?: string; status?: string; derivedState?: string;
+        fromDate?: string; toDate?: string; q?: string;
+    }) {
+        const where: Record<string, any> = {};
+        if (filters.stadiumId) where.stadiumId = filters.stadiumId;
+        if (filters.fleetId) where.fleetId = filters.fleetId;
+        if (filters.status) where.status = filters.status;
+        if (filters.fromDate || filters.toDate) {
+            where.startDate = {
+                ...(filters.fromDate ? { gte: filters.fromDate } : {}),
+                ...(filters.toDate ? { lte: filters.toDate } : {}),
+            };
+        }
+        if (filters.q) {
+            where.OR = [
+                { requesterName: { contains: filters.q } },
+                { requesterEmail: { contains: filters.q } },
+                { requesterPhone: { contains: filters.q } },
+            ];
+        }
+        const rows = await prisma.poolBookingRequest.findMany({ where, include: BOOKING_INCLUDE, orderBy: { startDate: 'desc' } });
+        const now = new Date();
+        const decorated = rows.map((r) => ({ ...r, derivedState: deriveBookingState(r, now) }));
+        return filters.derivedState
+            ? decorated.filter((r) => r.derivedState === filters.derivedState)
+            : decorated;
+    }
+
+    async markReturned(id: string, userId: string) {
+        const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
+        if (!existing) throw new Error('Booking request not found');
+        if (existing.status !== 'Approved') throw new Error('Only an approved booking can be returned');
+        const updated = await prisma.poolBookingRequest.update({
+            where: { id },
+            data: { status: 'Completed', returnedAt: new Date(), returnedById: userId },
+            include: BOOKING_INCLUDE,
+        });
+        return { ...updated, derivedState: deriveBookingState(updated, new Date()) };
     }
 
     async approve(id: string, reviewedById: string, reviewComment?: string) {

@@ -1,8 +1,11 @@
 import { Response, Request } from 'express';
 import { z } from 'zod';
+import * as ExcelJS from 'exceljs';
 import { poolBookingRequestsService } from './pool-booking-requests.service';
 import { stadiumsService } from '../stadiums/stadiums.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { resolveStadiumScope } from '../reports/reports.scope';
+import { bookingHistoryPdf, makeReference } from '../../services/pdf.service';
 
 const createSchema = z.object({
     stadiumId: z.string().min(1),
@@ -155,18 +158,118 @@ export class PoolBookingRequestsController {
     /** GET /api/v1/pool-booking-requests */
     static async getAll(req: AuthRequest, res: Response) {
         try {
-            const { status, stadiumId } = req.query;
-            let filterStadiumId = stadiumId as string | undefined;
-            // Admin and FA are both venue-scoped — they only ever see their own
-            // venue's requests (which carry requester PII).
-            if (req.user?.role === 'Admin' || req.user?.role === 'FA') {
-                filterStadiumId = req.user.stadiumId;
-            }
-            const data = await poolBookingRequestsService.getAll({ status: status as string, stadiumId: filterStadiumId });
+            // Admin and FA are venue-locked; a client stadiumId is ignored for them.
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const data = await poolBookingRequestsService.getAll({
+                status: req.query.status as string | undefined,
+                stadiumId,
+                derivedState: req.query.derivedState as string | undefined,
+            });
             res.json({ data });
         } catch (error) {
             console.error('Get all pool booking requests error:', error);
             res.status(500).json({ error: 'Failed to fetch booking requests' });
+        }
+    }
+
+    /** GET /api/v1/pool-booking-requests/history */
+    static async history(req: AuthRequest, res: Response) {
+        try {
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const data = await poolBookingRequestsService.getHistory({
+                stadiumId,
+                fleetId: req.query.fleetId as string | undefined,
+                status: req.query.status as string | undefined,
+                derivedState: req.query.derivedState as string | undefined,
+                fromDate: req.query.fromDate as string | undefined,
+                toDate: req.query.toDate as string | undefined,
+                q: req.query.q as string | undefined,
+            });
+            res.json({ data });
+        } catch (error) {
+            console.error('Pool booking history error:', error);
+            res.status(500).json({ error: 'Failed to load booking history' });
+        }
+    }
+
+    /** GET /api/v1/pool-booking-requests/history/export?format=pdf|xlsx */
+    static async exportHistory(req: AuthRequest, res: Response) {
+        try {
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const format = (req.query.format as string) || 'pdf';
+            const rows = await poolBookingRequestsService.getHistory({
+                stadiumId,
+                fleetId: req.query.fleetId as string | undefined,
+                status: req.query.status as string | undefined,
+                derivedState: req.query.derivedState as string | undefined,
+                fromDate: req.query.fromDate as string | undefined,
+                toDate: req.query.toDate as string | undefined,
+                q: req.query.q as string | undefined,
+            });
+            const summary = [
+                stadiumId ? `venue=${stadiumId}` : 'all venues',
+                req.query.fromDate ? `from ${req.query.fromDate}` : null,
+                req.query.toDate ? `to ${req.query.toDate}` : null,
+                req.query.status ? `status=${req.query.status}` : null,
+                req.query.derivedState ? `state=${req.query.derivedState}` : null,
+            ].filter(Boolean).join('  ·  ');
+            const reference = makeReference('BKH', (rows[0] as { id?: string })?.id ?? 'NONE00');
+
+            if (format === 'xlsx') {
+                const wb = new ExcelJS.Workbook();
+                const ws = wb.addWorksheet('Booking History');
+                ws.columns = [
+                    { header: 'Car', key: 'car', width: 14 }, { header: 'Type', key: 'type', width: 14 },
+                    { header: 'Venue', key: 'venue', width: 22 }, { header: 'State', key: 'state', width: 12 },
+                    { header: 'Requester', key: 'req', width: 22 }, { header: 'FA', key: 'fa', width: 12 },
+                    { header: 'Phone', key: 'phone', width: 16 }, { header: 'Email', key: 'email', width: 26 },
+                    { header: 'Booking type', key: 'btype', width: 12 },
+                    { header: 'From', key: 'from', width: 18 }, { header: 'To', key: 'to', width: 18 },
+                    { header: 'Returned At', key: 'ret', width: 20 },
+                ];
+                rows.forEach((r: any) => ws.addRow({
+                    car: r.fleet?.carNumber, type: r.fleet?.carType, venue: r.stadium?.name,
+                    state: r.derivedState, req: r.requesterName, fa: r.faUser?.accreditationNumber ?? '',
+                    phone: r.requesterPhone, email: r.requesterEmail, btype: r.bookingType,
+                    from: `${r.startDate} ${r.startTime}`, to: `${r.endDate} ${r.endTime}`,
+                    ret: r.returnedAt ? new Date(r.returnedAt).toLocaleString() : '',
+                }));
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                res.setHeader('Content-Disposition', `attachment; filename=booking_history_${reference}.xlsx`);
+                await wb.xlsx.write(res);
+                res.end();
+                return;
+            }
+
+            const pdf = await bookingHistoryPdf({ rows: rows as any[], filterSummary: summary || 'all bookings', reference });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=booking_history_${reference}.pdf`);
+            res.end(pdf);
+        } catch (error) {
+            console.error('Pool booking history export error:', error);
+            res.status(500).json({ error: 'Failed to export booking history' });
+        }
+    }
+
+    /** PATCH /api/v1/pool-booking-requests/:id/return */
+    static async markReturned(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const existing = await poolBookingRequestsService.getById(id);
+            if (!existing) {
+                res.status(404).json({ error: 'Booking request not found' });
+                return;
+            }
+            if (req.user?.role === 'Admin' && existing.stadiumId !== req.user.stadiumId) {
+                res.status(403).json({ error: 'Access denied' });
+                return;
+            }
+            const data = await poolBookingRequestsService.markReturned(id, req.user!.userId);
+            res.json({ message: 'Booking marked returned', data });
+        } catch (error) {
+            const err = error as Error;
+            console.error('Mark returned error:', error);
+            res.status(400).json({ error: err.message || 'Failed to mark booking returned' });
         }
     }
 
