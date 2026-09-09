@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { fleetApi, stadiumsApi } from '@/lib/api';
+import { toast } from 'sonner';
+import { fleetApi, stadiumsApi, poolBookingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Users, Grid, History as HistoryIcon, X, ArrowRightLeft, FilterX } from 'lucide-react';
+import { Loader2, Users, Grid, History as HistoryIcon, X, ArrowRightLeft, FilterX, Car } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { carTypeColors } from '@/lib/constants';
 import { AssignmentHistory } from '@/components/fleet/AssignmentHistory';
@@ -50,6 +51,111 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
+
+interface PoolCart {
+    id: string;
+    carNumber: string;
+    carType: string;
+    isPool: boolean;
+    stadium?: { id: string; name: string; code: string };
+    assignedUser?: { id: string; name: string; accreditationNumber?: string | null } | null;
+    currentBooking?: {
+        derivedState: string;
+        requesterName: string;
+        endDate: string;
+        endTime: string;
+    } | null;
+}
+
+function PoolCarsPanel({ selectedStadium }: { selectedStadium: string }) {
+    const [carts, setCarts] = useState<PoolCart[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const params =
+                selectedStadium && selectedStadium !== 'all' ? { stadiumId: selectedStadium } : undefined;
+            const res = await poolBookingsApi.getPoolFleet(params);
+            setCarts(res.data?.data ?? res.data ?? []);
+        } catch {
+            toast.error('Failed to load pool cars');
+        } finally {
+            setLoading(false);
+        }
+    };
+    useEffect(() => {
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedStadium]);
+
+    const toggle = async (id: string, isPool: boolean) => {
+        try {
+            await poolBookingsApi.togglePool(id, isPool);
+            toast.success(isPool ? 'Added to pool' : 'Removed from pool');
+            load();
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Toggle failed');
+        }
+    };
+
+    const statusFor = (c: PoolCart) => {
+        const b = c.currentBooking;
+        if (!b) return { label: 'Available', cls: 'text-green-600 font-semibold' };
+        if (b.derivedState === 'Overdue') return { label: 'Overdue — should be returned', cls: 'text-red-600 font-semibold' };
+        return { label: `Booked until ${b.endDate} ${b.endTime}`, cls: 'text-amber-600 font-semibold' };
+    };
+
+    if (loading) return <p className="text-muted-foreground">Loading pool cars…</p>;
+    if (carts.length === 0)
+        return (
+            <p className="text-muted-foreground">
+                No pool cars at this venue. Use the pool toggle on a cart to add one.
+            </p>
+        );
+
+    return (
+        <div className="overflow-x-auto rounded-md border">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Cart #</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Venue</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Assigned FA</TableHead>
+                        <TableHead>Current booking</TableHead>
+                        <TableHead className="text-right">Pool</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {carts.map((c) => {
+                        const st = statusFor(c);
+                        return (
+                            <TableRow key={c.id}>
+                                <TableCell className="font-medium">{c.carNumber}</TableCell>
+                                <TableCell>{c.carType}</TableCell>
+                                <TableCell>{c.stadium?.name ?? '—'}</TableCell>
+                                <TableCell className={st.cls}>{st.label}</TableCell>
+                                <TableCell>{c.assignedUser?.accreditationNumber ?? '—'}</TableCell>
+                                <TableCell>{c.currentBooking?.requesterName ?? '—'}</TableCell>
+                                <TableCell className="text-right">
+                                    <Button
+                                        size="sm"
+                                        variant={c.isPool ? 'outline' : 'default'}
+                                        onClick={() => toggle(c.id, !c.isPool)}
+                                    >
+                                        {c.isPool ? 'Remove' : 'Add'}
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
 
 export function FleetManagementPage() {
     const { user } = useAuthStore();
@@ -277,6 +383,7 @@ export function FleetManagementPage() {
                 <TabsList>
                     <TabsTrigger value="matrix"><Grid className="w-4 h-4 mr-2 inline" />Assignment Matrix</TabsTrigger>
                     <TabsTrigger value="history"><HistoryIcon className="w-4 h-4 mr-2 inline" />Assignment History</TabsTrigger>
+                    <TabsTrigger value="pool"><Car className="w-4 h-4 mr-2 inline" />Pool Cars</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="matrix" className="space-y-4">
@@ -541,6 +648,10 @@ export function FleetManagementPage() {
 
                 <TabsContent value="history" className="space-y-4">
                     <AssignmentHistory stadiumId={selectedStadium !== 'all' ? selectedStadium : undefined} />
+                </TabsContent>
+
+                <TabsContent value="pool" className="space-y-4">
+                    <PoolCarsPanel selectedStadium={selectedStadium} />
                 </TabsContent>
             </Tabs>
 
