@@ -7,6 +7,7 @@ export interface EmailOptions {
     text?: string;
     html?: string;
     from?: string;
+    attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
 export interface EmailTransport {
@@ -47,6 +48,13 @@ class ResendTransport implements EmailTransport {
         if (text) {
             emailData.text = text;
         }
+        if (options.attachments?.length) {
+            (emailData as any).attachments = options.attachments.map(a => ({
+                filename: a.filename,
+                content: a.content,
+                ...(a.contentType ? { content_type: a.contentType } : {}),
+            }));
+        }
 
         const { data, error } = await this.resend.emails.send(emailData as any);
 
@@ -85,6 +93,11 @@ class SmtpTransport implements EmailTransport {
                 subject,
                 text,
                 html,
+                attachments: options.attachments?.map(a => ({
+                    filename: a.filename,
+                    content: a.content,
+                    ...(a.contentType ? { contentType: a.contentType } : {}),
+                })),
             });
 
             console.log('Email sent via SMTP:', info.messageId);
