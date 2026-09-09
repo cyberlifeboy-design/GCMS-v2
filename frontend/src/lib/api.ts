@@ -284,6 +284,12 @@ export const reportsApi = {
     exportUserReport: (format: 'xlsx' | 'pdf' = 'xlsx') =>
         apiClient.get(`/reports/users/export${format === 'pdf' ? '/pdf' : ''}`, { responseType: 'blob' }),
 
+    // Pool report
+    getPoolReport: (params?: Record<string, unknown>) =>
+        apiClient.get('/reports/pool', { params }),
+    exportPoolReport: (format: 'xlsx' | 'pdf' = 'xlsx', params?: Record<string, unknown>) =>
+        apiClient.get(`/reports/pool/export${format === 'pdf' ? '/pdf' : ''}`, { params, responseType: 'blob' }),
+
     // Print Labels
     exportLabels: (format: 'docx' | 'pptx' | 'pdf' = 'pdf', params?: Record<string, unknown>) =>
         apiClient.get(`/reports/labels/${format}`, { params, responseType: 'blob' }),

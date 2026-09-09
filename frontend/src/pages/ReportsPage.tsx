@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag, Activity, Search, FileSignature } from 'lucide-react';
+import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag, Activity, Search, FileSignature, Car } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
 import { formatDateTime } from '@/lib/dateUtils';
@@ -88,6 +88,11 @@ export function ReportsPage() {
     const [stadiumReports, setStadiumReports] = useState<StadiumReport[]>([]);
     const [departmentReports, setDepartmentReports] = useState<DepartmentReport[]>([]);
     const [userReports, setUserReports] = useState<UserReport[]>([]);
+    const [poolReport, setPoolReport] = useState<any>(null);
+    const [poolLoading, setPoolLoading] = useState(false);
+    const [poolStadiumFilter, setPoolStadiumFilter] = useState<string>(() =>
+        role === 'Admin' && user?.stadiumId ? user.stadiumId : ''
+    );
 
     const [loadingUtil, setLoadingUtil] = useState(true);
     const [loadingStadium, setLoadingStadium] = useState(false);
@@ -210,6 +215,16 @@ export function ReportsPage() {
         } catch { } finally { setLoadingUser(false); }
     };
 
+    const loadPoolReport = async () => {
+        setPoolLoading(true);
+        try {
+            const params: Record<string, string> = {};
+            if (poolStadiumFilter) params.stadiumId = poolStadiumFilter;
+            const res = await reportsApi.getPoolReport(params);
+            setPoolReport(res.data);
+        } catch { } finally { setPoolLoading(false); }
+    };
+
     const downloadBlob = (data: Blob, filename: string) => {
         const url = window.URL.createObjectURL(data);
         const a = document.createElement('a');
@@ -257,6 +272,17 @@ export function ReportsPage() {
             const res = await reportsApi.exportUserReport(actualFormat as 'xlsx' | 'pdf');
             const ext = actualFormat === 'pdf' ? 'pdf' : 'xlsx';
             downloadBlob(res.data, `user_report_${new Date().toISOString().split('T')[0]}.${ext}`);
+        } catch { alert('Export failed'); }
+        finally { setExporting(null); }
+    };
+
+    const handleExportPool = async (format: 'xlsx' | 'pdf') => {
+        setExporting('pool');
+        try {
+            const params: Record<string, unknown> = {};
+            if (poolStadiumFilter) params.stadiumId = poolStadiumFilter;
+            const res = await reportsApi.exportPoolReport(format, params);
+            downloadBlob(res.data, `pool_report_${new Date().toISOString().split('T')[0]}.${format}`);
         } catch { alert('Export failed'); }
         finally { setExporting(null); }
     };
@@ -329,10 +355,14 @@ export function ReportsPage() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="stadiums" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-6">
+                <TabsList className="grid w-full grid-cols-7">
                     <TabsTrigger value="stadiums" className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Stadium Reports
+                    </TabsTrigger>
+                    <TabsTrigger value="pool" className="flex items-center gap-2">
+                        <Car className="w-4 h-4" />
+                        Pool
                     </TabsTrigger>
                     <TabsTrigger value="departments" className="flex items-center gap-2">
                         <FileSpreadsheet className="w-4 h-4" />
@@ -457,6 +487,82 @@ export function ReportsPage() {
                                             ))}
                                         </TableBody>
                                     </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Pool Report Tab */}
+                <TabsContent value="pool">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Pool Car Report</CardTitle>
+                            <CardDescription>
+                                Pool fleet inventory, booking activity, request mix and utilization
+                                {role === 'Admin' ? ' for your venue.' : ' across all venues.'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex gap-3 flex-wrap items-end">
+                                {!isStadiumLocked && (
+                                    <div className="space-y-1 min-w-[180px]">
+                                        <p className="text-xs font-medium text-muted-foreground">Stadium</p>
+                                        <Select value={poolStadiumFilter || '__all__'} onValueChange={v => setPoolStadiumFilter(v === '__all__' ? '' : v)}>
+                                            <SelectTrigger className="w-48"><SelectValue placeholder="All Stadiums" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__all__">All Stadiums</SelectItem>
+                                                {allStadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                <Button size="sm" onClick={loadPoolReport} disabled={poolLoading}>
+                                    {poolLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                                    Load Report
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleExportPool('pdf')} disabled={exporting === 'pool' || !poolReport}>
+                                    <FileText className="w-4 h-4 mr-2" /> PDF
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleExportPool('xlsx')} disabled={exporting === 'pool' || !poolReport}>
+                                    <FileSpreadsheet className="w-4 h-4 mr-2" /> Excel
+                                </Button>
+                            </div>
+
+                            {poolReport ? (
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="rounded-md border p-4">
+                                        <h4 className="font-medium mb-2">Pool fleet</h4>
+                                        <p className="text-sm">Total pool cars: <b>{poolReport.fleet.total}</b></p>
+                                        <p className="text-sm">Utilization: <b>{poolReport.utilizationPct ?? '—'}{poolReport.utilizationPct != null ? '%' : ''}</b></p>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            {Object.entries(poolReport.fleet.byStatus).map(([k, v]) => `${k}: ${v}`).join('  ·  ') || '—'}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-md border p-4">
+                                        <h4 className="font-medium mb-2">Bookings</h4>
+                                        <p className="text-sm">Total: <b>{poolReport.bookings.total}</b></p>
+                                        <p className="text-sm">Overdue now: <b>{poolReport.bookings.overdueCount}</b> · Completed: <b>{poolReport.bookings.completedCount}</b></p>
+                                        <p className="text-sm">Avg duration: <b>{poolReport.bookings.avgDurationHours ?? '—'}</b> h</p>
+                                    </div>
+                                    <div className="rounded-md border p-4">
+                                        <h4 className="font-medium mb-2">Requests</h4>
+                                        <p className="text-sm">Pending {poolReport.requests.pending} · Approved {poolReport.requests.approved} · Rejected {poolReport.requests.rejected}</p>
+                                        <p className="text-sm">Pool-shared {poolReport.requests.poolShared} · Dedicated {poolReport.requests.dedicated}</p>
+                                    </div>
+                                    <div className="rounded-md border p-4">
+                                        <h4 className="font-medium mb-2">Top cars by bookings</h4>
+                                        <ul className="text-sm text-muted-foreground space-y-0.5">
+                                            {poolReport.bookings.byCar.slice(0, 8).map((c: any) => (
+                                                <li key={c.carNumber}>{c.carNumber}: {c.count}</li>
+                                            ))}
+                                            {poolReport.bookings.byCar.length === 0 && <li>—</li>}
+                                        </ul>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <p>Click "Load Report" to view pool analytics.</p>
                                 </div>
                             )}
                         </CardContent>
