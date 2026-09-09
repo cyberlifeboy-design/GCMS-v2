@@ -204,6 +204,50 @@ are user-entered.
 
 ## 8. Phase 4 — Requests, Reports, FA Audit, Labels
 
+### 8.0 Request window (requirement-collection campaign control)
+
+SuperAdmin controls whether the public request/booking channels are open, so requirement
+collection from FAs/users happens in a defined window that is then reviewed in bulk.
+
+**Data — `SystemSettings` new fields:**
+- `requestWindowMode` `String` default `"open"` — one of `open` | `closed` | `scheduled`.
+- `requestWindowStart` `DateTime?`, `requestWindowEnd` `DateTime?` — used when `scheduled`.
+- `requestWindowClosedMessage` `String?` — optional custom text shown when closed.
+
+**Derived state** (`isRequestWindowOpen()` helper in the settings service):
+- `open` → true; `closed` → false; `scheduled` → `now >= start && now <= end`
+  (missing bound = unbounded on that side).
+
+**Public exposure:** `GET /api/v1/settings/public` returns
+`requestWindow: { isOpen: boolean, opensAt: string | null, closesAt: string | null, message: string | null }`.
+
+**Login page** (`LoginPage.tsx`): the "Submit a Request" and "Bookings" buttons stay
+visible always; when `!isOpen` they render **disabled** with a sub-line —
+`message` if set, else `Requirement collection opens <opensAt>` (scheduled, future) or
+`Requests are currently closed`.
+
+**Server-side enforcement (both flows):** `POST /api/v1/requests` (public `CarRequest`
+create) and `POST /api/v1/pool-booking-requests` (public create) reject with
+`403 { error: "The request window is currently closed." }` when `!isRequestWindowOpen()`.
+The public pages (`PublicRequestPage.tsx`, `PoolBookingRequestPage.tsx`) show a
+"currently closed" notice in place of the form when closed.
+
+**Settings UI** (`SettingsPage.tsx`, SuperAdmin only): a "Request Window" card —
+mode radio (Open / Closed / Scheduled), start/end datetime pickers (shown for Scheduled),
+optional closed-message field, and an **"Announce window is open"** button that, after a
+confirm dialog, sends an in-app notification **and** an email to every active `FA` and
+plain user account ("Requirement collection is now open — submit your requests by
+<closesAt>"). Announcement is manual only; no scheduler.
+
+### 8.0a Requester notification on approve/reject
+
+`requests.service.ts` `approveRequest` / `rejectRequest` (and the equivalent in
+`pool-booking-requests.service.ts`) currently notify admins only. Extend both to also
+notify the **requester**:
+- in-app `Notification` if a `User` exists with that `requesterEmail`;
+- always an email to `requesterEmail` with the status (Approved / Rejected), the review
+  notes/comment, and the request reference.
+
 ### 8.1 Request type
 - `CarRequest.requestType` currently `"one-time" | "dedicated"`. Migrate values to
   **`"dedicated"`** and **`"pool-shared"`** (map legacy `one-time` → `pool-shared`).
@@ -246,6 +290,13 @@ Excel/PDF export.
   match or deprecated (decide during planning; PDF is the canonical one).
 
 ### 8.6 Acceptance
+- With the window set to Closed (or a future Scheduled range), the login-page
+  "Submit a Request" / "Bookings" buttons are disabled with the correct message, and
+  `POST /requests` + `POST /pool-booking-requests` return 403.
+- With the window Open (or inside a Scheduled range), both flows accept submissions.
+- "Announce window is open" sends an email + in-app notification to every active FA/user.
+- Approving or rejecting a request emails the requester (and in-app notifies them if they
+  have an account) with the status and review notes.
 - A request can be created and filtered as Dedicated or Pool shared resource; legacy rows
   read as Pool shared resource.
 - `/reports/pool/export/pdf` returns a populated pool report scoped correctly by role.
