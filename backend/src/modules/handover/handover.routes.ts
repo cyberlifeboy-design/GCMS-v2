@@ -29,6 +29,7 @@ router.post('/forms', authenticate, requireRole('Admin', 'SuperAdmin'), Handover
 router.get('/forms/pending', authenticate, requireRole('Admin', 'SuperAdmin'), HandoverController.getPendingHandovers);
 router.get('/forms/list', authenticate, HandoverController.listForms);
 router.get('/forms/:fleetId', authenticate, HandoverController.getHandoverForm);
+router.get('/forms/:fleetId/pdf', authenticate, HandoverController.downloadFormPdf);
 router.post('/forms/user-sign', authenticate, HandoverController.userSignHandoverForm);
 router.post('/forms/afteruse', authenticate, HandoverController.saveAfterUse);
 router.post('/forms/admin-return', authenticate, requireRole('Admin', 'SuperAdmin'), HandoverController.adminSignReturn);

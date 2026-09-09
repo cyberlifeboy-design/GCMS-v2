@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
 import { HandoverFilters, PaginationParams } from '../../types';
+import { handoverFormPdf } from '../../services/pdf.service';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -251,6 +252,24 @@ export class HandoverController {
             res.status(200).json(form ?? null);
         } catch (error: any) {
             res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async downloadFormPdf(req: AuthRequest, res: Response) {
+        try {
+            const fleetId = req.params.fleetId as string;
+            const form = await handoverService.getHandoverForm(fleetId);
+            if (!form) {
+                res.status(404).json({ error: 'No handover form found for this cart' });
+                return;
+            }
+            const result = await handoverFormPdf(form);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=handover_${result.reference}.pdf`);
+            res.end(result.buffer);
+        } catch (error) {
+            console.error('Handover PDF error:', error);
+            res.status(500).json({ error: 'Failed to generate handover PDF' });
         }
     }
 

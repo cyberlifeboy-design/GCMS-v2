@@ -14,6 +14,18 @@ export function makeReference(prefix: string, id: string): string {
   return `${prefix}-${year}-${tail}`;
 }
 
+/** Decode a "data:image/png;base64,AAAA" string to a Buffer, or null if it isn't one. */
+function dataUriToBuffer(uri: string | null | undefined): Buffer | null {
+  if (!uri || typeof uri !== 'string') return null;
+  const m = uri.match(/^data:image\/[a-zA-Z+]+;base64,(.+)$/);
+  if (!m) return null;
+  try {
+    return Buffer.from(m[1], 'base64');
+  } catch {
+    return null;
+  }
+}
+
 async function loadBranding() {
   const s = await prisma.systemSettings.findFirst();
   return {
@@ -90,4 +102,86 @@ export async function bookingHistoryPdf(args: {
       });
     },
   );
+}
+
+/**
+ * Full handover & return form as a branded PDF. Takes the already-loaded form
+ * (with `fleet`, `assignedUser`, signer relations) — the caller fetches it so
+ * this module stays leaf-level.
+ */
+export async function handoverFormPdf(
+  form: any,
+): Promise<{ buffer: Buffer; reference: string }> {
+  const reference = makeReference('HOF', form.id);
+  const fleet = form.fleet ?? {};
+  const fa = fleet.assignedUser ?? {};
+
+  const line = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
+    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
+  };
+  const sig = (doc: PDFKit.PDFDocument, label: string, uri: string | null | undefined, at?: string, by?: string) => {
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(label);
+    const buf = dataUriToBuffer(uri);
+    if (buf) {
+      try { doc.image(buf, { fit: [160, 60] }); } catch { doc.font('Helvetica').fillColor('#000').text('[signature on file]'); }
+    } else {
+      doc.font('Helvetica').fillColor('#000').text('[not signed]');
+    }
+    if (at || by) doc.font('Helvetica').fontSize(8).fillColor('#666').text(`${by ?? ''}${at ? `  ·  ${new Date(at).toLocaleString()}` : ''}`);
+    doc.fillColor('#000');
+  };
+
+  const buffer = await renderPdf(
+    {
+      title: 'Golf Cart Handover & Return Form',
+      subtitle: `Cart ${fleet.carNumber ?? '—'} · ${fleet.stadium?.name ?? '—'}`,
+      reference,
+    },
+    (doc) => {
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('System record');
+      line(doc, 'Car number', fleet.carNumber);
+      line(doc, 'Car type', fleet.carType);
+      line(doc, 'Venue', fleet.stadium?.name);
+      line(doc, 'Department', fleet.department?.name);
+      line(doc, 'Assigned FA', fa.name);
+      line(doc, 'FA code', fa.accreditationNumber);
+      line(doc, 'FA phone', fa.phone);
+      line(doc, 'Status', form.status);
+      doc.moveDown(0.6);
+
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('Handover details');
+      line(doc, 'Handover date', form.handoverDate);
+      line(doc, 'Approved return date', form.approvedReturnDate);
+      line(doc, 'Handover location', form.handoverLocation);
+      line(doc, 'Handed over to', form.handedOverTo);
+      line(doc, 'Receiver contact', form.receiverContact);
+      line(doc, 'Receiver licence no', form.receiverLicenseNo);
+      line(doc, 'Issues / notes', form.issuesNotes);
+      doc.moveDown(0.4);
+      sig(doc, 'Admin signature (handover)', form.adminSignatureData, form.adminSignedAt, form.adminSignedByUser?.name);
+      sig(doc, 'Receiver signature (handover)', form.userSignatureData, form.userSignedAt, form.userSignedByUser?.name);
+
+      doc.moveDown(0.8);
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('Handback / return');
+      line(doc, 'Inspection done', form.inspectionDone);
+      line(doc, 'Return date', form.returnDate);
+      line(doc, 'Received by', form.receivedBy);
+      line(doc, 'Returned by', form.returnedBy);
+      doc.moveDown(0.4);
+      sig(doc, 'After-use signature (FA)', form.afteruseSignatureData, form.afteruseSignedAt, form.afteruseSignedByUser?.name);
+      sig(doc, 'Admin signature (return)', form.returnAdminSigData);
+      sig(doc, 'Receiver signature (return)', form.returnUserSigData);
+
+      if (form.finalSignatureData || form.finalName) {
+        doc.moveDown(0.6);
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('Terms acknowledgement');
+        line(doc, 'Name', form.finalName);
+        line(doc, 'Date', form.finalDate);
+        sig(doc, 'Final signature', form.finalSignatureData);
+      }
+    },
+  );
+  return { buffer, reference };
 }
