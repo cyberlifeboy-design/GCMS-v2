@@ -30,6 +30,7 @@ interface Branding {
     headerUrl: string | null;
     footerUrl: string | null;
     footerText: string | null;
+    requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
 }
 
 const statusColors: Record<string, string> = {
@@ -288,6 +289,19 @@ export function PoolBookingRequestPage() {
                         <p className="text-muted-foreground mt-2">Request a shared pool cart at a venue — subject to admin approval</p>
                     </div>
 
+                    {branding.requestWindow && !branding.requestWindow.isOpen ? (
+                        <Card className="max-w-lg mx-auto">
+                            <CardContent className="py-10 text-center space-y-2">
+                                <h2 className="text-xl font-semibold">Bookings are currently closed</h2>
+                                <p className="text-muted-foreground">
+                                    {branding.requestWindow.message
+                                        || (branding.requestWindow.opensAt
+                                            ? `The booking window opens ${new Date(branding.requestWindow.opensAt).toLocaleString()}.`
+                                            : 'Please check back later.')}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    ) : (
                     <Card>
                         <CardHeader>
                             <CardTitle>Booking Details</CardTitle>
@@ -500,6 +514,7 @@ export function PoolBookingRequestPage() {
                             </div>
                         </CardContent>
                     </Card>
+                    )}
                 </div>
             </div>
 

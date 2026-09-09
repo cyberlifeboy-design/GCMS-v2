@@ -30,6 +30,7 @@ interface Branding {
     headerUrl: string | null;
     footerUrl: string | null;
     footerText: string | null;
+    requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
 }
 
 export function PublicRequestPage() {
@@ -56,7 +57,7 @@ export function PublicRequestPage() {
         requesterEmail: '',
         requesterPhone: '',
         accreditationNumber: '',
-        requestType: 'one-time',
+        requestType: 'pool-shared',
         stadiumId: stadiumIdParam || '',
         departmentId: departmentIdParam || '',
         cargoCount: 0,
@@ -226,6 +227,19 @@ export function PublicRequestPage() {
                         )}
                     </div>
 
+                    {branding.requestWindow && !branding.requestWindow.isOpen ? (
+                        <Card className="max-w-lg mx-auto">
+                            <CardContent className="py-10 text-center space-y-2">
+                                <h2 className="text-xl font-semibold">Requests are currently closed</h2>
+                                <p className="text-muted-foreground">
+                                    {branding.requestWindow.message
+                                        || (branding.requestWindow.opensAt
+                                            ? `Requirement collection opens ${new Date(branding.requestWindow.opensAt).toLocaleString()}.`
+                                            : 'Please check back later.')}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    ) : (
                     <Card>
                         <CardHeader>
                             <CardTitle>Request Details</CardTitle>
@@ -297,8 +311,8 @@ export function PublicRequestPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="one-time">One-time use</SelectItem>
-                                                <SelectItem value="dedicated">Dedicated tournament operational use</SelectItem>
+                                                <SelectItem value="dedicated">Dedicated</SelectItem>
+                                                <SelectItem value="pool-shared">Pool shared resource</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -453,6 +467,7 @@ export function PublicRequestPage() {
                         </form>
                     </CardContent>
                 </Card>
+                    )}
             </div>
 
             {/* Footer branding */}
