@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
+import { canCreateOrSignHandover } from './handover-phase';
 
 export interface PoolStatusByStadium {
     stadiumId: string;
@@ -530,7 +531,9 @@ export class HandoverService {
         if (!vehicle.assignedUserId) throw new Error('Cart must be assigned to a user before creating a handover form');
 
         const existing = await prisma.handoverForm.findUnique({ where: { fleetId: data.fleetId } });
-        if (existing && existing.status === 'COMPLETE') throw new Error('Handover already completed for this cart');
+        if (existing && !canCreateOrSignHandover(existing.status)) {
+            throw new Error('The handover for this cart is already signed — it cannot be changed. Use the handback flow instead.');
+        }
 
         const status = data.adminSignatureData ? 'ADMIN_SIGNED' : 'PENDING';
 
@@ -538,11 +541,11 @@ export class HandoverService {
             return prisma.handoverForm.update({
                 where: { id: existing.id },
                 data: {
-                    serialNumber: data.serialNumber ?? vehicle.carNumber,
+                    serialNumber: vehicle.carNumber,
                     faCode: data.faCode ?? vehicle.department?.code,
                     handoverDate: data.handoverDate,
                     approvedReturnDate: data.approvedReturnDate,
-                    handoverLocation: data.handoverLocation ?? vehicle.stadium.name,
+                    handoverLocation: vehicle.stadium.name,
                     receiverLicenseNo: data.receiverLicenseNo,
                     handoverBy: data.handoverBy,
                     handedOverTo: data.handedOverTo ?? vehicle.assignedUser?.name,
@@ -571,11 +574,11 @@ export class HandoverService {
         return prisma.handoverForm.create({
             data: {
                 fleetId: data.fleetId,
-                serialNumber: data.serialNumber ?? vehicle.carNumber,
+                serialNumber: vehicle.carNumber,
                 faCode: data.faCode ?? vehicle.department?.code,
                 handoverDate: data.handoverDate,
                 approvedReturnDate: data.approvedReturnDate,
-                handoverLocation: data.handoverLocation ?? vehicle.stadium.name,
+                handoverLocation: vehicle.stadium.name,
                 receiverLicenseNo: data.receiverLicenseNo,
                 handoverBy: data.handoverBy,
                 handedOverTo: data.handedOverTo ?? vehicle.assignedUser?.name,
