@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AuditLogFilters, HandoverFilters, MaintenanceFilters } from '../../types';
 import { deriveBookingState } from '../pool-booking-requests/booking-state';
+import { summarizePoolBookings, PoolBookingSummary } from './pool-report';
 
 interface ActivityLog {
     action: string;
@@ -73,6 +74,19 @@ interface ActiveCarUsage {
     faDepartment: string | null;
     stadium: { id: string; name: string };
     checkOutTime: Date;
+}
+
+export interface PoolReport {
+    scope: { stadiumId: string | null };
+    fleet: {
+        total: number;
+        byStatus: Record<string, number>;
+        byType: Record<string, number>;
+        byVenue: Array<{ stadiumName: string; total: number; inUse: number }>;
+    };
+    bookings: PoolBookingSummary;
+    requests: { pending: number; approved: number; rejected: number; poolShared: number; dedicated: number };
+    utilizationPct: number | null;
 }
 
 export class ReportsService {
@@ -688,6 +702,80 @@ export class ReportsService {
         );
 
         return reports;
+    }
+
+    /**
+     * Pool car report — pool fleet inventory, pool booking activity, request mix,
+     * and utilization. Venue-scoped by the caller (via resolveStadiumScope).
+     */
+    async getPoolReport(filters: { stadiumId?: string } = {}): Promise<PoolReport> {
+        const fleetWhere: any = { isPool: true };
+        if (filters.stadiumId) fleetWhere.stadiumId = filters.stadiumId;
+
+        const bookingWhere: any = {};
+        if (filters.stadiumId) bookingWhere.stadiumId = filters.stadiumId;
+
+        const requestWhere: any = {};
+        if (filters.stadiumId) requestWhere.stadiumId = filters.stadiumId;
+
+        const [poolFleet, bookingRows, reqPending, reqApproved, reqRejected, reqPoolShared, reqDedicated] = await Promise.all([
+            this.prisma.fleet.findMany({
+                where: fleetWhere,
+                select: { id: true, carNumber: true, carType: true, status: true, stadium: { select: { name: true } } },
+            }),
+            this.prisma.poolBookingRequest.findMany({
+                where: bookingWhere,
+                select: {
+                    id: true, status: true, startDate: true, endDate: true, startTime: true, endTime: true,
+                    returnedAt: true, createdAt: true, fleetId: true,
+                    fleet: { select: { carNumber: true } },
+                    stadium: { select: { name: true } },
+                },
+            }),
+            this.prisma.carRequest.count({ where: { ...requestWhere, status: 'Pending' } }),
+            this.prisma.carRequest.count({ where: { ...requestWhere, status: 'Approved' } }),
+            this.prisma.carRequest.count({ where: { ...requestWhere, status: 'Rejected' } }),
+            this.prisma.carRequest.count({ where: { ...requestWhere, requestType: 'pool-shared' } }),
+            this.prisma.carRequest.count({ where: { ...requestWhere, requestType: 'dedicated' } }),
+        ]);
+
+        const byStatus: Record<string, number> = {};
+        const byType: Record<string, number> = {};
+        const venueMap = new Map<string, { total: number; inUse: number }>();
+        for (const c of poolFleet) {
+            byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
+            byType[c.carType] = (byType[c.carType] ?? 0) + 1;
+            const v = venueMap.get(c.stadium.name) ?? { total: 0, inUse: 0 };
+            v.total++;
+            if (c.status === 'Dispatched') v.inUse++;
+            venueMap.set(c.stadium.name, v);
+        }
+        const byVenue = [...venueMap.entries()]
+            .map(([stadiumName, v]) => ({ stadiumName, ...v }))
+            .sort((a, b) => b.total - a.total || a.stadiumName.localeCompare(b.stadiumName));
+
+        const totalInUse = byVenue.reduce((a, c) => a + c.inUse, 0);
+        const utilizationPct = poolFleet.length
+            ? Math.round((totalInUse / poolFleet.length) * 1000) / 10
+            : null;
+
+        const bookings = summarizePoolBookings(
+            bookingRows.map(r => ({
+                id: r.id, status: r.status,
+                startDate: r.startDate, endDate: r.endDate, startTime: r.startTime, endTime: r.endTime,
+                returnedAt: r.returnedAt, createdAt: r.createdAt, fleetId: r.fleetId,
+                carNumber: r.fleet?.carNumber ?? '—', stadiumName: r.stadium?.name ?? '—',
+            })),
+            new Date(),
+        );
+
+        return {
+            scope: { stadiumId: filters.stadiumId ?? null },
+            fleet: { total: poolFleet.length, byStatus, byType, byVenue },
+            bookings,
+            requests: { pending: reqPending, approved: reqApproved, rejected: reqRejected, poolShared: reqPoolShared, dedicated: reqDedicated },
+            utilizationPct,
+        };
     }
 
     /**
