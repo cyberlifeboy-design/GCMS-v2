@@ -33,6 +33,22 @@ container, SMTP email, deployment guide).
 - The whole app runs as a **single container** on Azure Container Apps against Azure
   Database for PostgreSQL and Azure Blob Storage, with a written transfer/deployment guide.
 
+## 2a. Non-Functional Requirements (apply to every phase)
+
+- **Responsive:** every page and new component must be usable on phone, tablet and
+  desktop. No horizontal body scroll at 320px width. Tables become card lists or
+  horizontally-scroll inside their own container on small screens. Modals and forms fit a
+  phone viewport. Test each change at 375px, 768px and 1280px.
+- **Fast:** no N+1 query regressions (batch Prisma reads); list endpoints paginate;
+  frontend list views virtualise or paginate beyond ~100 rows; new blocking work on the
+  request path is avoided (PDF/email generation runs after the response where possible).
+- **Bug-free:** no TypeScript `any` added without cause; `tsc --noEmit` and `eslint` pass
+  clean for touched files; every new endpoint has an explicit error path that returns a
+  typed JSON error and never leaks a stack trace; every new mutation is covered by a
+  backend test.
+- **Consistent:** reuse existing `@/components/ui/*` primitives and Tailwind tokens; match
+  the existing page layout patterns (header block, filter row, content card).
+
 ## 3. Non-Goals
 
 - Real Microsoft Entra / Azure AD SSO (the login button stays a placeholder).
