@@ -3,6 +3,9 @@ import { settingsService } from './settings.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
+import { prisma } from '../../config/database';
+import { emailService } from '../../services/email.service';
+import { notificationService } from '../notifications/notification.service';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -136,6 +139,45 @@ export class SettingsController {
             } else {
                 res.status(500).json({ error: 'Failed to update settings' });
             }
+        }
+    }
+
+    /** POST /api/v1/settings/request-window/announce — email + notify all active FA that the window is open. */
+    static async announceWindow(_req: AuthRequest, res: Response) {
+        try {
+            const state = await settingsService.getRequestWindowState();
+            const closesLine = state.closesAt
+                ? ` Submit your requests by ${new Date(state.closesAt).toLocaleString()}.`
+                : '';
+            const recipients = await prisma.user.findMany({
+                where: { isActive: true, role: { in: ['FA'] } },
+                select: { id: true, email: true, name: true },
+            });
+            const subject = 'Requirement collection is now open';
+            const text = `The GCMS request window is now open.${closesLine}\n\nSubmit at: ${process.env.FRONTEND_URL || ''}/request`;
+            for (const u of recipients) {
+                try {
+                    await emailService.send({ to: u.email, subject, text });
+                } catch (e) {
+                    console.error('announce email failed', u.email, e);
+                }
+            }
+            if (recipients.length) {
+                await notificationService.createForUsers(
+                    {
+                        type: 'RequestWindowOpen',
+                        title: subject,
+                        message: `The request window is open.${closesLine}`,
+                        entityType: 'SystemSettings',
+                        entityId: 'request-window',
+                    },
+                    recipients.map((u) => u.id),
+                );
+            }
+            res.json({ notified: recipients.length });
+        } catch (error) {
+            console.error('announceWindow error:', error);
+            res.status(500).json({ error: 'Failed to announce the window' });
         }
     }
 }

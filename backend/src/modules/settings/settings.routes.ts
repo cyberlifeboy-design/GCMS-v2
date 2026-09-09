@@ -47,4 +47,7 @@ router.put(
     SettingsController.update
 );
 
+// POST /api/v1/settings/request-window/announce — SuperAdmin only
+router.post('/request-window/announce', requireRole('SuperAdmin'), SettingsController.announceWindow);
+
 export default router;
