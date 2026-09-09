@@ -12,68 +12,68 @@ router.use(authenticate);
 router.get('/audit', requireRole('SuperAdmin', 'Observer'), auditLog(), ReportsController.exportAuditLogs);
 
 // FA user audit trail (SuperAdmin + Admin + Observer)
-router.get('/fa-trail', requireRole('SuperAdmin', 'Admin', 'Observer'), ReportsController.getFaAuditTrail);
+router.get('/fa-trail', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), ReportsController.getFaAuditTrail);
 
 // Get utilization stats (SuperAdmin/Admin/Observer)
-router.get('/utilization', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUtilization);
+router.get('/utilization', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.getUtilization);
 
 // Get active cars currently in use (SuperAdmin/Admin/Observer)
-router.get('/active-usage', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getActiveCarsUsage);
+router.get('/active-usage', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.getActiveCarsUsage);
 
 // Export handover logs
-router.get('/handover/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportHandoverLogs);
+router.get('/handover/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportHandoverLogs);
 
 // Export maintenance logs
-router.get('/maintenance/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportMaintenanceLogs);
+router.get('/maintenance/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportMaintenanceLogs);
 
 // Export fleet overview
-router.get('/fleet/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportFleetOverview);
+router.get('/fleet/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportFleetOverview);
 
 // Export activity timeline
-router.get('/activity/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportActivityTimeline);
+router.get('/activity/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportActivityTimeline);
 
 // Export full system report
-router.get('/full', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportFullReport);
+router.get('/full', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportFullReport);
 
 // ==================== STADIUM REPORTS ====================
 
 // Get stadium-wise reports (JSON)
-router.get('/stadiums', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getStadiumReports);
+router.get('/stadiums', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.getStadiumReports);
 
 // Export stadium report (Excel)
-router.get('/stadiums/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportStadiumReport);
+router.get('/stadiums/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportStadiumReport);
 
 // Export stadium report (PDF)
-router.get('/stadiums/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportStadiumReportPdf);
+router.get('/stadiums/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportStadiumReportPdf);
 
 // ==================== DEPARTMENT REPORTS ====================
 
 // Get department-wise reports (JSON)
-router.get('/departments', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getDepartmentReports);
+router.get('/departments', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.getDepartmentReports);
 
 // Export department report (Excel)
-router.get('/departments/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportDepartmentReport);
+router.get('/departments/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportDepartmentReport);
 
 // ==================== USER REPORTS ====================
 
 // Get user activity reports (JSON)
-router.get('/users', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.getUserReports);
+router.get('/users', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.getUserReports);
 
 // Export user report (Excel)
-router.get('/users/export', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportUserReport);
+router.get('/users/export', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportUserReport);
 
 // Export user report (PDF)
-router.get('/users/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportUserReportPdf);
+router.get('/users/export/pdf', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportUserReportPdf);
 
 // ==================== PRINT LABELS ====================
 
 // Export print labels (Word)
-router.get('/labels/docx', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsDocx);
+router.get('/labels/docx', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportLabelsDocx);
 
 // Export print labels (PowerPoint)
-router.get('/labels/pptx', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsPptx);
+router.get('/labels/pptx', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportLabelsPptx);
 
 // Export print labels (PDF - one per page, landscape, large font)
-router.get('/labels/pdf', requireRole('SuperAdmin', 'Admin', 'Observer'), auditLog(), ReportsController.exportLabelsPdf);
+router.get('/labels/pdf', requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), auditLog(), ReportsController.exportLabelsPdf);
 
 export default router;

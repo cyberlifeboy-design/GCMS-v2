@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { reportsService } from './reports.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { resolveStadiumScope } from './reports.scope';
 import * as ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { Document, Packer, Paragraph, TextRun, Header, Footer, PageOrientation, AlignmentType } from 'docx';
@@ -34,12 +35,7 @@ export class ReportsController {
     static async getFaAuditTrail(req: AuthRequest, res: Response) {
         try {
             const { userId, startDate, endDate, page = '1', limit = '50' } = req.query as Record<string, string>;
-            let stadiumId = req.query.stadiumId as string | undefined;
-
-            // Admin: scoped to own stadium only
-            if (req.user?.role === 'Admin') {
-                stadiumId = req.user.stadiumId || undefined;
-            }
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             const pageNum = Math.max(1, parseInt(page));
             const pageSize = Math.min(100, parseInt(limit) || 50);
@@ -61,6 +57,8 @@ export class ReportsController {
 
     static async exportAuditLogs(req: AuthRequest, res: Response) {
         try {
+            // AuditLog has no stadium dimension, so it cannot be venue-scoped.
+            // The /reports/audit route is restricted to SuperAdmin + Observer.
             const logs = await reportsService.getAuditLogs({});
 
             const workbook = new ExcelJS.Workbook();
@@ -89,13 +87,8 @@ export class ReportsController {
 
     static async getUtilization(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId } = req.query as any;
-            // Admin is scoped to their venue; SuperAdmin/Observer/Contracts/MaintenanceTeam see all
-            let filterStadiumId = stadiumId;
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
-            const stats = await reportsService.getDashboardStats({ stadiumId: filterStadiumId || undefined });
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const stats = await reportsService.getDashboardStats({ stadiumId: filterStadiumId });
             res.status(200).json(stats);
         } catch (error) {
             res.status(500).json({ error: 'Failed to get utilization stats' });
@@ -104,13 +97,8 @@ export class ReportsController {
 
     static async getActiveCarsUsage(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, departmentId, carType, search } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            // Admin can only see their own stadium's active cars
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
+            const { departmentId, carType, search } = req.query as any;
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             const activeCars = await reportsService.getActiveCarsUsage({
                 stadiumId: filterStadiumId,
@@ -127,7 +115,8 @@ export class ReportsController {
 
     static async exportHandoverLogs(req: AuthRequest, res: Response) {
         try {
-            const logs = await reportsService.getHandoverReports({});
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const logs = await reportsService.getHandoverReports({ stadiumId: filterStadiumId });
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Handover Logs');
@@ -162,7 +151,8 @@ export class ReportsController {
 
     static async exportMaintenanceLogs(req: AuthRequest, res: Response) {
         try {
-            const logs = await reportsService.getMaintenanceReports({});
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const logs = await reportsService.getMaintenanceReports({ stadiumId: filterStadiumId });
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Maintenance Logs');
@@ -199,13 +189,10 @@ export class ReportsController {
 
     static async exportFleetOverview(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, departmentId, status, carType } = req.query as any;
+            const { departmentId, status, carType } = req.query as any;
 
-            // RBAC scoping
-            let filterStadiumId = stadiumId;
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
+            // RBAC scoping — Admin/FA locked to own venue, privileged roles may filter
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             // Support comma-separated carType for multi-select filter
             let carTypeFilter: string | string[] | undefined;
@@ -258,7 +245,8 @@ export class ReportsController {
 
     static async exportActivityTimeline(req: AuthRequest, res: Response) {
         try {
-            const logs = await reportsService.getHandoverReports({});
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const logs = await reportsService.getHandoverReports({ stadiumId: filterStadiumId });
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Activity Timeline');
@@ -295,11 +283,12 @@ export class ReportsController {
 
     static async exportFullReport(req: AuthRequest, res: Response) {
         try {
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const [stats, fleet, handoverLogs, maintenanceLogs] = await Promise.all([
-                reportsService.getDashboardStats({}),
-                reportsService.getFleetList({}),
-                reportsService.getHandoverReports({}),
-                reportsService.getMaintenanceReports({}),
+                reportsService.getDashboardStats({ stadiumId: filterStadiumId }),
+                reportsService.getFleetList({ stadiumId: filterStadiumId }),
+                reportsService.getHandoverReports({ stadiumId: filterStadiumId }),
+                reportsService.getMaintenanceReports({ stadiumId: filterStadiumId }),
             ]);
 
             const workbook = new ExcelJS.Workbook();
@@ -379,7 +368,9 @@ export class ReportsController {
 
     static async getStadiumReports(req: AuthRequest, res: Response) {
         try {
-            const reports = await reportsService.getStadiumReports();
+            const scoped = resolveStadiumScope(req.user, req.query.stadiumId);
+            const reports = (await reportsService.getStadiumReports())
+                .filter((r) => !scoped || r.id === scoped);
             res.status(200).json(reports);
         } catch (error) {
             res.status(500).json({ error: 'Failed to get stadium reports' });
@@ -388,7 +379,9 @@ export class ReportsController {
 
     static async exportStadiumReport(req: AuthRequest, res: Response) {
         try {
-            const reports = await reportsService.getStadiumReports();
+            const scoped = resolveStadiumScope(req.user, req.query.stadiumId);
+            const reports = (await reportsService.getStadiumReports())
+                .filter((r) => !scoped || r.id === scoped);
 
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Stadium Report');
@@ -455,7 +448,9 @@ export class ReportsController {
 
     static async exportStadiumReportPdf(req: AuthRequest, res: Response) {
         try {
-            const reports = await reportsService.getStadiumReports();
+            const scoped = resolveStadiumScope(req.user, req.query.stadiumId);
+            const reports = (await reportsService.getStadiumReports())
+                .filter((r) => !scoped || r.id === scoped);
 
             const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
             res.setHeader('Content-Type', 'application/pdf');
@@ -528,14 +523,7 @@ export class ReportsController {
 
     static async getDepartmentReports(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            // Admin can only see their own stadium's departments
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
-
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const reports = await reportsService.getDepartmentReports({ stadiumId: filterStadiumId });
             res.status(200).json(reports);
         } catch (error) {
@@ -545,13 +533,7 @@ export class ReportsController {
 
     static async exportDepartmentReport(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
-
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const reports = await reportsService.getDepartmentReports({ stadiumId: filterStadiumId });
 
             const workbook = new ExcelJS.Workbook();
@@ -618,14 +600,8 @@ export class ReportsController {
 
     static async getUserReports(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, role } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            // Admin can only see users in their stadium
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
-
+            const { role } = req.query as any;
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
             res.status(200).json(reports);
         } catch (error) {
@@ -635,13 +611,8 @@ export class ReportsController {
 
     static async exportUserReport(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, role } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
-
+            const { role } = req.query as any;
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
 
             const workbook = new ExcelJS.Workbook();
@@ -725,13 +696,8 @@ export class ReportsController {
 
     static async exportUserReportPdf(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId, role } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
-
+            const { role } = req.query as any;
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
 
             const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
@@ -804,13 +770,7 @@ export class ReportsController {
 
     static async exportLabelsDocx(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            // RBAC scoping
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             // Get fleet data and system settings
             const [labelsData, settings] = await Promise.all([
@@ -919,13 +879,7 @@ export class ReportsController {
 
     static async exportLabelsPdf(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            // RBAC scoping: Admin is locked to their stadium
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             const [labelsData, settings] = await Promise.all([
                 reportsService.getLabelsData({ stadiumId: filterStadiumId }),
@@ -1073,13 +1027,7 @@ export class ReportsController {
 
     static async exportLabelsPptx(req: AuthRequest, res: Response) {
         try {
-            const { stadiumId } = req.query as any;
-            let filterStadiumId = stadiumId;
-
-            // RBAC scoping
-            if (req.user?.role === 'Admin') {
-                filterStadiumId = req.user.stadiumId;
-            }
+            const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
 
             // Get fleet data and system settings
             const [labelsData, settings] = await Promise.all([
