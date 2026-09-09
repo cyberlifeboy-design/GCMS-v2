@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import crypto from 'crypto';
 import { notificationService } from '../notifications/notification.service';
+import { emailService } from '../../services/email.service';
 import { deriveBookingState } from './booking-state';
 
 export interface CreatePoolBookingRequestData {
@@ -293,6 +294,7 @@ export class PoolBookingRequestsService {
                 userId: updated.createdById,
             });
         }
+        await this.notifyBookingRequester(updated, 'approved', reviewComment);
 
         return updated;
     }
@@ -318,8 +320,30 @@ export class PoolBookingRequestsService {
                 userId: updated.createdById,
             });
         }
+        await this.notifyBookingRequester(updated, 'rejected', reviewComment);
 
         return updated;
+    }
+
+    /** Best-effort email to the (possibly no-login) requester on approve/reject. */
+    private async notifyBookingRequester(
+        booking: { requesterEmail: string; requesterName: string; fleet: { carNumber: string }; stadium: { name: string } },
+        status: 'approved' | 'rejected',
+        reviewComment?: string,
+    ) {
+        try {
+            await emailService.send({
+                to: booking.requesterEmail,
+                subject: `Pool booking ${status}: ${booking.fleet.carNumber}`,
+                text:
+                    `Hello ${booking.requesterName},\n\n` +
+                    `Your pool booking for ${booking.fleet.carNumber} at ${booking.stadium.name} has been ${status}.` +
+                    (reviewComment ? `\n\nReviewer notes: ${reviewComment}` : '') +
+                    `\n\nThank you,\nGCMS`,
+            });
+        } catch (e) {
+            console.error('Pool booking requester email failed:', e);
+        }
     }
 
     async amend(id: string, data: AmendPoolBookingRequestData, reviewedById: string, reviewComment?: string) {
