@@ -12,8 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 import {
     Plus, Search, Download, Loader2, CheckCircle, Clock,
     DollarSign, FileText, Send, FilterX, ArrowUpRight,
-    XCircle, Eye, Printer, Image, AlertTriangle,
+    XCircle, Eye, Printer, Image, AlertTriangle, Mail,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
 import { formatDate, formatDateTime } from '@/lib/dateUtils';
@@ -87,6 +88,7 @@ export function MaintenancePage() {
     const canApproveCost = isContracts || isSuperAdmin;
     const canRejectCost = isContracts || isSuperAdmin;
     const canViewPdf = isAdmin || isSuperAdmin || isContracts || isObserver;
+    const canEmailReport = isAdmin || isSuperAdmin || isContracts || isMaintenance;
 
     const [issues, setIssues] = useState<MaintenanceLog[]>([]);
     const [fleet, setFleet] = useState<Array<{ id: string; carNumber: string; carType: string; status: string }>>([]);
@@ -112,6 +114,10 @@ export function MaintenancePage() {
     const [rejectOpen, setRejectOpen] = useState(false);
     const [escalateOpen, setEscalateOpen] = useState(false);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+    const [emailReportIssue, setEmailReportIssue] = useState<MaintenanceLog | null>(null);
+    const [emailRecipients, setEmailRecipients] = useState('');
+    const [emailNote, setEmailNote] = useState('');
+    const [emailSending, setEmailSending] = useState(false);
 
     const [historyFleet, setHistoryFleet] = useState<{ id: string; carNumber: string } | null>(null);
     const [cartHistory, setCartHistory] = useState<MaintenanceLog[]>([]);
@@ -325,6 +331,40 @@ export function MaintenancePage() {
         window.open(`${url}?token=${token}`, '_blank');
     };
 
+    const downloadReportPdf = async (id: string) => {
+        try {
+            const res = await maintenanceApi.downloadReportPdf(id);
+            const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `maintenance_${id.slice(-8)}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Failed to download the report PDF');
+        }
+    };
+
+    const submitEmailReport = async () => {
+        if (!emailReportIssue) return;
+        setEmailSending(true);
+        try {
+            const recipients = emailRecipients.split(',').map(s => s.trim()).filter(Boolean);
+            const res = await maintenanceApi.emailReport(emailReportIssue.id, {
+                recipients: recipients.length ? recipients : undefined,
+                note: emailNote.trim() || undefined,
+            });
+            toast.success(res.data.message || 'Report emailed');
+            setEmailReportIssue(null);
+            setEmailRecipients('');
+            setEmailNote('');
+        } catch (e: any) {
+            toast.error(e?.response?.data?.error || 'Failed to email the report');
+        } finally {
+            setEmailSending(false);
+        }
+    };
+
     const statusCards = [
         { label: 'Operational', value: stats.operational, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
         { label: 'Awaiting Quote', value: stats.pendingQuotes, icon: FileText, color: 'text-orange-600', bg: 'bg-orange-50' },
@@ -499,10 +539,24 @@ export function MaintenancePage() {
                                                     <Button variant="ghost" size="sm" onClick={() => { setSelectedIssue(issue); setStatusForm({ status: issue.status, resolutionNotes: issue.resolutionNotes || '' }); setStatusOpen(true); }}>Update</Button>
                                                 )}
 
-                                                {/* PDF Report */}
+                                                {/* PDF Report (self-printing HTML) */}
                                                 {canViewPdf && (
                                                     <Button variant="ghost" size="sm" onClick={() => openPdfReport(issue.id)}>
                                                         <Printer className="w-3 h-3 mr-1" />PDF
+                                                    </Button>
+                                                )}
+
+                                                {/* Download branded PDF report */}
+                                                {canViewPdf && (
+                                                    <Button variant="ghost" size="sm" onClick={() => downloadReportPdf(issue.id)} title="Download PDF report">
+                                                        <Download className="w-3 h-3 mr-1" />Report
+                                                    </Button>
+                                                )}
+
+                                                {/* Email report */}
+                                                {canEmailReport && (
+                                                    <Button variant="ghost" size="sm" onClick={() => { setEmailReportIssue(issue); setEmailRecipients(''); setEmailNote(''); }} title="Email report">
+                                                        <Mail className="w-3 h-3 mr-1" />Email
                                                     </Button>
                                                 )}
 
@@ -631,13 +685,53 @@ export function MaintenancePage() {
                             </div>
                         </div>
                     )}
-                    <DialogFooter>
+                    <DialogFooter className="flex-wrap">
                         {detailIssue && canViewPdf && (
                             <Button variant="outline" onClick={() => openPdfReport(detailIssue.id)}>
                                 <Printer className="w-4 h-4 mr-2" />Print / PDF
                             </Button>
                         )}
+                        {detailIssue && canViewPdf && (
+                            <Button variant="outline" onClick={() => downloadReportPdf(detailIssue.id)}>
+                                <Download className="w-4 h-4 mr-2" />Download PDF
+                            </Button>
+                        )}
+                        {detailIssue && canEmailReport && (
+                            <Button variant="outline" onClick={() => { setEmailReportIssue(detailIssue); setEmailRecipients(''); setEmailNote(''); }}>
+                                <Mail className="w-4 h-4 mr-2" />Email report
+                            </Button>
+                        )}
                         <Button variant="outline" onClick={() => setDetailIssue(null)}>Close</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Email Report Dialog */}
+            <Dialog open={!!emailReportIssue} onOpenChange={open => !open && setEmailReportIssue(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Email maintenance report</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                            The full report PDF for cart <strong>{emailReportIssue?.fleet?.carNumber || '—'}</strong> will
+                            be sent to the configured maintenance recipients. Add extra addresses below (comma-separated).
+                        </p>
+                        <div className="space-y-1">
+                            <Label htmlFor="er-recipients">Additional recipients</Label>
+                            <Input id="er-recipients" placeholder="a@x.com, b@y.com"
+                                value={emailRecipients} onChange={e => setEmailRecipients(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="er-note">Note (optional)</Label>
+                            <Textarea id="er-note" rows={3} value={emailNote} onChange={e => setEmailNote(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEmailReportIssue(null)} disabled={emailSending}>Cancel</Button>
+                        <Button onClick={submitEmailReport} disabled={emailSending}>
+                            {emailSending ? 'Sending…' : 'Send email'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

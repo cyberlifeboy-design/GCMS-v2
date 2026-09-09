@@ -181,6 +181,10 @@ export const maintenanceApi = {
         apiClient.get('/maintenance/export', { responseType: 'blob' }),
     getPdfReportUrl: (id: string) =>
         `${(import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:3005/api/v1'}/maintenance/${id}/pdf`,
+    downloadReportPdf: (id: string) =>
+        apiClient.get(`/maintenance/${id}/report.pdf`, { responseType: 'blob' }),
+    emailReport: (id: string, data: { recipients?: string[]; note?: string }) =>
+        apiClient.post(`/maintenance/${id}/email-report`, data),
 };
 
 // Stadiums
