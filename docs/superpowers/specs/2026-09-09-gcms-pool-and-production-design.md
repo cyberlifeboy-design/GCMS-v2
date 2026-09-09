@@ -421,13 +421,15 @@ model Warning {
 
 1. **Phase 1** (foundation) — no dependencies.
 2. **Phase 2** (pool visibility) — depends on Phase 1 dashboard scoping.
-3. **Phase 3** (handover rework) — independent; depends on §4 PDF service.
-4. **Phase 4** (requests/reports/labels) — depends on §4 PDF service; Phase 2 for pool report.
+3. **Phase 3** (handover rework) — depends on §4 PDF service (built in Phase 2).
+4. **Phase 4** (requests/reports/labels) — depends on §4 PDF service (built in Phase 2);
+   Phase 2 for pool report.
 5. **Phase 5** (maintenance email) — depends on §4 PDF service.
 6. **Phase 6** (ticketing) — depends on §4 PDF service, Phase 1 (dashboard/RBAC), notifications.
 7. **Phase 7** (Azure) — last; touches every module's config; no feature work after it.
 
-The shared PDF service (§4) is built at the start of Phase 3 (first consumer) and reused.
+The shared PDF service (§4) is built at the start of **Phase 2** (its first consumer is
+booking-history download, §6.4) and reused by Phases 3–6.
 
 ## 13. Open Questions
 
