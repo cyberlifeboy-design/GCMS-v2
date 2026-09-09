@@ -14,7 +14,10 @@ export function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
+    const [branding, setBranding] = useState<{
+        tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string;
+        requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
+    }>({});
     const { login, isLoading } = useAuthStore();
     const navigate = useNavigate();
 
@@ -98,14 +101,27 @@ export function LoginPage() {
                         Sign in with Microsoft Authenticator
                     </Button>
 
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Button asChild variant="secondary" className="w-full">
-                            <Link to="/request">Submit a Request</Link>
-                        </Button>
-                        <Button asChild variant="secondary" className="w-full">
-                            <Link to="/book-pool">Bookings</Link>
-                        </Button>
-                    </div>
+                    {(() => {
+                        const w = branding.requestWindow;
+                        const open = w ? w.isOpen : true;
+                        const note = !open
+                            ? (w?.message
+                                || (w?.opensAt ? `Requirement collection opens ${new Date(w.opensAt).toLocaleDateString()}` : 'Requests are currently closed'))
+                            : null;
+                        return (
+                            <div className="mt-4 space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <Button asChild={open} variant="secondary" className="w-full" disabled={!open}>
+                                        {open ? <Link to="/request">Submit a Request</Link> : <span>Submit a Request</span>}
+                                    </Button>
+                                    <Button asChild={open} variant="secondary" className="w-full" disabled={!open}>
+                                        {open ? <Link to="/book-pool">Bookings</Link> : <span>Bookings</span>}
+                                    </Button>
+                                </div>
+                                {note && <p className="text-xs text-center text-muted-foreground">{note}</p>}
+                            </div>
+                        );
+                    })()}
                 </CardContent>
             </Card>
             </div>
