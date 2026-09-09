@@ -390,19 +390,29 @@ export class MaintenanceService {
             r.id,
             r.fleet?.carNumber || '',
             r.fleet?.stadium?.name || '',
+            r.issueType || '',
             r.reportedBy?.name || '',
             r.reportedBy?.phone || '',
             r.issueDescription,
             r.status,
-            r.fixCost ? `QAR ${r.fixCost.toFixed(2)}` : '',
+            r.quotationStatus || '',
+            r.fixCost != null ? `QAR ${r.fixCost.toFixed(2)}` : '',
             r.quotationDescription || '',
             r.quotationTimeline || '',
             r.reportedAt ? new Date(r.reportedAt).toISOString() : '',
+            r.contractsEscalatedAt ? new Date(r.contractsEscalatedAt).toISOString() : '',
+            r.contractsEscalatedBy?.name || '',
+            r.quotationRequestedAt ? new Date(r.quotationRequestedAt).toISOString() : '',
+            r.costSubmittedAt ? new Date(r.costSubmittedAt).toISOString() : '',
+            r.costApprovedAt ? new Date(r.costApprovedAt).toISOString() : '',
+            r.approvedBy?.name || '',
+            r.rejectionReason || '',
+            r.rejectedAt ? new Date(r.rejectedAt).toISOString() : '',
             r.resolutionNotes || '',
             r.resolvedAt ? new Date(r.resolvedAt).toISOString() : '',
         ]);
 
-        const header = ['ID', 'Cart Number', 'Venue', 'Reporter', 'Phone', 'Issue', 'Status', 'Fix Cost (QAR)', 'Quotation Description', 'Timeline', 'Reported At', 'Resolution Notes', 'Resolved At'];
+        const header = ['ID', 'Cart Number', 'Venue', 'Issue Type', 'Reporter', 'Phone', 'Issue', 'Status', 'Quotation Status', 'Fix Cost', 'Quotation Description', 'Timeline', 'Reported At', 'Escalated At', 'Escalated By', 'Quotation Requested At', 'Cost Submitted At', 'Cost Approved At', 'Approved By', 'Rejection Reason', 'Rejected At', 'Resolution Notes', 'Resolved At'];
         const csvLines = [header, ...rows].map(row => row.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(','));
         return csvLines.join('\n');
     }
