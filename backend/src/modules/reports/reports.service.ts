@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AuditLogFilters, HandoverFilters, MaintenanceFilters } from '../../types';
+import { deriveBookingState } from '../pool-booking-requests/booking-state';
 
 interface ActivityLog {
     action: string;
@@ -348,6 +349,36 @@ export class ReportsService {
             })
         );
 
+        // 9. Pool bookings today (available / in use / overdue)
+        const poolCartCount = await this.prisma.fleet.count({
+            where: { isPool: true, ...(filters.stadiumId ? { stadiumId: filters.stadiumId } : {}) },
+        });
+        const liveBookings = await this.prisma.poolBookingRequest.findMany({
+            where: {
+                status: 'Approved',
+                returnedAt: null,
+                ...(filters.stadiumId ? { stadiumId: filters.stadiumId } : {}),
+            },
+            select: { startDate: true, endDate: true, startTime: true, endTime: true, status: true, returnedAt: true },
+        });
+        const nowPool = new Date();
+        const todayStr = nowPool.toISOString().slice(0, 10);
+        let booked = 0;
+        let overdue = 0;
+        let bookingsToday = 0;
+        for (const b of liveBookings) {
+            const s = deriveBookingState(b, nowPool);
+            if (s === 'Active') booked++;
+            if (s === 'Overdue') overdue++;
+            if (b.startDate <= todayStr && b.endDate >= todayStr) bookingsToday++;
+        }
+        const poolToday = {
+            bookings: bookingsToday,
+            available: Math.max(0, poolCartCount - booked),
+            booked,
+            overdue,
+        };
+
         return {
             fleetByType: fleetByType.map(f => ({ type: f.carType, count: f._count._all })),
             fleetByStatus: fleetByStatus.map(f => ({ status: f.status, count: f._count._all })),
@@ -359,6 +390,7 @@ export class ReportsService {
             activeStadiumsCount: activeStadiums.length,
             stadiums: stadiumsList,
             faFleetOverview,
+            poolToday,
         };
     }
 
