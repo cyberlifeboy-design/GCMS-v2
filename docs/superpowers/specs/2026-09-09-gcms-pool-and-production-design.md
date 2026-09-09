@@ -106,59 +106,88 @@ equal-width buttons side by side: **"Submit a Request"** (left → `/request`) a
 
 ## 6. Phase 2 — Pool Car Visibility & Bookings
 
+### 6.0 Booking model reality (correction)
+
+The live booking entity is **`PoolBookingRequest`** (statuses `Pending` → `Approved` /
+`Rejected` / `Cancelled`), carrying the scheduled window (`startDate`, `endDate`,
+`startTime`, `endTime`, `bookingType`) and the requester/FA identity. The older
+`PoolBooking` model (driver / `checkoutAt` / `expectedReturnAt` / `returnedAt`) is
+**deprecated** — its checkout/return routes were removed; only legacy rows remain.
+
+Phase 2 therefore works on `PoolBookingRequest` and adds a return lifecycle to it:
+
+- New status value **`Completed`** (car returned) added to the existing enum comment.
+- New fields on `PoolBookingRequest`: `returnedAt DateTime?`, `returnedById String?`
+  (+ relation `returnedBy User?`). Migration.
+- **Derived state** (computed, never stored), for an `Approved` booking with
+  `returnedAt == null`, using the venue timezone's "now":
+  - `Upcoming` — `now` is before the window start.
+  - `Active` — `now` is within `[startDate startTime, endDate endTime]`.
+  - `Overdue` — `now` is after the window end.
+  A booking with `returnedAt != null` is `Completed`.
+
 ### 6.1 Fleet Management — Pool Cars section
 `frontend/src/pages/FleetManagementPage.tsx` gains a **"Pool Cars"** tab/section:
 
-- Lists `Fleet` where `isPool = true`, venue-scoped for `Admin`.
-- Columns: car number, type, stadium, status (`Available` / `Booked until <time>` /
-  **`Overdue`**), currently-assigned FA code (if any), active booking driver.
-- Actions: add-to-pool / remove-from-pool (toggles `isPool`), open booking history for
-  that car.
-- Backend: extend `fleet` service/controller with an `isPool` filter and a
-  `PATCH /fleet/:id/pool` toggle (Admin scoped to own venue).
+- Lists `Fleet` where `isPool = true`, venue-scoped for `Admin` (backend
+  `GET /pool-bookings/fleet` already returns this — extend it to also attach the current
+  `Approved`, not-yet-returned `PoolBookingRequest` for each cart).
+- Columns: car number, type, stadium, **status** (`Available` / `Booked until <end>` /
+  **`Overdue`**), assigned FA code, current booking's requester name.
+- Actions: add-to-pool / remove-from-pool (existing
+  `PATCH /pool-bookings/fleet/:id/toggle-pool`), and a link to that car's booking history.
 
 ### 6.2 Booking Management page
-`frontend/src/pages/BookingsPage.tsx` reworked into three panels:
+`frontend/src/pages/BookingsPage.tsx` keeps its **Pending review** queue and gains
+panels/tabs:
 
-1. **Available pool cars** — `isPool` cars at the venue with no active `PoolBooking`.
-2. **Active bookings** — each `PoolBooking` with `status = 'Active'`: driver, checkout
-   time, expected return, and a red **"OVERDUE — return now"** badge when
-   `now > expectedReturnAt`. "Mark Returned" action (sets `returnedAt`, `returnedById`,
-   `status = 'Returned'`).
-3. **Upcoming approved requests** — `PoolBookingRequest` with `status = 'Approved'` and a
-   future window.
+1. **Available pool cars** — `isPool` cars at the venue with no `Active` booking now.
+2. **Active & Overdue** — `Approved`, not-returned bookings whose derived state is
+   `Active` or `Overdue`. Shows requester, FA code, window start/end; a red
+   **"OVERDUE — should be returned"** badge when derived state is `Overdue`.
+   **"Mark Returned"** action → `PATCH /pool-booking-requests/:id/return` sets
+   `returnedAt = now`, `returnedById = req.user.id`, `status = 'Completed'`
+   (RBAC: SuperAdmin, Admin own-venue).
+3. **Upcoming** — `Approved`, not-returned, derived state `Upcoming`.
 
-Backend: `GET /pool-bookings` already lists; add `overdue` computed field and a
-`?status=` / `?stadiumId=` filter. Overdue = `status Active && expectedReturnAt < now`.
+Backend `GET /pool-booking-requests` (`getAll`): add a computed `derivedState` field to
+each row and accept `?derivedState=` and the existing `?status=` / `?stadiumId=` filters;
+keep venue scoping via `resolveStadiumScope` (replace the inline `role === 'Admin'`
+check in `pool-bookings.controller.ts` / `pool-booking-requests.controller.ts`).
 
 ### 6.3 Booker detail on the Bookings page
-Each active/historical booking row expands to show: booker full name, **FA code**
-(`faUser.accreditationNumber`), phone, email, scheduled start/end, expected return,
-booking type (**Single** / **Recurring**) and, for recurring, the date range + daily
-time window. Data joined from `PoolBookingRequest` (when the booking originated from a
-request) and `PoolBooking`.
+Each booking row expands to show: requester full name, **FA code**
+(`faUser.accreditationNumber` — add it to `BOOKING_INCLUDE`), requester phone, requester
+email, `bookingType` (**Single** / **Recurring**), the scheduled window
+(`startDate startTime` → `endDate endTime`), and — for `Recurring` — that the daily
+window repeats across the date range. If returned: `returnedAt` and `returnedBy` name.
 
 ### 6.4 Booking history + download
-- `GET /pool-bookings/history` — filters: date range, stadium, car, status, booker.
-  Returns paginated rows; Admin auto-scoped to their venue.
-- "Download" button offering **PDF** (`bookingHistoryPdf`) and **Excel** (existing
-  `exceljs` pattern in `reports.controller`). PDF includes filter summary + reference
-  number + full per-booking detail.
+- `GET /pool-booking-requests/history` — filters: date range (on `startDate`), stadium,
+  car, status/derivedState, requester text. Paginated; Admin auto-scoped via
+  `resolveStadiumScope`.
+- "Download" button → **PDF** (`bookingHistoryPdf` from the §4 shared service) and
+  **Excel** (`exceljs`). PDF carries a `BKH-YYYY-NNNNNN` reference, the filter summary,
+  and every field from §6.3 per booking.
 
 ### 6.5 Dashboard booking widget (Admin + SuperAdmin)
-`DashboardPage` gains a **Bookings today** card:
-- count + list of today's bookings (checkout today or active today), venue-scoped for Admin;
-- available pool cars count, booked pool cars count, overdue count (each links to the
-  Bookings page filtered accordingly).
-- Backend: `GET /reports/dashboard` (or the existing dashboard-stats endpoint) extended
-  with `poolToday: { bookings, available, booked, overdue }`.
+`DashboardPage` gains a **Pool bookings today** card:
+- today's bookings (window overlaps today), venue-scoped for Admin;
+- counts: available pool cars, booked (Active) pool cars, overdue — each links to the
+  Bookings page filtered accordingly.
+- Backend: the existing dashboard stats endpoint (`reports.controller.getUtilization` →
+  `getDashboardStats`) gains `poolToday: { bookings, available, booked, overdue }`,
+  venue-scoped by the same `resolveStadiumScope` value.
 
 ### 6.6 Acceptance
-- A pool car booked with `expectedReturnAt` in the past shows **Overdue** on the Fleet
-  Management pool list, the Bookings page, and the dashboard count.
-- Marking a booking returned clears it from "Active" and the availability count updates.
-- Booking history PDF downloads with every field from 6.3 and a reference number.
-- An Admin's dashboard booking widget only counts their own venue.
+- An `Approved` booking whose window end is in the past and `returnedAt` is null shows
+  **Overdue** on the Fleet Management pool list, the Bookings page, and the dashboard.
+- "Mark Returned" sets it `Completed`; it leaves the Active/Overdue panel and the
+  available-cars count goes up.
+- Booking history PDF downloads with every §6.3 field and a `BKH-` reference number.
+- An Admin's pool list, Bookings page and dashboard widget only show their own venue;
+  a client `?stadiumId=` override is ignored.
+- Booking rows show requester FA code + contact and Single/Recurring at 375 / 768 / 1280.
 
 ## 7. Phase 3 — Handover / Handback Rework
 
