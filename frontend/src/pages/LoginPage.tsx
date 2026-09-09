@@ -98,13 +98,13 @@ export function LoginPage() {
                         Sign in with Microsoft Authenticator
                     </Button>
 
-                    <div className="mt-4 flex flex-col items-center gap-2 text-sm">
-                        <Link to="/request" className="text-primary hover:underline font-medium">
-                            Submit a Request
-                        </Link>
-                        <Link to="/book-pool" className="text-primary hover:underline font-medium">
-                            Bookings
-                        </Link>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <Button asChild variant="secondary" className="w-full">
+                            <Link to="/request">Submit a Request</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="w-full">
+                            <Link to="/book-pool">Bookings</Link>
+                        </Button>
                     </div>
                 </CardContent>
             </Card>
