@@ -49,6 +49,10 @@ interface Settings {
     enableHandoverReminder?: boolean;
     handoverReminderHoursBefore?: number;
     timezone?: string;
+    requestWindowMode?: string;
+    requestWindowStart?: string | null;
+    requestWindowEnd?: string | null;
+    requestWindowClosedMessage?: string | null;
     handoverTcEnTitle?: string;
     handoverTcEnBody?: string;
     handoverTcArTitle?: string;
@@ -159,6 +163,11 @@ export function SettingsPage() {
     const [enableHandoverReminder, setEnableHandoverReminder] = useState(true);
     const [handoverReminderHoursBefore, setHandoverReminderHoursBefore] = useState(1);
     const [timezone, setTimezone] = useState('UTC');
+    const [rwMode, setRwMode] = useState<'open' | 'closed' | 'scheduled'>('open');
+    const [rwStart, setRwStart] = useState('');
+    const [rwEnd, setRwEnd] = useState('');
+    const [rwClosedMessage, setRwClosedMessage] = useState('');
+    const [announcingWindow, setAnnouncingWindow] = useState(false);
     const [tcEnTitle, setTcEnTitle] = useState('');
     const [tcEnBody, setTcEnBody] = useState('');
     const [tcArTitle, setTcArTitle] = useState('');
@@ -216,6 +225,10 @@ export function SettingsPage() {
                 setEnableHandoverReminder(d.enableHandoverReminder ?? true);
                 setHandoverReminderHoursBefore(d.handoverReminderHoursBefore ?? 1);
                 setTimezone(d.timezone || 'UTC');
+                setRwMode((d.requestWindowMode as 'open' | 'closed' | 'scheduled') || 'open');
+                setRwStart(d.requestWindowStart ? d.requestWindowStart.slice(0, 16) : '');
+                setRwEnd(d.requestWindowEnd ? d.requestWindowEnd.slice(0, 16) : '');
+                setRwClosedMessage(d.requestWindowClosedMessage || '');
                 setTcEnTitle(d.handoverTcEnTitle || '');
                 setTcEnBody(d.handoverTcEnBody || '');
                 setTcArTitle(d.handoverTcArTitle || '');
@@ -312,6 +325,10 @@ export function SettingsPage() {
             fd.append('enableHandoverReminder', String(enableHandoverReminder));
             fd.append('handoverReminderHoursBefore', String(handoverReminderHoursBefore));
             fd.append('timezone', timezone || 'UTC');
+            fd.append('requestWindowMode', rwMode);
+            fd.append('requestWindowStart', rwMode === 'scheduled' && rwStart ? new Date(rwStart).toISOString() : '');
+            fd.append('requestWindowEnd', rwMode === 'scheduled' && rwEnd ? new Date(rwEnd).toISOString() : '');
+            fd.append('requestWindowClosedMessage', rwMode === 'open' ? '' : rwClosedMessage);
             fd.append('handoverTcEnTitle', tcEnTitle);
             fd.append('handoverTcEnBody', tcEnBody);
             fd.append('handoverTcArTitle', tcArTitle);
@@ -563,6 +580,46 @@ export function SettingsPage() {
                         <>
                             <TabsContent value="system" className="mt-0 space-y-8">
                                 <form onSubmit={handleSaveSystem} className="space-y-8">
+                                    <Card className="border-none shadow-md">
+                                        <CardHeader>
+                                            <CardTitle className="text-2xl">Request Window</CardTitle>
+                                            <CardDescription>Controls the public “Submit a Request” and “Bookings” channels. Save to apply.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="p-8 space-y-4">
+                                            <div className="flex flex-wrap gap-6">
+                                                {(['open', 'closed', 'scheduled'] as const).map((m) => (
+                                                    <label key={m} className="flex items-center gap-2 text-sm">
+                                                        <input type="radio" name="rwMode" value={m} checked={rwMode === m} onChange={() => setRwMode(m)} />
+                                                        <span className="capitalize">{m}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                            {rwMode === 'scheduled' && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    <div className="space-y-1"><Label>Opens</Label>
+                                                        <Input type="datetime-local" value={rwStart} onChange={(e) => setRwStart(e.target.value)} /></div>
+                                                    <div className="space-y-1"><Label>Closes</Label>
+                                                        <Input type="datetime-local" value={rwEnd} onChange={(e) => setRwEnd(e.target.value)} /></div>
+                                                </div>
+                                            )}
+                                            {rwMode !== 'open' && (
+                                                <div className="space-y-1"><Label>Closed message (optional)</Label>
+                                                    <Input value={rwClosedMessage} onChange={(e) => setRwClosedMessage(e.target.value)}
+                                                        placeholder="Requirement collection opens 5 Jan 2027" /></div>
+                                            )}
+                                            <div className="pt-2 border-t">
+                                                <Button type="button" variant="outline" disabled={announcingWindow} onClick={async () => {
+                                                    if (!confirm('Email and notify every FA that the request window is open?')) return;
+                                                    setAnnouncingWindow(true);
+                                                    try {
+                                                        const res = await settingsApi.announceWindow();
+                                                        toast.success(`Announced to ${res.data.notified} people`);
+                                                    } catch { toast.error('Announce failed'); }
+                                                    finally { setAnnouncingWindow(false); }
+                                                }}>Announce window is open</Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
                                     <Card className="border-none shadow-md">
                                         <CardHeader><CardTitle className="text-2xl">System Identity</CardTitle></CardHeader>
                                         <CardContent className="p-8 space-y-6">

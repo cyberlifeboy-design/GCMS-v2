@@ -22,6 +22,7 @@ export interface CarRequestFilters {
     status?: string;
     stadiumId?: string;
     departmentId?: string;
+    requestType?: string;
 }
 
 export class RequestsService {
@@ -151,6 +152,9 @@ export class RequestsService {
         }
         if (filters.departmentId) {
             where.departmentId = filters.departmentId;
+        }
+        if (filters.requestType) {
+            where.requestType = filters.requestType;
         }
 
         const [data, total] = await Promise.all([

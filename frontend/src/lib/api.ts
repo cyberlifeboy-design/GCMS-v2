@@ -297,6 +297,8 @@ export const settingsApi = {
         apiClient.put('/settings', data, {
             headers: { 'Content-Type': undefined },
         }),
+    announceWindow: () =>
+        apiClient.post('/settings/request-window/announce'),
 };
 
 export const publicSettingsApi = {

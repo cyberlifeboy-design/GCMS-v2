@@ -78,6 +78,7 @@ export function RequestsManagementPage() {
     const [limit] = useState(10);
 
     const [statusFilter, setStatusFilter] = useState<string>('');
+    const [typeFilter, setTypeFilter] = useState<string>('');
     const [stadiumFilter, setStadiumFilter] = useState<string>('');
     const [departmentFilter, setDepartmentFilter] = useState<string>('');
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
@@ -126,7 +127,7 @@ export function RequestsManagementPage() {
 
     useEffect(() => {
         loadRequests();
-    }, [page, statusFilter, stadiumFilter, departmentFilter]);
+    }, [page, statusFilter, typeFilter, stadiumFilter, departmentFilter]);
 
     useEffect(() => {
         const loadDepartments = async () => {
@@ -159,6 +160,7 @@ export function RequestsManagementPage() {
         try {
             const params: any = { page, limit };
             if (statusFilter) params.status = statusFilter;
+            if (typeFilter) params.requestType = typeFilter;
             if (stadiumFilter) params.stadiumId = stadiumFilter;
             if (departmentFilter) params.departmentId = departmentFilter;
 
@@ -356,6 +358,19 @@ export function RequestsManagementPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <Label>Type</Label>
+                            <Select value={typeFilter || '__all__'} onValueChange={v => setTypeFilter(v === '__all__' ? '' : v)}>
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="All types" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__all__">All</SelectItem>
+                                    <SelectItem value="dedicated">Dedicated</SelectItem>
+                                    <SelectItem value="pool-shared">Pool shared resource</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                         {isSuperAdmin && (
                             <div className="space-y-2">
                                 <Label>Stadium</Label>
@@ -426,6 +441,14 @@ export function RequestsManagementPage() {
                                             <div>
                                                 <p className="font-medium">{req.requesterName}</p>
                                                 <p className="text-sm text-muted-foreground">{req.requesterEmail}</p>
+                                                {req.accreditationNumber && (
+                                                    <p className="text-xs text-muted-foreground">FA {req.accreditationNumber}</p>
+                                                )}
+                                                {req.requestType && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {req.requestType === 'dedicated' ? 'Dedicated' : 'Pool shared resource'}
+                                                    </p>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -578,7 +601,7 @@ export function RequestsManagementPage() {
                             {selectedRequest.requestType && (
                                 <div>
                                     <p className="text-sm text-muted-foreground">Request Type</p>
-                                    <p className="capitalize">{selectedRequest.requestType === 'dedicated' ? 'Dedicated tournament operational use' : 'One-time use'}</p>
+                                    <p>{selectedRequest.requestType === 'dedicated' ? 'Dedicated' : 'Pool shared resource'}</p>
                                 </div>
                             )}
                             <div>

@@ -102,7 +102,7 @@ export class RequestsController {
      */
     static async getAll(req: AuthRequest, res: Response) {
         try {
-            const { status, stadiumId, departmentId, page, limit } = req.query;
+            const { status, stadiumId, departmentId, requestType, page, limit } = req.query;
 
             // RBAC: Admin can only see requests for their stadium
             let filterStadiumId = stadiumId as string | undefined;
@@ -114,6 +114,7 @@ export class RequestsController {
                 status: status as string,
                 stadiumId: filterStadiumId,
                 departmentId: departmentId as string,
+                requestType: requestType as string | undefined,
             };
 
             const result = await requestsService.getAll(
