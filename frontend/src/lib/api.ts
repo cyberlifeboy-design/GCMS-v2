@@ -427,7 +427,7 @@ export const poolBookingRequestsApi = {
         apiClient.get(`/public/pool-booking-requests/${token}`),
 
     // Admin/FA/Observer endpoints (auth required)
-    getAll: (params?: { status?: string; stadiumId?: string }) =>
+    getAll: (params?: { status?: string; stadiumId?: string; derivedState?: string }) =>
         apiClient.get('/pool-booking-requests', { params }),
     approve: (id: string, comment?: string) =>
         apiClient.patch(`/pool-booking-requests/${id}/approve`, { comment }),
@@ -435,6 +435,12 @@ export const poolBookingRequestsApi = {
         apiClient.patch(`/pool-booking-requests/${id}/reject`, { comment }),
     amend: (id: string, data: Record<string, unknown>) =>
         apiClient.patch(`/pool-booking-requests/${id}`, data),
+    markReturned: (id: string) =>
+        apiClient.patch(`/pool-booking-requests/${id}/return`),
+    getHistory: (params?: Record<string, string | undefined>) =>
+        apiClient.get('/pool-booking-requests/history', { params }),
+    exportHistory: (params: Record<string, string | undefined>) =>
+        apiClient.get('/pool-booking-requests/history/export', { params, responseType: 'blob' }),
 };
 
 export default apiClient;

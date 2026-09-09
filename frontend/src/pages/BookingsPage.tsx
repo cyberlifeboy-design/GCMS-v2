@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { poolBookingRequestsApi, stadiumsApi } from '@/lib/api';
+import { poolBookingRequestsApi, poolBookingsApi, stadiumsApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -36,7 +37,7 @@ interface Booking {
     stadium: { id: string; name: string; code: string };
     fleetId: string;
     fleet: { id: string; carNumber: string; carType: string };
-    faUser: { id: string; name: string };
+    faUser: { id: string; name: string; accreditationNumber?: string | null };
     bookingType: string;
     startDate: string;
     endDate: string;
@@ -44,10 +45,307 @@ interface Booking {
     endTime: string;
     purpose?: string;
     status: string;
+    derivedState?: string;
     reviewComment?: string;
     reviewedBy?: { id: string; name: string };
     reviewedAt?: string;
+    returnedAt?: string | null;
+    returnedBy?: { id: string; name: string } | null;
     createdAt: string;
+}
+
+const derivedBadge: Record<string, string> = {
+    Upcoming: 'bg-sky-100 text-sky-700',
+    Active: 'bg-emerald-100 text-emerald-700',
+    Overdue: 'bg-red-100 text-red-700',
+    Completed: 'bg-slate-100 text-slate-600',
+};
+
+/** Expandable detail row shared by the live/history tables. */
+function BookerDetail({ b }: { b: Booking }) {
+    return (
+        <div className="text-sm grid gap-1 p-3 bg-muted/40 rounded-md">
+            <div>
+                Requester: <b>{b.requesterName}</b> · FA {b.faUser?.accreditationNumber ?? '—'}
+            </div>
+            <div>{b.requesterPhone} · {b.requesterEmail}</div>
+            <div>
+                Type: <b>{b.bookingType}</b>
+                {b.bookingType === 'Recurring' && ' — daily window repeats across the date range'}
+            </div>
+            <div>Window: {b.startDate} {b.startTime} → {b.endDate} {b.endTime}</div>
+            {b.returnedAt && (
+                <div>Returned {new Date(b.returnedAt).toLocaleString()} by {b.returnedBy?.name ?? '—'}</div>
+            )}
+        </div>
+    );
+}
+
+function LiveBookingsPanel({
+    mode,
+    stadiumId,
+    canManage,
+}: {
+    mode: 'live' | 'upcoming';
+    stadiumId?: string;
+    canManage: boolean;
+}) {
+    const [rows, setRows] = useState<Booking[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const [busy, setBusy] = useState<string | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params: Record<string, string> = { status: 'Approved' };
+            if (stadiumId) params.stadiumId = stadiumId;
+            const res = await poolBookingRequestsApi.getAll(params);
+            const all: Booking[] = res.data.data || [];
+            setRows(
+                all.filter((b) =>
+                    mode === 'upcoming'
+                        ? b.derivedState === 'Upcoming'
+                        : b.derivedState === 'Active' || b.derivedState === 'Overdue',
+                ),
+            );
+        } finally {
+            setLoading(false);
+        }
+    }, [mode, stadiumId]);
+    useEffect(() => { load(); }, [load]);
+
+    const markReturned = async (id: string) => {
+        setBusy(id);
+        try {
+            await poolBookingRequestsApi.markReturned(id);
+            toast.success('Booking marked returned');
+            load();
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to mark returned');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+    if (rows.length === 0) return <div className="text-center py-8 text-muted-foreground">Nothing here right now.</div>;
+
+    return (
+        <div className="overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Cart</TableHead>
+                        <TableHead>Requester / FA</TableHead>
+                        <TableHead>Window</TableHead>
+                        <TableHead>State</TableHead>
+                        {mode === 'live' && canManage && <TableHead className="text-right">Action</TableHead>}
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {rows.map((b) => (
+                        <>
+                            <TableRow key={b.id}>
+                                <TableCell>
+                                    <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-muted-foreground">
+                                        {expanded === b.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                    </button>
+                                </TableCell>
+                                <TableCell>
+                                    <p className="font-medium">{b.fleet?.carNumber}</p>
+                                    <p className="text-xs text-muted-foreground">{b.fleet?.carType} · {b.stadium?.name}</p>
+                                </TableCell>
+                                <TableCell>
+                                    <p>{b.requesterName}</p>
+                                    <p className="text-xs text-muted-foreground">FA {b.faUser?.accreditationNumber ?? '—'} · {b.requesterPhone}</p>
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                    {b.startDate} {b.startTime} → {b.endDate} {b.endTime}
+                                </TableCell>
+                                <TableCell>
+                                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${derivedBadge[b.derivedState || ''] || 'bg-muted'}`}>
+                                        {b.derivedState}
+                                    </span>
+                                    {b.derivedState === 'Overdue' && (
+                                        <span className="ml-2 text-xs text-red-600 font-semibold">should be returned</span>
+                                    )}
+                                </TableCell>
+                                {mode === 'live' && canManage && (
+                                    <TableCell className="text-right">
+                                        <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => markReturned(b.id)}>
+                                            <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
+                                        </Button>
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                            {expanded === b.id && (
+                                <TableRow>
+                                    <TableCell colSpan={6}><BookerDetail b={b} /></TableCell>
+                                </TableRow>
+                            )}
+                        </>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+function AvailableCarsPanel({ stadiumId }: { stadiumId?: string }) {
+    const [carts, setCarts] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        setLoading(true);
+        poolBookingsApi
+            .getPoolFleet(stadiumId ? { stadiumId } : undefined)
+            .then((res) => setCarts((res.data?.data ?? res.data ?? []).filter((c: any) => !c.currentBooking)))
+            .finally(() => setLoading(false));
+    }, [stadiumId]);
+
+    if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+    if (carts.length === 0) return <div className="text-center py-8 text-muted-foreground">No pool cars are free right now.</div>;
+    return (
+        <div className="overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow><TableHead>Cart</TableHead><TableHead>Type</TableHead><TableHead>Venue</TableHead></TableRow>
+                </TableHeader>
+                <TableBody>
+                    {carts.map((c) => (
+                        <TableRow key={c.id}>
+                            <TableCell className="font-medium">{c.carNumber}</TableCell>
+                            <TableCell>{c.carType}</TableCell>
+                            <TableCell>{c.stadium?.name ?? '—'}</TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+function HistoryPanel({ stadiumId }: { stadiumId?: string }) {
+    const [rows, setRows] = useState<Booking[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const [filters, setFilters] = useState<{ fromDate: string; toDate: string; status: string }>({ fromDate: '', toDate: '', status: '' });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params: Record<string, string> = {};
+            if (stadiumId) params.stadiumId = stadiumId;
+            if (filters.fromDate) params.fromDate = filters.fromDate;
+            if (filters.toDate) params.toDate = filters.toDate;
+            if (filters.status) params.status = filters.status;
+            const res = await poolBookingRequestsApi.getHistory(params);
+            setRows(res.data.data || []);
+        } finally {
+            setLoading(false);
+        }
+    }, [stadiumId, filters]);
+    useEffect(() => { load(); }, [load]);
+
+    const download = async (format: 'pdf' | 'xlsx') => {
+        try {
+            const params: Record<string, string> = { format };
+            if (stadiumId) params.stadiumId = stadiumId;
+            if (filters.fromDate) params.fromDate = filters.fromDate;
+            if (filters.toDate) params.toDate = filters.toDate;
+            if (filters.status) params.status = filters.status;
+            const res = await poolBookingRequestsApi.exportHistory(params);
+            const url = URL.createObjectURL(new Blob([res.data]));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `booking_history.${format}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Download failed');
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                    <Label className="text-xs">From</Label>
+                    <Input type="date" value={filters.fromDate} onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })} className="w-40" />
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs">To</Label>
+                    <Input type="date" value={filters.toDate} onChange={(e) => setFilters({ ...filters, toDate: e.target.value })} className="w-40" />
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs">Status</Label>
+                    <Select value={filters.status || '__all__'} onValueChange={(v) => setFilters({ ...filters, status: v === '__all__' ? '' : v })}>
+                        <SelectTrigger className="w-40"><SelectValue placeholder="All" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__all__">All</SelectItem>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="Approved">Approved</SelectItem>
+                            <SelectItem value="Rejected">Rejected</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => download('pdf')}><Download className="w-4 h-4 mr-1" /> PDF</Button>
+                    <Button variant="outline" size="sm" onClick={() => download('xlsx')}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+                </div>
+            </div>
+            {loading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            ) : rows.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No bookings match these filters.</div>
+            ) : (
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-8"></TableHead>
+                                <TableHead>Cart</TableHead><TableHead>Requester / FA</TableHead>
+                                <TableHead>Window</TableHead><TableHead>State</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((b) => (
+                                <>
+                                    <TableRow key={b.id}>
+                                        <TableCell>
+                                            <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-muted-foreground">
+                                                {expanded === b.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                            </button>
+                                        </TableCell>
+                                        <TableCell>
+                                            <p className="font-medium">{b.fleet?.carNumber}</p>
+                                            <p className="text-xs text-muted-foreground">{b.fleet?.carType} · {b.stadium?.name}</p>
+                                        </TableCell>
+                                        <TableCell>
+                                            <p>{b.requesterName}</p>
+                                            <p className="text-xs text-muted-foreground">FA {b.faUser?.accreditationNumber ?? '—'} · {b.bookingType}</p>
+                                        </TableCell>
+                                        <TableCell className="text-sm">{b.startDate} {b.startTime} → {b.endDate} {b.endTime}</TableCell>
+                                        <TableCell>
+                                            <span className={`rounded px-2 py-0.5 text-xs font-semibold ${derivedBadge[b.derivedState || ''] || 'bg-muted'}`}>
+                                                {b.derivedState || b.status}
+                                            </span>
+                                        </TableCell>
+                                    </TableRow>
+                                    {expanded === b.id && (
+                                        <TableRow><TableCell colSpan={5}><BookerDetail b={b} /></TableCell></TableRow>
+                                    )}
+                                </>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+        </div>
+    );
 }
 
 interface Stadium {
@@ -80,6 +378,8 @@ export function BookingsPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
     const [stadiumFilter, setStadiumFilter] = useState('');
+    // Panels are venue-scoped by the server for Admin/FA; SuperAdmin can narrow with the picker.
+    const panelStadiumId = isAdmin ? user?.stadiumId || undefined : stadiumFilter || undefined;
 
     const [selected, setSelected] = useState<Booking | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -303,6 +603,37 @@ export function BookingsPage() {
                 </div>
             </div>
 
+            <Tabs defaultValue="queue">
+                <TabsList className="flex flex-wrap h-auto">
+                    <TabsTrigger value="queue">Review queue</TabsTrigger>
+                    <TabsTrigger value="live">Active &amp; Overdue</TabsTrigger>
+                    <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+                    <TabsTrigger value="available">Available cars</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="live" className="pt-4">
+                    <Card><CardContent className="pt-6">
+                        <LiveBookingsPanel mode="live" stadiumId={panelStadiumId} canManage={canManage} />
+                    </CardContent></Card>
+                </TabsContent>
+                <TabsContent value="upcoming" className="pt-4">
+                    <Card><CardContent className="pt-6">
+                        <LiveBookingsPanel mode="upcoming" stadiumId={panelStadiumId} canManage={canManage} />
+                    </CardContent></Card>
+                </TabsContent>
+                <TabsContent value="available" className="pt-4">
+                    <Card><CardContent className="pt-6">
+                        <AvailableCarsPanel stadiumId={panelStadiumId} />
+                    </CardContent></Card>
+                </TabsContent>
+                <TabsContent value="history" className="pt-4">
+                    <Card><CardContent className="pt-6">
+                        <HistoryPanel stadiumId={panelStadiumId} />
+                    </CardContent></Card>
+                </TabsContent>
+
+                <TabsContent value="queue" className="pt-4 space-y-6">
             <Card>
                 <CardContent className="pt-6">
                     <div className="flex flex-wrap gap-4">
@@ -413,6 +744,8 @@ export function BookingsPage() {
                     )}
                 </CardContent>
             </Card>
+                </TabsContent>
+            </Tabs>
 
             {/* Review Dialog */}
             <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
