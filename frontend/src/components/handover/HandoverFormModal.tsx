@@ -298,6 +298,16 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const canPrint = isComplete || isReturned;
     const today = new Date().toISOString().slice(0, 10);
 
+    const phaseLabel =
+        form?.status === 'RETURNED' ? 'Complete'
+        : form?.status === 'HANDBACK_PENDING' ? 'Step 2 of 2 · Handback'
+        : form?.status === 'COMPLETE' ? 'Handover signed · awaiting handback'
+        : 'Step 1 of 2 · Handover';
+    // Once handback has started the whole handover section is locked (read-only + greyed).
+    const handoverLocked =
+        mode === 'afteruse' || mode === 'admin-return'
+        || form?.status === 'HANDBACK_PENDING' || form?.status === 'RETURNED';
+
     const loadForm = useCallback(async () => {
         setLoading(true);
         try {
@@ -476,7 +486,20 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
         }
     };
 
-    const handlePrint = () => window.print();
+    const handlePrint = async () => {
+        if (!fleetId) return;
+        try {
+            const res = await handoverApi.downloadFormPdf(fleetId);
+            const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `handover_${form?.fleet?.carNumber || fleetId}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Could not download the PDF');
+        }
+    };
 
     const setDriver = (i: number, field: keyof AdditionalDriver, val: string) => {
         setDrivers(prev => { const d = [...prev]; d[i] = { ...d[i], [field]: val }; return d; });
@@ -537,11 +560,12 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                 ? <Badge className="bg-amber-500 text-white">Awaiting User Signature</Badge>
                                 : <Badge className="bg-slate-500 text-white">Pending Admin Signature</Badge>
                             }
+                            <span className="text-xs rounded bg-white/10 px-2 py-0.5">{phaseLabel}</span>
                             {form?.adminSignedAt && <span className="text-xs text-zinc-400">Admin signed: {new Date(form.adminSignedAt).toLocaleDateString()}</span>}
                             {form?.userSignedAt && <span className="text-xs text-zinc-400">User signed: {new Date(form.userSignedAt).toLocaleDateString()}</span>}
                             {form?.returnDate && <span className="text-xs text-zinc-400">Returned: {form.returnDate}</span>}
                         </div>
-                        {canPrint && <Button variant="secondary" size="sm" className="no-print" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Save PDF</Button>}
+                        {canPrint && <Button variant="secondary" size="sm" className="no-print" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Download PDF</Button>}
                     </div>
 
                     {loading ? (
@@ -549,12 +573,21 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                     ) : (
                         <div className="bg-white text-sm text-gray-900">
 
+                            {/* System record — pulled from the cart, always read-only */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 px-4 py-3 bg-muted/40 border-b text-sm">
+                                <div><span className="text-muted-foreground">Car #:</span> <b>{form?.fleet?.carNumber ?? '—'}</b></div>
+                                <div><span className="text-muted-foreground">Type:</span> <b>{form?.fleet?.carType ?? '—'}</b></div>
+                                <div><span className="text-muted-foreground">Venue:</span> <b>{form?.fleet?.stadium?.name ?? '—'}</b></div>
+                                <div><span className="text-muted-foreground">Assigned FA:</span> <b>{form?.fleet?.assignedUser?.name ?? '—'}</b></div>
+                                <div><span className="text-muted-foreground">FA code:</span> <b>{form?.fleet?.assignedUser?.accreditationNumber ?? '—'}</b></div>
+                                <div><span className="text-muted-foreground">FA phone:</span> <b>{form?.fleet?.assignedUser?.phone ?? '—'}</b></div>
+                            </div>
+
                             {/* Serial + FA Code bars */}
                             <div className="bg-zinc-800 text-white px-4 py-2 flex items-center gap-4">
                                 <span className="text-xs font-bold uppercase">Golf Cart Serial Number:</span>
                                 <input className="bg-white/10 border border-white/30 text-white rounded px-3 py-1 text-sm flex-1 max-w-xs placeholder:text-white/40"
-                                    placeholder="Serial number..." value={f.serialNumber} readOnly={isAdminReadonly}
-                                    onChange={e => setF(p => ({ ...p, serialNumber: e.target.value }))} />
+                                    placeholder="Serial number..." value={f.serialNumber || form?.fleet?.carNumber || ''} readOnly />
                             </div>
                             <div className="bg-zinc-700 text-white px-4 py-2 flex items-center gap-4">
                                 <span className="text-xs font-bold uppercase">FA Code:</span>
@@ -562,6 +595,13 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     placeholder="FA code..." value={f.faCode} readOnly={isAdminReadonly}
                                     onChange={e => setF(p => ({ ...p, faCode: e.target.value }))} />
                             </div>
+
+                            <div className={handoverLocked ? 'opacity-50 pointer-events-none select-none' : ''} aria-disabled={handoverLocked}>
+                            {handoverLocked && (
+                                <div className="m-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-2">
+                                    Handover is signed and locked. Only the handback section below is editable.
+                                </div>
+                            )}
 
                             {/* ── Section 1: Handover Details ── */}
                             <SectionHeader title="Handover Details" ar="تفاصيل التسليم" />
@@ -676,8 +716,9 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     ))}
                                 </TypeRow>
                             </div>
+                            </div>{/* end handover-locked wrapper A (Sections 1–2) */}
 
-                            {/* ── Section 3: Condition Inspection ── */}
+                            {/* ── Section 3: Condition Inspection ── (pre column already disabled outside 'admin') */}
                             <SectionHeader title="Vehicle Condition Inspection" ar="فحص حالة المركبة" />
                             <div className="p-3 border-b">
                                 <ConditionTable
@@ -688,6 +729,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                 />
                             </div>
 
+                            <div className={handoverLocked ? 'opacity-50 pointer-events-none select-none' : ''} aria-disabled={handoverLocked}>
                             {/* ── Section 4: Additional Drivers ── */}
                             <SectionHeader title="Additional Authorized Drivers" ar="السائقون الإضافيون المصرح لهم" />
                             <div className="border-b">
@@ -826,6 +868,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     />
                                 </div>
                             </div>
+                            </div>{/* end handover-locked wrapper B (Sections 4–7) */}
 
                             {/* ── After-Use Signature Section ── */}
                             {mode === 'afteruse' && (
@@ -921,7 +964,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     <CheckCircle2 className="w-5 h-5 text-green-600" />
                                     <span className="font-semibold text-sm">Handover complete. Both parties have signed.</span>
                                     <div className="flex-1" />
-                                    <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Print / Save PDF</Button>
+                                    <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Download PDF</Button>
                                 </div>
                             )}
                             {isReturned && (
@@ -929,7 +972,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     <CheckCircle2 className="w-5 h-5 text-indigo-600" />
                                     <span className="font-semibold text-sm">Cart returned and released to pool. Return form signed.</span>
                                     <div className="flex-1" />
-                                    <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Print / Save PDF</Button>
+                                    <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Download PDF</Button>
                                 </div>
                             )}
                         </div>
