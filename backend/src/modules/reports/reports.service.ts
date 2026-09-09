@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { AuditLogFilters, HandoverFilters, MaintenanceFilters } from '../../types';
 import { deriveBookingState } from '../pool-booking-requests/booking-state';
 import { summarizePoolBookings, PoolBookingSummary } from './pool-report';
+import { buildPublicBookerRows, PublicBookerRow } from './public-bookers';
 
 interface ActivityLog {
     action: string;
@@ -702,6 +703,38 @@ export class ReportsService {
         );
 
         return reports;
+    }
+
+    /**
+     * External pool bookers — people who booked a pool car through the public
+     * link and do NOT have a User account. One row per email, venue-scoped.
+     */
+    async getPublicBookers(filters: { stadiumId?: string } = {}): Promise<PublicBookerRow[]> {
+        const where: any = {};
+        if (filters.stadiumId) where.stadiumId = filters.stadiumId;
+
+        const [bookings, users] = await Promise.all([
+            this.prisma.poolBookingRequest.findMany({
+                where,
+                select: {
+                    requesterEmail: true, requesterName: true, requesterPhone: true, createdAt: true,
+                    faUser: { select: { accreditationNumber: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.user.findMany({ select: { email: true } }),
+        ]);
+
+        return buildPublicBookerRows(
+            bookings.map(b => ({
+                requesterEmail: b.requesterEmail,
+                requesterName: b.requesterName,
+                requesterPhone: b.requesterPhone,
+                faAccreditationNumber: b.faUser?.accreditationNumber ?? null,
+                createdAt: b.createdAt,
+            })),
+            new Set(users.map(u => u.email)),
+        );
     }
 
     /**

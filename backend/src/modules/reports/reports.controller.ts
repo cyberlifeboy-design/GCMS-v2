@@ -604,8 +604,11 @@ export class ReportsController {
         try {
             const { role } = req.query as any;
             const filterStadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
-            const reports = await reportsService.getUserReports({ stadiumId: filterStadiumId, role });
-            res.status(200).json(reports);
+            const [users, publicBookers] = await Promise.all([
+                reportsService.getUserReports({ stadiumId: filterStadiumId, role }),
+                reportsService.getPublicBookers({ stadiumId: filterStadiumId }),
+            ]);
+            res.status(200).json({ users, publicBookers });
         } catch (error) {
             res.status(500).json({ error: 'Failed to get user reports' });
         }
@@ -687,6 +690,24 @@ export class ReportsController {
                 }
             });
 
+            // Public bookers sheet (external pool bookers with no login)
+            const publicBookers = await reportsService.getPublicBookers({ stadiumId: filterStadiumId });
+            const pbSheet = workbook.addWorksheet('Public Bookers');
+            pbSheet.columns = [
+                { header: 'Name', key: 'name', width: 25 },
+                { header: 'FA Code', key: 'faCode', width: 16 },
+                { header: 'Phone', key: 'phone', width: 18 },
+                { header: 'Email', key: 'email', width: 30 },
+                { header: 'Bookings', key: 'bookingCount', width: 10 },
+                { header: 'Last Booking', key: 'lastBookingAt', width: 22 },
+                { header: 'Source', key: 'source', width: 16 },
+            ];
+            publicBookers.forEach(b => pbSheet.addRow({
+                ...b,
+                faCode: b.faCode || '—',
+                lastBookingAt: b.lastBookingAt ? new Date(b.lastBookingAt).toLocaleString() : '—',
+            }));
+
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             res.setHeader('Content-Disposition', 'attachment; filename=user_report.xlsx');
             await workbook.xlsx.write(res);
@@ -761,6 +782,32 @@ export class ReportsController {
             y += 10;
             doc.font('Helvetica-Bold').fontSize(9);
             doc.text(`Total Users: ${reports.length}`, 30, y);
+
+            // Public bookers section (external pool bookers with no login)
+            const publicBookers = await reportsService.getPublicBookers({ stadiumId: filterStadiumId });
+            if (publicBookers.length) {
+                doc.addPage();
+                doc.font('Helvetica-Bold').fontSize(14).text('Public Bookers (no login)', { align: 'center' });
+                doc.moveDown();
+                const pbHeaders = ['Name', 'FA Code', 'Phone', 'Email', 'Bookings', 'Last Booking'];
+                const pbWidths = [110, 70, 90, 170, 55, 110];
+                let py = doc.y;
+                let px = 30;
+                doc.font('Helvetica-Bold').fontSize(9);
+                pbHeaders.forEach((h, i) => { doc.text(h, px, py, { width: pbWidths[i] }); px += pbWidths[i]; });
+                py += 16;
+                doc.font('Helvetica').fontSize(8);
+                publicBookers.forEach(b => {
+                    px = 30;
+                    const cells = [
+                        b.name, b.faCode || '—', b.phone, b.email, String(b.bookingCount),
+                        b.lastBookingAt ? new Date(b.lastBookingAt).toLocaleDateString() : '—',
+                    ];
+                    cells.forEach((c, i) => { doc.text(c, px, py, { width: pbWidths[i] }); px += pbWidths[i]; });
+                    py += 14;
+                    if (py > doc.page.height - 40) { doc.addPage(); py = 30; }
+                });
+            }
 
             doc.end();
         } catch (error) {

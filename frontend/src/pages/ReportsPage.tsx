@@ -88,6 +88,7 @@ export function ReportsPage() {
     const [stadiumReports, setStadiumReports] = useState<StadiumReport[]>([]);
     const [departmentReports, setDepartmentReports] = useState<DepartmentReport[]>([]);
     const [userReports, setUserReports] = useState<UserReport[]>([]);
+    const [publicBookers, setPublicBookers] = useState<any[]>([]);
     const [poolReport, setPoolReport] = useState<any>(null);
     const [poolLoading, setPoolLoading] = useState(false);
     const [poolStadiumFilter, setPoolStadiumFilter] = useState<string>(() =>
@@ -211,7 +212,8 @@ export function ReportsPage() {
             if (selectedStadiumFilter) params.stadiumId = selectedStadiumFilter;
             if (selectedRoleFilter) params.role = selectedRoleFilter;
             const res = await reportsApi.getUserReports(params);
-            setUserReports(res.data.data || res.data || []);
+            setUserReports(res.data.users ?? res.data.data ?? res.data ?? []);
+            setPublicBookers(res.data.publicBookers ?? []);
         } catch { } finally { setLoadingUser(false); }
     };
 
@@ -858,6 +860,41 @@ export function ReportsPage() {
                                     </div>
                                 );
                             })()}
+
+                            {publicBookers.length > 0 && (
+                                <div className="mt-6 space-y-2">
+                                    <div className="flex items-center gap-2 mb-1 px-1">
+                                        <span className="text-sm font-semibold">Public bookers (no login)</span>
+                                        <Badge variant="secondary">{publicBookers.length}</Badge>
+                                    </div>
+                                    <div className="overflow-x-auto rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Name</TableHead>
+                                                    <TableHead>FA Code</TableHead>
+                                                    <TableHead>Phone</TableHead>
+                                                    <TableHead>Email</TableHead>
+                                                    <TableHead className="text-center">Bookings</TableHead>
+                                                    <TableHead>Last Booking</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {publicBookers.map((b) => (
+                                                    <TableRow key={b.email}>
+                                                        <TableCell className="font-medium">{b.name}</TableCell>
+                                                        <TableCell className="font-mono text-xs">{b.faCode || '—'}</TableCell>
+                                                        <TableCell className="text-sm">{b.phone}</TableCell>
+                                                        <TableCell className="text-sm">{b.email}</TableCell>
+                                                        <TableCell className="text-center">{b.bookingCount}</TableCell>
+                                                        <TableCell className="text-xs">{b.lastBookingAt ? new Date(b.lastBookingAt).toLocaleDateString() : '—'}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
