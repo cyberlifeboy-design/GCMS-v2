@@ -170,6 +170,78 @@ export async function poolReportPdf(args: { data: PoolReportPdfData; reference: 
   );
 }
 
+type PdfTimelineEvent = { label: string; at: string | null; by: string | null; detail: string | null };
+
+export interface MaintenanceReportPdfData {
+  id: string;
+  status: string;
+  quotationStatus: string | null;
+  carNumber: string | null;
+  carType: string | null;
+  stadiumName: string | null;
+  stadiumCode: string | null;
+  reporterName: string | null;
+  reporterRole: string | null;
+  reporterPhone: string | null;
+  fixCost: number | null;
+  photoCount: number;
+  timeline: PdfTimelineEvent[];
+}
+
+/**
+ * Maintenance fix report as a branded PDF — cart/venue, reporter, and the full
+ * workflow timeline. The caller passes already-loaded data so this module stays
+ * leaf-level (no maintenance-module import).
+ */
+export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfData; reference: string }): Promise<Buffer> {
+  const { data } = args;
+  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
+    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
+  };
+  const heading = (doc: PDFKit.PDFDocument, t: string) => {
+    doc.moveDown(0.6).font('Helvetica-Bold').fontSize(12).fillColor('#000').text(t).moveDown(0.2);
+    doc.font('Helvetica').fontSize(10);
+  };
+
+  return renderPdf(
+    {
+      title: 'Maintenance Fix Report',
+      subtitle: `Cart ${data.carNumber ?? '—'} · ${data.stadiumName ?? '—'}`,
+      reference: args.reference,
+    },
+    (doc) => {
+      heading(doc, 'Cart & venue');
+      kv(doc, 'Cart number', data.carNumber);
+      kv(doc, 'Cart type', data.carType);
+      kv(doc, 'Venue', `${data.stadiumName ?? '—'}${data.stadiumCode ? ` (${data.stadiumCode})` : ''}`);
+      kv(doc, 'Current status', data.status);
+      kv(doc, 'Quotation status', data.quotationStatus);
+      kv(doc, 'Fix cost', data.fixCost == null ? '—' : `QAR ${data.fixCost.toFixed(2)}`);
+      kv(doc, 'Photos attached', data.photoCount);
+
+      heading(doc, 'Reporter');
+      kv(doc, 'Name', data.reporterName);
+      kv(doc, 'Role', data.reporterRole);
+      kv(doc, 'Contact', data.reporterPhone);
+
+      heading(doc, 'Workflow timeline');
+      if (data.timeline.length === 0) {
+        doc.text('No timeline events.');
+      } else {
+        data.timeline.forEach((e, i) => {
+          if (i > 0) doc.moveDown(0.35);
+          doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text(e.label, { continued: true });
+          doc.font('Helvetica').fontSize(9).fillColor('#666')
+            .text(`   ${e.at ? new Date(e.at).toLocaleString() : 'date not recorded'}${e.by ? `  ·  ${e.by}` : ''}`);
+          if (e.detail) doc.font('Helvetica').fontSize(9).fillColor('#333').text(e.detail);
+          doc.fillColor('#000');
+        });
+      }
+    },
+  );
+}
+
 /**
  * Full handover & return form as a branded PDF. Takes the already-loaded form
  * (with `fleet`, `assignedUser`, signer relations) — the caller fetches it so
