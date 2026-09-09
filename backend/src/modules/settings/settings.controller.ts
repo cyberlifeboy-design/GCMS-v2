@@ -68,6 +68,11 @@ const updateSettingsSchema = z.object({
     handoverReminderHoursBefore: coerceOptionalNumber,
     // Timezone settings
     timezone: z.string().optional().nullable(),
+    // Request window control
+    requestWindowMode: z.enum(['open', 'closed', 'scheduled']).optional(),
+    requestWindowStart: coerceDate,
+    requestWindowEnd: coerceDate,
+    requestWindowClosedMessage: z.string().optional().nullable(),
     // Handover T&C (SuperAdmin only — enforced at route level)
     handoverTcEnTitle: z.string().optional().nullable(),
     handoverTcEnBody: z.string().optional().nullable(),

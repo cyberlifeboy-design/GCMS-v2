@@ -6,6 +6,7 @@ import { stadiumsService } from '../stadiums/stadiums.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { resolveStadiumScope } from '../reports/reports.scope';
 import { bookingHistoryPdf, makeReference } from '../../services/pdf.service';
+import { settingsService } from '../settings/settings.service';
 
 const createSchema = z.object({
     stadiumId: z.string().min(1),
@@ -64,6 +65,12 @@ export class PoolBookingRequestsController {
     /** POST /api/v1/public/pool-booking-requests */
     static async createPublic(req: AuthRequest, res: Response) {
         try {
+            const windowState = await settingsService.getRequestWindowState();
+            if (!windowState.isOpen) {
+                res.status(403).json({ error: windowState.message || 'The request window is currently closed.' });
+                return;
+            }
+
             const data = createSchema.parse(req.body);
             if (data.endDate < data.startDate) {
                 res.status(400).json({ error: 'End date cannot be before start date' });

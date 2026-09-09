@@ -3,13 +3,14 @@ import { requestsService } from './requests.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { emailService } from '../../services/email.service';
+import { settingsService } from '../settings/settings.service';
 
 const createRequestSchema = z.object({
     requesterName: z.string().min(1, 'Name is required'),
     requesterEmail: z.string().email('Valid email is required'),
     requesterPhone: z.string().optional(),
     accreditationNumber: z.string().optional(),
-    requestType: z.enum(['one-time', 'dedicated']).default('one-time'),
+    requestType: z.enum(['dedicated', 'pool-shared']).default('pool-shared'),
     departmentId: z.string().min(1, 'Department is required'),
     stadiumId: z.string().min(1, 'Stadium is required'),
     cargoCount: z.number().int().min(0).default(0),
@@ -37,6 +38,12 @@ export class RequestsController {
      */
     static async createPublic(req: Request, res: Response) {
         try {
+            const windowState = await settingsService.getRequestWindowState();
+            if (!windowState.isOpen) {
+                res.status(403).json({ error: windowState.message || 'The request window is currently closed.' });
+                return;
+            }
+
             const validatedData = createRequestSchema.parse(req.body);
 
             // Validate that at least one cart type is requested

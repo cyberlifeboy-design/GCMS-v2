@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { SettingsController } from './settings.controller';
+import { settingsService } from './settings.service';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/rbac.middleware';
 import { prisma } from '../../config/database';
@@ -10,6 +11,7 @@ const router = Router();
 router.get('/public', async (_req: Request, res: Response) => {
     try {
         const settings = await prisma.systemSettings.findFirst();
+        const requestWindow = await settingsService.getRequestWindowState();
         res.json({
             tournamentName: settings?.tournamentName || 'GCMS',
             logoUrl: settings?.logoUrl || null,
@@ -21,9 +23,14 @@ router.get('/public', async (_req: Request, res: Response) => {
             handoverTcArTitle: settings?.handoverTcArTitle || null,
             handoverTcArBody: settings?.handoverTcArBody || null,
             handoverTcCheckboxes: settings?.handoverTcCheckboxes || null,
+            requestWindow,
         });
     } catch {
-        res.json({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
+        // A settings read failure must never block submissions — default to open.
+        res.json({
+            tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null,
+            requestWindow: { isOpen: true, opensAt: null, closesAt: null, message: null },
+        });
     }
 });
 

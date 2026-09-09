@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { uploadFile } from '../../config/storage';
+import { computeRequestWindow, RequestWindowState } from './request-window';
 
 export class SettingsService {
     async get() {
@@ -42,6 +43,11 @@ export class SettingsService {
         handoverReminderHoursBefore: number;
         // Timezone settings
         timezone: string | null;
+        // Request window
+        requestWindowMode: string;
+        requestWindowStart: Date | null;
+        requestWindowEnd: Date | null;
+        requestWindowClosedMessage: string | null;
         // Handover T&C
         handoverTcEnTitle: string | null;
         handoverTcEnBody: string | null;
@@ -58,6 +64,19 @@ export class SettingsService {
 
     async uploadBrandingAsset(filename: string, buffer: Buffer, contentType: string): Promise<string> {
         return uploadFile('branding', filename, buffer, contentType);
+    }
+
+    async getRequestWindowState(): Promise<RequestWindowState> {
+        const s = await this.get();
+        return computeRequestWindow(
+            {
+                requestWindowMode: s.requestWindowMode,
+                requestWindowStart: s.requestWindowStart,
+                requestWindowEnd: s.requestWindowEnd,
+                requestWindowClosedMessage: s.requestWindowClosedMessage,
+            },
+            new Date(),
+        );
     }
 }
 
