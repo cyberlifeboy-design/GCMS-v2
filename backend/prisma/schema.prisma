@@ -122,6 +122,7 @@ model User {
   faPoolBookingRequests       PoolBookingRequest[] @relation("PoolBookingRequestFA")
   reviewedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReviewer")
   createdPoolBookingRequests  PoolBookingRequest[] @relation("PoolBookingRequestCreatedBy")
+  returnedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReturnedBy")
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -488,11 +489,15 @@ model PoolBookingRequest {
   endTime        String   // "HH:mm", daily window end
   purpose        String?
 
-  status         String    @default("Pending") // Pending, Approved, Rejected, Cancelled
+  status         String    @default("Pending") // Pending, Approved, Rejected, Cancelled, Completed
   reviewedById   String?
   reviewedBy     User?     @relation("PoolBookingRequestReviewer", fields: [reviewedById], references: [id])
   reviewedAt     DateTime?
   reviewComment  String?
+
+  returnedAt     DateTime?
+  returnedById   String?
+  returnedBy     User?     @relation("PoolBookingRequestReturnedBy", fields: [returnedById], references: [id])
 
   requestToken   String    @unique
 
