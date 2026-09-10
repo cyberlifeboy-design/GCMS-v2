@@ -241,6 +241,8 @@ export const usersApi = {
         apiClient.patch(`/users/${id}/status`, { isActive }),
     setBlocked: (id: string, isBlocked: boolean) =>
         apiClient.patch(`/users/${id}/blocked`, { isBlocked }),
+    unblock: (id: string) =>
+        apiClient.patch(`/users/${id}/unblock`),
     importFromRequests: (requestIds: string[]) =>
         apiClient.post('/users/import-requests', { requestIds }),
     updatePreferences: (data: { exportFormat?: string; exportPreferences?: Record<string, unknown>; emailNotifications?: { maintenance?: boolean; handover?: boolean; requests?: boolean; assignments?: boolean } }) =>
@@ -455,6 +457,31 @@ export const poolBookingRequestsApi = {
         apiClient.get('/pool-booking-requests/history', { params }),
     exportHistory: (params: Record<string, string | undefined>) =>
         apiClient.get('/pool-booking-requests/history/export', { params, responseType: 'blob' }),
+};
+
+// Incidents & warnings (Phase 6 ticketing)
+export const incidentsApi = {
+    list: (params?: Record<string, string | undefined>) =>
+        apiClient.get('/incidents', { params }),
+    get: (id: string) =>
+        apiClient.get(`/incidents/${id}`),
+    report: (formData: FormData) =>
+        apiClient.post('/incidents', formData),
+    setStatus: (id: string, status: string) =>
+        apiClient.patch(`/incidents/${id}/status`, { status }),
+    downloadPdf: (id: string) =>
+        apiClient.get(`/incidents/${id}/pdf`, { responseType: 'blob' }),
+    issueWarning: (id: string, data: { level: number; reason: string }) =>
+        apiClient.post(`/incidents/${id}/warnings`, data),
+};
+
+export const warningsApi = {
+    list: (params?: { userId?: string }) =>
+        apiClient.get('/warnings', { params }),
+    issue: (data: { userId: string; level: number; reason: string; incidentId?: string }) =>
+        apiClient.post('/warnings', data),
+    revoke: (id: string, unblock: boolean) =>
+        apiClient.patch(`/warnings/${id}/revoke`, { unblock }),
 };
 
 export default apiClient;

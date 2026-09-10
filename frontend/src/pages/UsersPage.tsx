@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { usersApi, stadiumsApi, departmentsApi, requestsApi } from '@/lib/api';
+import { usersApi, stadiumsApi, departmentsApi, requestsApi, warningsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -87,6 +87,7 @@ export function UsersPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [editUser, setEditUser] = useState<User | null>(null);
+    const [editWarnings, setEditWarnings] = useState<any[]>([]);
     const [bulkOpen, setBulkOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -244,9 +245,13 @@ export function UsersPage() {
             if (type === 'active') {
                 await usersApi.setStatus(u.id, !u.isActive);
                 toast.success(`User ${u.isActive ? 'deactivated' : 'activated'}`);
+            } else if (u.isBlocked) {
+                // Unblock goes through the SuperAdmin-only endpoint (clears block audit fields; warnings preserved)
+                await usersApi.unblock(u.id);
+                toast.success('User unblocked');
             } else {
-                await usersApi.setBlocked(u.id, !u.isBlocked);
-                toast.success(`User ${u.isBlocked ? 'unblocked' : 'blocked'}`);
+                await usersApi.setBlocked(u.id, true);
+                toast.success('User blocked');
             }
             loadSystemUsers();
             loadFaUsers();
@@ -388,6 +393,8 @@ export function UsersPage() {
                     stadiumId: u.stadium?.id || '', departmentId: u.department?.id || '',
                     assignAllStadiums: u.assignAllStadiums || false, newPassword: ''
                 });
+                setEditWarnings([]);
+                warningsApi.list({ userId: u.id }).then(r => setEditWarnings(r.data.data ?? [])).catch(() => setEditWarnings([]));
                 setEditOpen(true);
             }}>
                 <Edit2 className="w-4 h-4" />
@@ -814,6 +821,28 @@ export function UsersPage() {
                         <DialogTitle className="text-xl font-bold">Edit User Profile</DialogTitle>
                         <DialogDescription>Modify user settings and access levels.</DialogDescription>
                     </DialogHeader>
+
+                    {editUser?.isBlocked && (
+                        <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs p-2 flex items-center justify-between gap-2">
+                            <span>This account is <b>blocked</b>.</span>
+                            <Button type="button" size="sm" variant="outline" onClick={async () => {
+                                try { await usersApi.unblock(editUser.id); toast.success('User unblocked'); setEditOpen(false); setEditUser(null); loadSystemUsers(); loadFaUsers(); }
+                                catch (err: any) { toast.error(err.response?.data?.error || 'Failed to unblock'); }
+                            }}>Unblock</Button>
+                        </div>
+                    )}
+
+                    {editWarnings.length > 0 && (
+                        <div className="rounded-lg border p-2 max-h-40 overflow-y-auto space-y-1">
+                            <p className="text-xs font-semibold">Warning history ({editWarnings.filter((w: any) => !w.revoked).length} active / {editWarnings.length} total)</p>
+                            {editWarnings.map((w: any) => (
+                                <div key={w.id} className={`text-[11px] ${w.revoked ? 'opacity-50 line-through' : ''}`}>
+                                    <b>L{w.level}</b> {w.reference} · {new Date(w.issuedAt).toLocaleDateString()} · {w.reason}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     <form onSubmit={handleEdit} className="space-y-4 pt-4">
                         <div className="grid grid-cols-1 gap-4">
                             <div className="space-y-2">

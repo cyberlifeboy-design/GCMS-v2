@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react';
+import { ReportIncidentModal } from '@/components/incidents/ReportIncidentModal';
 import {
     Dialog,
     DialogContent,
@@ -394,6 +395,7 @@ export function BookingsPage() {
     const [editCartsLoading, setEditCartsLoading] = useState(false);
 
     const [hoursOpen, setHoursOpen] = useState(false);
+    const [reportIncidentOpen, setReportIncidentOpen] = useState(false);
     const [hoursStadiumId, setHoursStadiumId] = useState('');
     const [hoursForm, setHoursForm] = useState<{ poolBookingStartTime: string; poolBookingEndTime: string }>({
         poolBookingStartTime: '',
@@ -600,8 +602,13 @@ export function BookingsPage() {
                     <Button variant="outline" size="sm" onClick={loadBookings}>
                         <RefreshCw className="w-4 h-4 mr-2" /> Refresh
                     </Button>
+                    <Button variant="outline" size="sm" onClick={() => setReportIncidentOpen(true)}>
+                        <ShieldAlert className="w-4 h-4 mr-2" /> Report incident
+                    </Button>
                 </div>
             </div>
+
+            <ReportIncidentModal open={reportIncidentOpen} onOpenChange={setReportIncidentOpen} />
 
             <Tabs defaultValue="queue">
                 <TabsList className="flex flex-wrap h-auto">

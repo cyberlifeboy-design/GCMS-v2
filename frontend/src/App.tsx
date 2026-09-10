@@ -18,6 +18,7 @@ const StadiumsPage = lazy(() => import('@/pages/StadiumsPage').then(m => ({ defa
 const DepartmentsPage = lazy(() => import('@/pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })));
 const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').then(m => ({ default: m.FleetManagementPage })));
 const RequestsManagementPage = lazy(() => import('@/pages/RequestsManagementPage').then(m => ({ default: m.RequestsManagementPage })));
+const IncidentsPage = lazy(() => import('@/pages/IncidentsPage').then(m => ({ default: m.IncidentsPage })));
 const PublicRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.PublicRequestPage })));
 const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage').then(m => ({ default: m.NotificationCenterPage })));
 const UsageHistoryPage = lazy(() => import('@/pages/UsageHistoryPage').then(m => ({ default: m.UsageHistoryPage })));
@@ -79,6 +80,7 @@ function AppContent() {
                                     <Route path="/notifications" element={<PageGuard pageKey="notifications"><NotificationCenterPage /></PageGuard>} />
                                     <Route path="/settings" element={<PageGuard pageKey="settings"><SettingsPage /></PageGuard>} />
                                     <Route path="/requests" element={<PageGuard pageKey="requests"><RequestsManagementPage /></PageGuard>} />
+                                    <Route path="/incidents" element={<PageGuard pageKey="incidents"><IncidentsPage /></PageGuard>} />
                                     <Route path="/bookings" element={<PageGuard pageKey="bookings"><BookingsPage /></PageGuard>} />
                                     <Route path="/usage-history" element={<UsageHistoryPage />} />
                                     <Route path="/my-reports" element={<MyReportsPage />} />
