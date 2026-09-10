@@ -22,6 +22,7 @@ model Stadium {
   departments Department[]
   carRequests CarRequest[]
   poolBookingRequests PoolBookingRequest[]
+  incidents   Incident[]
 }
 
 model Department {
@@ -75,6 +76,7 @@ model Fleet {
   maintenanceLogs MaintenanceLog[]
   poolBookings    PoolBooking[]
   poolBookingRequests PoolBookingRequest[]
+  incidents       Incident[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -123,6 +125,16 @@ model User {
   reviewedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReviewer")
   createdPoolBookingRequests  PoolBookingRequest[] @relation("PoolBookingRequestCreatedBy")
   returnedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReturnedBy")
+  blockedAt           DateTime?
+  blockedReason       String?
+  blockedById         String?
+  blockedBy           User?           @relation("UserBlockedBy", fields: [blockedById], references: [id])
+  blockedUsers        User[]          @relation("UserBlockedBy")
+  incidentsAbout      Incident[]      @relation("IncidentSubject")
+  incidentsReported   Incident[]      @relation("IncidentReporter")
+  warnings            Warning[]       @relation("WarningUser")
+  warningsIssued      Warning[]       @relation("WarningIssuer")
+  warningsRevoked     Warning[]       @relation("WarningRevoker")
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -516,4 +528,51 @@ model PoolBookingRequest {
   @@index([fleetId])
   @@index([status])
   @@index([requestToken])
+}
+
+model Incident {
+  id             String    @id @default(cuid())
+  reference      String    @unique
+  subjectUserId  String
+  subjectUser    User      @relation("IncidentSubject", fields: [subjectUserId], references: [id])
+  reportedById   String
+  reportedBy     User      @relation("IncidentReporter", fields: [reportedById], references: [id])
+  fleetId        String?
+  fleet          Fleet?    @relation(fields: [fleetId], references: [id])
+  stadiumId      String?
+  stadium        Stadium?  @relation(fields: [stadiumId], references: [id])
+  title          String
+  description    String
+  photosUrls     String?   @default("[]")
+  occurredAt     DateTime
+  status         String    @default("Open") // Open, UnderReview, Closed
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  warnings       Warning[]
+
+  @@index([subjectUserId])
+  @@index([status])
+}
+
+model Warning {
+  id             String    @id @default(cuid())
+  reference      String    @unique
+  userId         String
+  user           User      @relation("WarningUser", fields: [userId], references: [id])
+  incidentId     String?
+  incident       Incident? @relation(fields: [incidentId], references: [id])
+  level          Int       // 1 soft, 2, 3 ban + block
+  reason         String
+  issuedById     String
+  issuedBy       User      @relation("WarningIssuer", fields: [issuedById], references: [id])
+  issuedAt       DateTime  @default(now())
+  acknowledgedAt DateTime?
+  revoked        Boolean   @default(false)
+  revokedById    String?
+  revokedBy      User?     @relation("WarningRevoker", fields: [revokedById], references: [id])
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+  @@index([level])
 }
