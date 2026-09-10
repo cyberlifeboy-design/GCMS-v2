@@ -242,6 +242,110 @@ export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfDat
   );
 }
 
+export interface IncidentReportPdfData {
+  reference: string;
+  title: string;
+  description: string;
+  status: string;
+  occurredAt: string;
+  subjectName: string | null;
+  subjectFaCode: string | null;
+  reporterName: string | null;
+  carNumber: string | null;
+  stadiumName: string | null;
+  photoCount: number;
+  warnings: Array<{ reference: string; level: number; reason: string; issuedBy: string | null; issuedAt: string; revoked: boolean }>;
+}
+
+/** Branded incident report — the incident plus every warning issued against it. */
+export async function incidentReportPdf(args: { data: IncidentReportPdfData }): Promise<Buffer> {
+  const { data } = args;
+  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
+    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
+  };
+  const heading = (doc: PDFKit.PDFDocument, t: string) => {
+    doc.moveDown(0.6).font('Helvetica-Bold').fontSize(12).fillColor('#000').text(t).moveDown(0.2);
+    doc.font('Helvetica').fontSize(10);
+  };
+  return renderPdf(
+    { title: 'Incident Report', subtitle: data.subjectName ? `Subject: ${data.subjectName}` : undefined, reference: data.reference },
+    (doc) => {
+      heading(doc, 'Incident');
+      kv(doc, 'Title', data.title);
+      kv(doc, 'Status', data.status);
+      kv(doc, 'Occurred at', new Date(data.occurredAt).toLocaleString());
+      kv(doc, 'Venue', data.stadiumName);
+      kv(doc, 'Cart', data.carNumber);
+      kv(doc, 'Photos attached', data.photoCount);
+      doc.moveDown(0.3).font('Helvetica').fontSize(10).fillColor('#000').text(data.description);
+
+      heading(doc, 'People');
+      kv(doc, 'Subject', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`);
+      kv(doc, 'Reported by', data.reporterName);
+
+      heading(doc, 'Warnings issued');
+      if (data.warnings.length === 0) {
+        doc.text('None.');
+      } else {
+        data.warnings.forEach((w, i) => {
+          if (i > 0) doc.moveDown(0.3);
+          doc.font('Helvetica-Bold').fontSize(10).fillColor(w.revoked ? '#999' : '#000')
+            .text(`${w.reference} — Level ${w.level}${w.revoked ? ' (revoked)' : ''}`);
+          doc.font('Helvetica').fontSize(9).fillColor('#666')
+            .text(`${new Date(w.issuedAt).toLocaleString()}${w.issuedBy ? `  ·  ${w.issuedBy}` : ''}`);
+          doc.font('Helvetica').fontSize(9).fillColor('#333').text(w.reason);
+          doc.fillColor('#000');
+        });
+      }
+    },
+  );
+}
+
+export interface WarningLetterPdfData {
+  reference: string;
+  level: number;
+  reason: string;
+  subjectName: string | null;
+  subjectFaCode: string | null;
+  issuedBy: string | null;
+  issuedAt: string;
+  activeWarningCount: number;
+  incidentReference: string | null;
+  blocked: boolean;
+}
+
+/** Standalone warning letter (used when no incident is linked). */
+export async function warningLetterPdf(args: { data: WarningLetterPdfData }): Promise<Buffer> {
+  const { data } = args;
+  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
+    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
+  };
+  const levelLabel = data.level === 1 ? 'Level 1 — soft warning'
+    : data.level === 2 ? 'Level 2 — formal warning'
+    : 'Level 3 — final warning (account blocked)';
+  return renderPdf(
+    { title: 'Warning Notice', subtitle: levelLabel, reference: data.reference },
+    (doc) => {
+      kv(doc, 'Issued to', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`);
+      kv(doc, 'Issued by', data.issuedBy);
+      kv(doc, 'Issued at', new Date(data.issuedAt).toLocaleString());
+      kv(doc, 'Warning level', data.level);
+      kv(doc, 'Cumulative active warnings', data.activeWarningCount);
+      kv(doc, 'Related incident', data.incidentReference);
+      kv(doc, 'Account status', data.blocked ? 'BLOCKED — contact the administrator' : 'Active');
+      doc.moveDown(0.5).font('Helvetica-Bold').fontSize(10).fillColor('#000').text('Reason');
+      doc.font('Helvetica').fontSize(10).text(data.reason);
+      doc.moveDown(0.8).font('Helvetica').fontSize(9).fillColor('#666').text(
+        data.level >= 3
+          ? 'This is a final warning. Your access to the system has been blocked. Contact the administrator to discuss reinstatement.'
+          : 'Continued breaches may lead to further warnings and, at level 3, a block on your system access.',
+      );
+    },
+  );
+}
+
 /**
  * Full handover & return form as a branded PDF. Takes the already-loaded form
  * (with `fleet`, `assignedUser`, signer relations) — the caller fetches it so
