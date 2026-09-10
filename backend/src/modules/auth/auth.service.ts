@@ -80,6 +80,10 @@ export class AuthService {
             throw new Error('Account is deactivated. Please contact your administrator.');
         }
 
+        if (user.isBlocked) {
+            throw new Error('ACCOUNT_BLOCKED');
+        }
+
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
         if (!isPasswordValid) {
             throw new Error('Invalid email or password');

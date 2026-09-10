@@ -33,6 +33,9 @@ router.patch('/:id/status', requireRole('SuperAdmin', 'Admin'), auditLog(), User
 // Block/unblock
 router.patch('/:id/blocked', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.setBlocked);
 
+// SuperAdmin-only unblock (clears the block; warnings preserved)
+router.patch('/:id/unblock', requireRole('SuperAdmin'), auditLog(), UsersController.unblock);
+
 // Delete user
 router.delete('/:id', requireRole('SuperAdmin', 'Admin'), auditLog(), UsersController.delete);
 

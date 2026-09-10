@@ -59,6 +59,8 @@ export class AuthController {
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error && error.message === 'ACCOUNT_BLOCKED') {
+                res.status(403).json({ error: 'Your account has been blocked. Contact the administrator.' });
             } else if (error instanceof Error) {
                 res.status(401).json({ error: error.message });
             } else {

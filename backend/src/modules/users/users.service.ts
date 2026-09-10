@@ -103,12 +103,21 @@ export class UsersService {
                 phone: true,
                 isActive: true,
                 isBlocked: true,
+                blockedAt: true,
+                blockedReason: true,
                 exportFormat: true,
                 exportPreferences: true,
                 grantedPages: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
                 createdAt: true,
+                warnings: {
+                    orderBy: { issuedAt: 'desc' },
+                    include: {
+                        issuedBy: { select: { name: true } },
+                        incident: { select: { id: true, reference: true } },
+                    },
+                },
             },
         });
 
@@ -250,6 +259,15 @@ export class UsersService {
             where: { id },
             data: { isBlocked },
             select: { id: true, name: true, isBlocked: true },
+        });
+    }
+
+    /** SuperAdmin unblock — clears the block + its audit fields. Warnings are untouched. */
+    async unblockUser(id: string) {
+        return prisma.user.update({
+            where: { id },
+            data: { isBlocked: false, blockedAt: null, blockedReason: null, blockedById: null },
+            select: { id: true, name: true, email: true, isBlocked: true },
         });
     }
 

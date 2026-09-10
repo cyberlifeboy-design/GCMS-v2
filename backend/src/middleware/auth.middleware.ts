@@ -43,7 +43,7 @@ export const authenticate = async (
 
         const user = await prisma.user.findUnique({
             where: { id: decoded.userId },
-            select: { id: true, email: true, role: true, stadiumId: true, departmentId: true, isActive: true },
+            select: { id: true, email: true, role: true, stadiumId: true, departmentId: true, isActive: true, isBlocked: true },
         });
 
         if (!user) {
@@ -55,6 +55,12 @@ export const authenticate = async (
         if (!user.isActive) {
             console.warn(`[AUTH] Deactivated user attempted access: ${user.email}`);
             res.status(401).json({ error: 'Account has been deactivated' });
+            return;
+        }
+
+        if (user.isBlocked) {
+            console.warn(`[AUTH] Blocked user attempted access: ${user.email}`);
+            res.status(403).json({ error: 'Your account has been blocked. Contact the administrator.' });
             return;
         }
 
@@ -106,10 +112,10 @@ export const optionalAuth = async (
 
         const user = await prisma.user.findUnique({
             where: { id: decoded.userId },
-            select: { id: true, email: true, role: true, stadiumId: true, isActive: true },
+            select: { id: true, email: true, role: true, stadiumId: true, isActive: true, isBlocked: true },
         });
 
-        if (user && user.isActive) {
+        if (user && user.isActive && !user.isBlocked) {
             req.user = {
                 userId: user.id,
                 email: user.email,

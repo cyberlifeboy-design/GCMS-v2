@@ -338,6 +338,18 @@ export class UsersController {
         }
     }
 
+    /** SuperAdmin-only unblock — clears the block; warnings are preserved. */
+    static async unblock(req: AuthRequest, res: Response) {
+        try {
+            const id = String(req.params['id'] || '');
+            const user = await usersService.unblockUser(id);
+            res.status(200).json({ message: 'User unblocked', data: user });
+        } catch (error) {
+            console.error('Unblock failed:', error);
+            res.status(500).json({ error: 'Failed to unblock user' });
+        }
+    }
+
     static async importFromRequests(req: AuthRequest, res: Response) {
         try {
             const { requestIds } = z.object({ requestIds: z.array(z.string()) }).parse(req.body);
