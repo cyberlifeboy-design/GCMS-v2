@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/rbac.middleware';
 import { auditLog } from '../../middleware/audit.middleware';
 import { IncidentsController } from './incidents.controller';
+import { WarningsController } from './warnings.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -15,5 +16,8 @@ router.get('/', requireRole('SuperAdmin', 'Admin'), IncidentsController.list);
 router.get('/:id', requireRole('SuperAdmin', 'Admin'), IncidentsController.getById);
 router.patch('/:id/status', requireRole('SuperAdmin', 'Admin'), auditLog(), IncidentsController.updateStatus);
 router.get('/:id/pdf', requireRole('SuperAdmin', 'Admin'), IncidentsController.downloadPdf);
+
+// Issue a warning linked to this incident
+router.post('/:id/warnings', requireRole('SuperAdmin', 'Admin'), auditLog(), WarningsController.issueForIncident);
 
 export default router;

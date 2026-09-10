@@ -17,6 +17,7 @@ import announcementRoutes from './modules/announcements/announcements.routes';
 import poolBookingsRoutes from './modules/pool-bookings/pool-bookings.routes';
 import poolBookingRequestsRoutes from './modules/pool-booking-requests/pool-booking-requests.routes';
 import incidentsRoutes from './modules/incidents/incidents.routes';
+import warningsRoutes from './modules/incidents/warnings.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import { minioClient, BUCKETS, UPLOADS_DIR } from './config/storage';
@@ -149,6 +150,7 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/announcements', announcementRoutes);
 app.use('/api/v1/pool-bookings', poolBookingsRoutes);
 app.use('/api/v1/incidents', incidentsRoutes);
+app.use('/api/v1/warnings', warningsRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
