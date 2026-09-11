@@ -75,10 +75,13 @@ class SmtpTransport implements EmailTransport {
     private defaultFrom: string;
 
     constructor() {
+        const user = process.env.SMTP_USER;
+        const pass = process.env.SMTP_PASS;
         this.transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST || 'localhost',
             port: Number(process.env.SMTP_PORT) || 1025,
-            secure: false,
+            secure: process.env.SMTP_SECURE === 'true',
+            ...(user && pass ? { auth: { user, pass } } : {}),
         });
         this.defaultFrom = process.env.EMAIL_FROM || '"GCMS Admin" <admin@gcms.local>';
     }
@@ -117,10 +120,17 @@ class EmailService implements EmailTransport {
     private transport: EmailTransport;
 
     constructor() {
+        const driver = (process.env.EMAIL_DRIVER || '').toLowerCase();
         const resendApiKey = process.env.RESEND_API_KEY;
         const isProduction = process.env.NODE_ENV === 'production';
 
-        if (isProduction && resendApiKey) {
+        if (driver === 'smtp') {
+            this.transport = new SmtpTransport();
+            console.log('Email service initialized: SMTP (EMAIL_DRIVER=smtp)');
+        } else if (driver === 'resend' && resendApiKey) {
+            this.transport = new ResendTransport(resendApiKey);
+            console.log('Email service initialized: Resend (EMAIL_DRIVER=resend)');
+        } else if (isProduction && resendApiKey) {
             // Production with Resend
             this.transport = new ResendTransport(resendApiKey);
             console.log('Email service initialized: Resend (production)');
