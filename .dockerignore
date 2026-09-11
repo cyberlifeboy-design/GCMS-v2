@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.git
+**/logs
+**/*.log
+backend/dev.db*
+backend/.env
+frontend/.env
+uploads
+.superpowers
+docs
+handover.md
+QA_REPORT.md

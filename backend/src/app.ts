@@ -176,6 +176,20 @@ app.use('/api/v1/pool-bookings', poolBookingsRoutes);
 app.use('/api/v1/incidents', incidentsRoutes);
 app.use('/api/v1/warnings', warningsRoutes);
 
+// In production, the built frontend ships inside this image; serve it as static
+// files with an SPA fallback so client-side routes resolve. Local dev keeps using
+// the Vite dev server on :3000 — this block is a no-op unless the directory exists.
+if (process.env.NODE_ENV === 'production') {
+    const frontendDir = process.env.FRONTEND_DIST_DIR || path.join(__dirname, '../frontend-dist');
+    if (fs.existsSync(frontendDir)) {
+        app.use(express.static(frontendDir));
+        app.get('*', (req: Request, res: Response, next) => {
+            if (req.path.startsWith('/api/')) { next(); return; }
+            res.sendFile(path.join(frontendDir, 'index.html'));
+        });
+    }
+}
+
 // 404 handler
 app.use((req: Request, res: Response) => {
     res.status(404).json({ error: 'Route not found' });
