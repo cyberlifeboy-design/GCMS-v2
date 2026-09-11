@@ -731,6 +731,8 @@ volumes:
 - [ ] Configure database backups
 - [ ] Review CORS settings
 - [ ] Enable rate limiting
+- [ ] Run `npm audit fix` in `backend/` and review what's left (see the deployment
+      guide's §11 audit notes — some findings need a reviewed major-version bump)
 
 ## Testing
 
@@ -740,10 +742,14 @@ cd backend
 npm run test
 ```
 
-### Run Frontend Tests
+### Frontend Lint
+The frontend has no automated test suite yet (component tests would be the natural next
+addition) — `eslint` is its quality gate today:
 ```bash
 cd frontend
-npm run test
+npm run lint          # warnings allowed
+npm run lint:strict   # --max-warnings 0; fails on the react-hooks/exhaustive-deps
+                       # backlog — see docs/deployment/azure-container-apps.md §11
 ```
 
 ### Type Checking

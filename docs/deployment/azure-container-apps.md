@@ -203,6 +203,8 @@ docker rm -f gcms-test-pg   # discard the throwaway database afterward
 - [ ] A real email send through the SMTP relay succeeded (e.g. trigger a maintenance
       "Email report" or a warning notice and confirm delivery).
 - [ ] Logs are visible in the Log Analytics workspace.
+- [ ] `npm audit fix` run in a working environment and the result reviewed (see §11 —
+      could not run in this sandbox).
 
 ## 10. Known follow-ups (deferred out of this phase)
 
@@ -216,7 +218,98 @@ docker rm -f gcms-test-pg   # discard the throwaway database afterward
   available). `docker build`, `docker run`, `prisma migrate deploy` against a real
   Postgres, the `azure-blob` storage branch, and a real SMTP relay send are all
   written-and-reviewed only. Treat "First deploy" (Section 5) as the first real test.
-- **Frontend lint backlog:** `npm run lint` now runs (Phase 7 fixed the missing flat
-  config) and reports ~58 pre-existing findings (empty catch blocks, missing
-  `useEffect` deps, a few unused vars). Not fixed here — `npm run lint:strict` reproduces
-  the original `--max-warnings 0` gate once that backlog is cleared.
+- **Frontend lint backlog — resolved to 0 errors.** A follow-up codebase audit (see
+  §11) fixed all 29 lint *errors* (empty catch blocks, a Rules-of-Hooks violation, an
+  empty interface). 24 `react-hooks/exhaustive-deps` *warnings* remain, reviewed and
+  left as-is (see §11) — `npm run lint:strict` will still fail on them since it uses
+  `--max-warnings 0`; use `npm run lint` (the default, warnings allowed) day to day.
+
+## 11. Codebase audit (2026-09-11)
+
+A full-codebase review pass (correctness, security, performance, UX) on top of Phase 7.
+Everything below was verified via `tsc --noEmit`, `vitest run`, `npm run build`, and
+`npm run lint` in this sandbox — same Docker/Postgres/Azure caveat as §10 applies to
+anything that needs live infrastructure.
+
+**Fixed:**
+- A real Rules-of-Hooks crash risk in `PoolBookingRequestPage` (hooks called after a
+  conditional early return) — split into two components so each calls its own hooks
+  unconditionally.
+- ~10 empty `catch {}` blocks in `ReportsPage`/`DashboardPage` that silently swallowed
+  API failures, leaving the UI stuck on an empty state with no explanation. Now surfaced
+  via `toast.error(...)`, matching the pattern already used across the rest of the app.
+  Blocking `alert('Export failed')` calls in `ReportsPage`'s 5 export handlers replaced
+  with the same toast pattern.
+- All 5 `multer` upload configs (fleet bulk-import, handover/incident/maintenance
+  photos, settings branding logos) accepted **any** file type — only a size limit was
+  enforced. Added `backend/src/middleware/uploadFilters.ts` restricting photo/logo
+  uploads to JPEG/PNG/WebP/GIF and the bulk-import endpoint to xlsx/xls/csv, closing a
+  stored-content risk (an uploaded HTML/SVG file being served back through the storage
+  proxy route).
+- Frontend lint errors: 29 → 0 (see §10's updated bullet above).
+- `DashboardPage`'s JS chunk (443KB / 117KB gzipped, dominated by `recharts`) split into
+  cacheable vendor chunks via `vite.config.ts` `manualChunks` — Dashboard's own chunk is
+  now 28.5KB / 7KB gzipped. Same total bytes on a cold load; better caching across
+  deploys since vendor code no longer changes hash when app code does.
+- Login page given a real visual pass (gradient background, card shadow, a branded icon
+  badge in the default/no-custom-logo state) — purely visual, branding overrides
+  unchanged.
+
+**Reviewed and found sound (no change needed):**
+- XSS: the one `dangerouslySetInnerHTML` use (`RichContent`, rendering admin-authored
+  rich text) is safe because `backend/src/middleware/sanitize.middleware.ts` runs
+  DOMPurify over every request body/query/params globally before anything is persisted.
+- JWT secrets: `backend/src/config/auth.ts` throws on boot in production if
+  `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` are unset (dev-only fallback otherwise).
+- Rate limiting: `authLimiter` (5/15min in prod) is wired to `/login`,
+  `/forgot-password`, and `/reset-password`; `apiLimiter` (100/min) is global.
+- No raw SQL string interpolation (`$queryRaw` is used once, for a parameterized
+  `SELECT 1` health check — not user input).
+- Role/privilege-escalation guards in `users.controller.ts` are real and specific (an
+  `Admin` cannot change a user's role, can only create/manage `FA`-role users, etc.) —
+  not just route-level `requireRole`.
+
+**Known, accepted design trade-off (not changed):**
+- The storage proxy (`GET /api/v1/storage/:bucket/:filename`) has no authentication —
+  it relies on filenames being unguessable UUIDs, not a real ACL. This is intentional:
+  the `branding` bucket is genuinely public (shown to anonymous visitors on the public
+  booking/confirmation pages), and URLs for `signatures`/`incident-photos`/
+  `maintenance-photos` are returned as plain `<img src>` paths with no way for a browser
+  to attach an Authorization header — retrofitting real per-bucket auth means either
+  cookie-based sessions or short-lived signed URLs, a larger change than this pass
+  should make blind. Flagging it here as a deliberate next-hardening candidate, not a
+  silent gap.
+
+**Dependency vulnerabilities — found, not auto-fixed in this sandbox:**
+`npm audit` (backend, production deps) reports 30 known vulnerabilities (2 critical, 15
+high, 13 moderate). `npm audit fix` could not be run here — this sandbox's npm 10.9.8
+hits a reproducible arborist bug (`Cannot read properties of null (reading 'edgesOut')`)
+resolving `vitest`'s optional peer dependencies, on both `npm install` and
+`npm audit fix`; confirmed by deleting and restoring `node_modules`/`package-lock.json`
+twice. **Package-lock.json in this repo is unchanged** (restored via `git checkout` +
+`npm ci` after each failed attempt) — `tsc`/tests were re-verified clean afterward.
+Run this in a normal environment before the next deploy:
+
+```bash
+cd backend
+npm audit fix                 # non-breaking: body-parser, brace-expansion, dompurify,
+                               # express-rate-limit, fast-xml-parser (critical), ip-address,
+                               # lodash, minimatch, minio, morgan, nanoid, path-to-regexp,
+                               # query-string, resend, stream-json, svix, tmp, undici
+npm audit                     # re-check what's left
+```
+
+The remaining findings need a deliberate major-version bump, reviewed and tested on its
+own (not blindly `--force`d):
+- `xlsx` — **no fix available upstream** (prototype pollution + ReDoS in SheetJS); no
+  action possible until the maintainer ships one or the codebase moves off `xlsx`.
+- `bcrypt` → 6.0.0 (major) — used for password hashing; re-test login/password-reset
+  fully after bumping.
+- `exceljs` → 3.4.0 (npm reports this as the fix target, which is a *downgrade* from the
+  current `^4.4.0` — verify report/export output before adopting; may be an npm
+  resolver quirk worth re-checking independently).
+- `express` → 5.2.1 (major) — routing/middleware API changes; needs its own test pass
+  across all ~20 route modules, not a drive-by bump.
+- `nodemailer` → 10.0.7 (major) — re-test SMTP + Resend email sending after bumping.
+- `pptxgenjs` → 1.1.5 (npm's reported fix target, also a downgrade from `^4.0.1`) — same
+  caveat as `exceljs`; verify PPTX label export still works before adopting.
