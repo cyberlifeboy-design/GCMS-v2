@@ -1,5 +1,5 @@
 import app from './app';
-import { initializeMinIO } from './config/storage';
+import { initializeStorage } from './config/storage';
 import { checkDatabaseConnection } from './config/database';
 
 const PORT = process.env.PORT || 3005;
@@ -15,9 +15,9 @@ async function startServer() {
         }
         console.log('✅ Database connected');
 
-        // Initialize MinIO storage
-        console.log('🔍 Initializing MinIO storage...');
-        await initializeMinIO();
+        // Initialize storage (local / MinIO / Azure Blob, per STORAGE_DRIVER)
+        console.log('🔍 Initializing storage...');
+        await initializeStorage();
 
         // Start server
         app.listen(PORT, () => {

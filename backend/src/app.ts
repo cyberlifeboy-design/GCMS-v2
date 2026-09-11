@@ -22,7 +22,7 @@ import warningsRoutes from './modules/incidents/warnings.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import { apiLimiter } from './middleware/rateLimit.middleware';
-import { minioClient, BUCKETS, UPLOADS_DIR } from './config/storage';
+import { BUCKETS, getFileBuffer, checkStorageConnection } from './config/storage';
 import { checkDatabaseConnection } from './config/database';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -87,14 +87,19 @@ app.get('/api/v1/health', (req: Request, res: Response) => {
     });
 });
 
-// Readiness probe (Container Apps): DB connectivity check. Storage check added in Task 3.
+// Readiness probe (Container Apps): DB + storage connectivity check.
 app.get('/api/v1/health/ready', async (req: Request, res: Response) => {
-    const dbOk = await checkDatabaseConnection();
-    if (!dbOk) {
-        res.status(503).json({ status: 'degraded', db: 'error', timestamp: new Date().toISOString() });
+    const [dbOk, storageOk] = await Promise.all([checkDatabaseConnection(), checkStorageConnection()]);
+    if (!dbOk || !storageOk) {
+        res.status(503).json({
+            status: 'degraded',
+            db: dbOk ? 'ok' : 'error',
+            storage: storageOk ? 'ok' : 'error',
+            timestamp: new Date().toISOString(),
+        });
         return;
     }
-    res.status(200).json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
+    res.status(200).json({ status: 'ok', db: 'ok', storage: 'ok', timestamp: new Date().toISOString() });
 });
 
 // API v1 routes
@@ -120,7 +125,8 @@ app.get('/api/v1', (req: Request, res: Response) => {
     });
 });
 
-// Storage proxy - serve files via MinIO, with local disk fallback
+// Storage proxy - serve files via the active storage driver (local/MinIO/Azure Blob),
+// with local disk fallback baked into getFileBuffer() itself.
 const allowedBuckets = new Set(Object.values(BUCKETS));
 const CONTENT_TYPES: Record<string, string> = {
     '.jpg': 'image/jpeg',
@@ -138,21 +144,13 @@ app.get('/api/v1/storage/:bucket/:filename', async (req: Request, res: Response)
     }
     const ext = path.extname(filename).toLowerCase();
     const contentType = CONTENT_TYPES[ext] || 'application/octet-stream';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
     try {
-        const stat = await minioClient.statObject(bucket, filename);
-        res.setHeader('Content-Type', stat.metaData?.['content-type'] || contentType);
-        const stream = await minioClient.getObject(bucket, filename);
-        return stream.pipe(res);
+        const buffer = await getFileBuffer(bucket, filename);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buffer);
     } catch {
-        // MinIO unavailable — serve from local disk
-        try {
-            const buffer = await fs.promises.readFile(path.join(UPLOADS_DIR, bucket, filename));
-            return res.send(buffer);
-        } catch {
-            return res.status(404).json({ error: 'File not found' });
-        }
+        return res.status(404).json({ error: 'File not found' });
     }
 });
 
