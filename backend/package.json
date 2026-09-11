@@ -12,6 +12,7 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "test": "cross-env NODE_ENV=test vitest run",
+    "test:workflow": "cross-env NODE_ENV=test vitest run --config vitest.workflow.config.ts src/modules/maintenance/maintenance.workflow.test.ts",
     "test:watch": "cross-env NODE_ENV=test vitest"
   },
   "keywords": [

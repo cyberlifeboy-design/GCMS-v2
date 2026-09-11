@@ -5,9 +5,10 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     // Integration tests (*.workflow.test.ts) mount the full app and wipe a live
-    // database in beforeEach. They need a dedicated test database and are not
-    // safe to run against the dev DB. They are excluded until Phase 7 stands up
-    // a proper test-DB harness; unit tests run by default.
+    // database in beforeEach. Run them explicitly with `npm run test:workflow`
+    // against a disposable Postgres DATABASE_URL (see docs/deployment/
+    // azure-container-apps.md -> "Running the workflow test"). Excluded from the
+    // default unit-test run so `npm test` never touches a real database.
     exclude: ['**/node_modules/**', '**/*.workflow.test.ts'],
     globals: false,
   },
