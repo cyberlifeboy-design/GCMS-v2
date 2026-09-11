@@ -45,21 +45,27 @@ export function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-background">
+        <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-background to-primary/5 dark:from-slate-950 dark:via-background dark:to-primary/10">
             {branding.headerUrl && (
                 <div className="w-full">
                     <img src={branding.headerUrl} alt="Header Branding" className="w-full max-h-24 object-cover" />
                 </div>
             )}
             <div className="flex-1 flex items-center justify-center p-4">
-            <Card className="w-full max-w-md">
+            <Card className="w-full max-w-md shadow-xl border-border/60 backdrop-blur-sm">
                 <CardHeader className="text-center space-y-2">
-                    {branding.logoUrl && (
+                    {branding.logoUrl ? (
                         <div className="flex justify-center mb-2">
                             <img src={branding.logoUrl} alt="Logo" className="h-16 w-auto object-contain" />
                         </div>
+                    ) : (
+                        <div className="flex justify-center mb-2">
+                            <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center ring-1 ring-primary/15">
+                                <ShieldCheck className="h-7 w-7 text-primary" />
+                            </div>
+                        </div>
                     )}
-                    <CardTitle className="text-2xl">{branding.tournamentName || 'GCMS'}</CardTitle>
+                    <CardTitle className="text-2xl tracking-tight">{branding.tournamentName || 'GCMS'}</CardTitle>
                     <CardDescription>Golf Car Management System</CardDescription>
                 </CardHeader>
                 <CardContent>
