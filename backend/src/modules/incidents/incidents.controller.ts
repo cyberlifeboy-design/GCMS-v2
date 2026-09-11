@@ -4,8 +4,9 @@ import multer from 'multer';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { incidentsService } from './incidents.service';
 import { uploadFile, BUCKETS } from '../../config/storage';
+import { imageFileFilter } from '../../middleware/uploadFilters';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 const reportSchema = z.object({
   subjectUserId: z.string().min(1),

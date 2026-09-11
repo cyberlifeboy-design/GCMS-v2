@@ -5,8 +5,9 @@ import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
 import { HandoverFilters, PaginationParams } from '../../types';
 import { handoverFormPdf } from '../../services/pdf.service';
+import { imageFileFilter } from '../../middleware/uploadFilters';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 const checkinSchema = z.object({
     fleetId: z.string().min(1),

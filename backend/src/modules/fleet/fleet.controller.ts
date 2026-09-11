@@ -6,8 +6,9 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import { FleetFilters, PaginationParams } from '../../types';
 import { prisma } from '../../config/database';
+import { spreadsheetFileFilter } from '../../middleware/uploadFilters';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: spreadsheetFileFilter });
 
 const CART_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
 const CART_STATUSES = ['Available', 'Assigned', 'Dispatched', 'Under Maintenance'] as const;

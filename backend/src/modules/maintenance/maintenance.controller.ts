@@ -3,8 +3,9 @@ import { maintenanceService } from './maintenance.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
+import { imageFileFilter } from '../../middleware/uploadFilters';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 const reportIssueSchema = z.object({
     fleetId: z.string().min(1),
