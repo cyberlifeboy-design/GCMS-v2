@@ -137,6 +137,26 @@ A standalone HTML form for recording golf cart incidents during operations.
 - **Signatures**: Reported To, Completed By, Inspector fields
 - **Print-to-PDF**: Print button + `window.print()` with `@media print` CSS; page break before inspection checklist
 
+### 🚨 Incident & Warning Ticketing (`/incidents`)
+
+A separate, database-backed system for filing incidents about a user and issuing
+cumulative warnings — distinct from the standalone print-form above.
+
+- **Report an incident**: any authenticated user (FA included) can file one, from the
+  Bookings page or the Incidents page — optional photos, optional linked cart/venue.
+  Filing an incident never issues a warning by itself.
+- **Issue a warning**: SuperAdmin/Admin only, from an incident or standalone —
+  3 manual levels (1 soft, 2, 3 = ban). The UI recommends the next level from the
+  subject's active warning history but never auto-issues it.
+  Three cumulative non-revoked warnings, or one level-3, **blocks the user's account**
+  (`isBlocked` + reason/timestamp/issuer recorded).
+- **Enforcement**: blocked users get `403 Your account has been blocked. Contact the
+  administrator.` at login and on every authenticated request.
+- **Unblock**: SuperAdmin only (`PATCH /users/:id/unblock`) — clears the block, the
+  warning history and its count are preserved.
+- **Delivery**: every issued warning creates an in-app notification and emails the
+  subject a PDF (the full incident report when linked, a warning letter otherwise).
+
 ### 📊 Reports & Analytics
 
 - **Export Formats**: Excel (.xlsx), PDF, Word (.docx)
@@ -233,7 +253,13 @@ Admin/SuperAdmin retain the full Pending Handovers / Real-time Stream / Global A
 - Node.js 20 LTS
 - Docker & Docker Compose (for production infra)
 
-### Local Development (SQLite)
+### Local Development (PostgreSQL)
+
+> As of the Azure production-hardening pass, `prisma/schema.prisma` targets
+> **PostgreSQL** — SQLite is no longer supported for local dev. Bring up a local
+> Postgres with the `postgres` service already defined in the root `docker-compose.yml`
+> (dev port exposed via `docker-compose.dev.yml`), or point `DATABASE_URL` at any
+> reachable Postgres 16 instance.
 
 1. **Clone the repository**
 ```bash
@@ -252,12 +278,18 @@ cd ../frontend
 npm install
 ```
 
-3. **Configure environment**
+3. **Start a local Postgres**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+```
 
-Backend `.env`:
+4. **Configure environment**
+
+Backend `.env` (see `backend/.env.example` for the full list — security, storage, and
+email vars all have working dev defaults):
 ```env
-DATABASE_URL="file:./dev.db"
-JWT_SECRET="your-jwt-secret"
+DATABASE_URL="postgresql://gcms_user:gcms_password_2024@localhost:5431/gcms?schema=public"
+JWT_ACCESS_SECRET="your-jwt-secret"
 JWT_REFRESH_SECRET="your-refresh-secret"
 CORS_ORIGIN="http://localhost:3000"
 ```
@@ -267,14 +299,14 @@ Frontend `.env`:
 VITE_API_URL=http://localhost:3005/api/v1
 ```
 
-4. **Initialize database**
+5. **Initialize database**
 ```bash
 cd backend
-npx prisma migrate dev
-npx prisma db seed
+npx prisma migrate deploy
+npx tsx prisma/seed.ts
 ```
 
-5. **Run development servers**
+6. **Run development servers**
 ```bash
 # Terminal 1 — Backend (port 3005)
 cd backend
@@ -285,9 +317,19 @@ cd frontend
 npm run dev
 ```
 
-Access the application at **http://localhost:3000**
+Access the application at **http://localhost:3000**. Health checks: `GET /api/v1/health`
+(liveness) and `GET /api/v1/health/ready` (DB + storage connectivity).
 
-> **Windows note:** Stop the backend before running `prisma migrate dev` — the running process holds a `.dll.node` file lock (EPERM rename error). Kill with `Stop-Process -Name "node" -Force`, migrate, then restart.
+> **Windows note:** Stop the backend before running any `prisma migrate` command — the
+> running process holds a `.dll.node` file lock (EPERM rename error). Kill it, migrate,
+> then restart.
+
+### Production Deployment (Azure Container Apps)
+
+The app ships as a single multi-stage `Dockerfile` (repo root) — Express serves both the
+API and the built frontend. See **[docs/deployment/azure-container-apps.md](docs/deployment/azure-container-apps.md)**
+for the full walkthrough: provisioning, secrets, build & push, first deploy, and
+day-2 operations (logs, scaling, rollback, backup/restore).
 
 ### Default Users (after seed)
 
