@@ -320,7 +320,7 @@ export class FleetController {
 
     static async getDrivers(req: AuthRequest, res: Response) {
         try {
-            const data = await fleetService.getAdditionalDrivers(req.params.id);
+            const data = await fleetService.getAdditionalDrivers(String(req.params.id));
             res.status(200).json(data);
         } catch (error: any) {
             res.status(400).json({ error: error.message });
@@ -332,7 +332,7 @@ export class FleetController {
             const { drivers } = req.body;
             if (!Array.isArray(drivers)) return res.status(400).json({ error: 'drivers must be an array' });
             const data = await fleetService.updateAdditionalDrivers(
-                req.params.id,
+                String(req.params.id),
                 req.user!.userId,
                 req.user!.role,
                 drivers,

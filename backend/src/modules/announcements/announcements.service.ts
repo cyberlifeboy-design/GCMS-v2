@@ -25,7 +25,7 @@ export class AnnouncementService {
                 message: data.message,
                 type: data.type || 'info',
                 targetType: data.targetType || 'all',
-                targetUserIds: data.targetUserIds || [],
+                targetUserIds: JSON.stringify(data.targetUserIds || []),
                 targetRole: data.targetRole,
                 stadiumId: data.stadiumId,
                 createdBy: data.createdBy,
@@ -99,7 +99,7 @@ export class AnnouncementService {
                 ...(data.message && { message: data.message }),
                 ...(data.type && { type: data.type }),
                 ...(data.targetType && { targetType: data.targetType }),
-                ...(data.targetUserIds && { targetUserIds: data.targetUserIds }),
+                ...(data.targetUserIds && { targetUserIds: JSON.stringify(data.targetUserIds) }),
                 ...(data.targetRole !== undefined && { targetRole: data.targetRole }),
                 ...(data.stadiumId !== undefined && { stadiumId: data.stadiumId }),
                 ...(data.scheduledAt && { scheduledAt: data.scheduledAt }),
@@ -176,8 +176,10 @@ export class AnnouncementService {
         // Filter by targeting
         return announcements.filter(ann => {
             // Check if announcement is targeted to specific users
-            if (ann.targetType === 'selected' && ann.targetUserIds.length > 0) {
-                return ann.targetUserIds.includes(userId);
+            if (ann.targetType === 'selected') {
+                let targetIds: string[] = [];
+                try { targetIds = ann.targetUserIds ? JSON.parse(ann.targetUserIds) : []; } catch { targetIds = []; }
+                if (targetIds.length > 0) return targetIds.includes(userId);
             }
 
             // Check if targeted to specific role

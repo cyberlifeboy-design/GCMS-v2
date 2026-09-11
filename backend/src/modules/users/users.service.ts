@@ -186,10 +186,10 @@ export class UsersService {
         name: string;
         email: string;
         role: string;
-        phone: string;
-        accreditationNumber: string;
-        stadiumId: string;
-        departmentId: string;
+        phone: string | null;
+        accreditationNumber: string | null;
+        stadiumId: string | null;
+        departmentId: string | null;
         isActive: boolean;
         isBlocked: boolean;
         exportFormat: string;

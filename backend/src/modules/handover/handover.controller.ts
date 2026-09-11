@@ -247,7 +247,7 @@ export class HandoverController {
 
     static async getHandoverForm(req: AuthRequest, res: Response) {
         try {
-            const fleetId = req.params.fleetId;
+            const fleetId = String(req.params.fleetId);
             const form = await handoverService.getHandoverForm(fleetId);
             res.status(200).json(form ?? null);
         } catch (error: any) {
