@@ -135,6 +135,10 @@ export function PoolBookingRequestPage() {
         return <BookingConfirmationView token={token} />;
     }
 
+    return <NewPoolBookingRequestView />;
+}
+
+function NewPoolBookingRequestView() {
     const [loadingInitial, setLoadingInitial] = useState(true);
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
     const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
