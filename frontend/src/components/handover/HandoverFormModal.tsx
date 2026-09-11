@@ -319,7 +319,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
             const s = settingsRes.data;
             setTc({ handoverTcEnTitle: s.handoverTcEnTitle, handoverTcEnBody: s.handoverTcEnBody, handoverTcArTitle: s.handoverTcArTitle, handoverTcArBody: s.handoverTcArBody, handoverTcCheckboxes: s.handoverTcCheckboxes });
             if (s.handoverTcCheckboxes) {
-                try { setTcBoxes(JSON.parse(s.handoverTcCheckboxes)); } catch {}
+                try { setTcBoxes(JSON.parse(s.handoverTcCheckboxes)); } catch { /* malformed stored JSON — keep default checkboxes */ }
             }
             setForm(data);
 
@@ -341,15 +341,15 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                     finalDate: data.finalDate || today,
                 });
                 if (data.cartTypeData) {
-                    try { setCartType(JSON.parse(data.cartTypeData)); } catch {}
+                    try { setCartType(JSON.parse(data.cartTypeData)); } catch { /* malformed stored JSON — keep default */ }
                 } else if (data.fleet?.carType) {
                     setCartType(prev => ({ ...prev, ...cartTypeFromString(data.fleet!.carType) }));
                 }
-                if (data.conditionData) try { setCondition(JSON.parse(data.conditionData)); } catch {}
-                if (data.additionalDrivers) try { const d = JSON.parse(data.additionalDrivers); setDrivers(d.length >= 3 ? d : [...d, ...Array(3-d.length).fill({ name: '', contact: '', entity: '', licenseNo: '' })]); } catch {}
+                if (data.conditionData) try { setCondition(JSON.parse(data.conditionData)); } catch { /* malformed stored JSON — keep default */ }
+                if (data.additionalDrivers) try { const d = JSON.parse(data.additionalDrivers); setDrivers(d.length >= 3 ? d : [...d, ...Array(3-d.length).fill({ name: '', contact: '', entity: '', licenseNo: '' })]); } catch { /* malformed stored JSON — keep default */ }
                 // Load checked state — tcData (dynamic) takes priority, fall back to tc1/tc2/tc3
                 if (data.tcData) {
-                    try { setTcChecked(JSON.parse(data.tcData)); } catch {}
+                    try { setTcChecked(JSON.parse(data.tcData)); } catch { /* malformed stored JSON — keep default (unchecked) */ }
                 } else {
                     setTcChecked({ tc1: !!data.tc1, tc2: !!data.tc2, tc3: !!data.tc3 });
                 }
