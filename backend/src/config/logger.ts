@@ -36,8 +36,16 @@ const logger = winston.createLogger({
     ],
 });
 
-// Add console transport in development
-if (process.env.NODE_ENV !== 'production') {
+// Console transport: structured JSON in production (Container Apps captures stdout,
+// not the file transports above — an ephemeral container loses those on restart),
+// colorized plain text in development.
+if (process.env.NODE_ENV === 'production') {
+    logger.add(
+        new winston.transports.Console({
+            format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
+        })
+    );
+} else {
     logger.add(
         new winston.transports.Console({
             format: winston.format.combine(

@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
 import authRoutes from './modules/auth/auth.routes';
 import fleetRoutes from './modules/fleet/fleet.routes';
 import handoverRoutes from './modules/handover/handover.routes';
@@ -20,7 +21,9 @@ import incidentsRoutes from './modules/incidents/incidents.routes';
 import warningsRoutes from './modules/incidents/warnings.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
+import { apiLimiter } from './middleware/rateLimit.middleware';
 import { minioClient, BUCKETS, UPLOADS_DIR } from './config/storage';
+import { checkDatabaseConnection } from './config/database';
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from './config/logger';
@@ -34,20 +37,33 @@ const PORT = process.env.PORT || 3005;
 app.set('trust proxy', 1);
 
 // Middleware
-const allowedOrigins = [
-    process.env.CORS_ORIGIN || 'http://localhost:3000',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-    'https://gcms.mehaisi.com',
-    'https://point-dangerous-packs-local.trycloudflare.com',
-];
+app.use(helmet({
+    contentSecurityPolicy: false, // the SPA is served from the same origin; CSP tuned in the deployment guide if needed
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // storage proxy serves images to the SPA
+}));
+
+// CORS_ORIGIN is a comma-separated list of allowed origins in production; falls back to
+// localhost dev origins (+ the current known mehaisi.com deployment) when unset.
+const envOrigins = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+const allowedOrigins = envOrigins.length
+    ? envOrigins
+    : [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5173',
+        'https://gcms.mehaisi.com',
+        'https://point-dangerous-packs-local.trycloudflare.com',
+    ];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(sanitizeInput); // Sanitize all inputs after body parser
 app.use(morgan('dev'));
+app.use(apiLimiter);
 
 // Audit logging middleware (applies to all routes)
 app.use(auditLog());
@@ -69,6 +85,16 @@ app.get('/api/v1/health', (req: Request, res: Response) => {
         service: 'GCMS Backend API',
         version: '1.0.0',
     });
+});
+
+// Readiness probe (Container Apps): DB connectivity check. Storage check added in Task 3.
+app.get('/api/v1/health/ready', async (req: Request, res: Response) => {
+    const dbOk = await checkDatabaseConnection();
+    if (!dbOk) {
+        res.status(503).json({ status: 'degraded', db: 'error', timestamp: new Date().toISOString() });
+        return;
+    }
+    res.status(200).json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
 });
 
 // API v1 routes
