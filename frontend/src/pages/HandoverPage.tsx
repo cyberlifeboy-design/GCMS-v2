@@ -225,8 +225,8 @@ export function HandoverPage() {
             setPoolLoading(true);
             const res = await handoverApi.getPoolDashboard();
             setPoolDashboard(res.data);
-        } catch (e) {
-            toast.error('Failed to load dashboard');
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to load dashboard');
         } finally {
             setPoolLoading(false);
         }

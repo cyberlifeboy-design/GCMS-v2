@@ -234,7 +234,7 @@ export function SettingsPage() {
                 setTcArTitle(d.handoverTcArTitle || '');
                 setTcArBody(d.handoverTcArBody || '');
                 if (d.handoverTcCheckboxes) {
-                    try { setTcCheckboxes(JSON.parse(d.handoverTcCheckboxes)); } catch {}
+                    try { setTcCheckboxes(JSON.parse(d.handoverTcCheckboxes)); } catch { /* malformed stored JSON — keep default checkboxes */ }
                 }
                 setStadiums(stadiumsRes.data.data || []);
             } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -941,7 +941,7 @@ export function SettingsPage() {
                                                     setSystemAnnouncement('');
                                                     toast.success('Announcement broadcasted successfully!');
                                                 } catch (err: any) {
-                                                    toast.error('Failed to send broadcast');
+                                                    toast.error(err.response?.data?.error || 'Failed to send broadcast');
                                                 } finally {
                                                     setPushingAnnouncement(false);
                                                 }
@@ -983,7 +983,7 @@ function RequestLinkGenerator({ stadiums }: { stadiums: Stadium[] }) {
             setTimeout(() => setCopied(false), 2000);
             toast.success('Link copied to clipboard!');
         } catch (err) {
-            toast.error('Failed to copy link');
+            toast.error(err instanceof Error ? `Failed to copy link: ${err.message}` : 'Failed to copy link');
         }
     };
 
@@ -1068,8 +1068,8 @@ function UserAccessControl() {
             await usersApi.update(userId, { grantedPages: next });
             setUsers(prev => prev.map(u => u.id === userId ? { ...u, grantedPages: next } : u));
             toast.success('Access updated');
-        } catch (e) {
-            toast.error('Failed to update access');
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to update access');
         } finally {
             setSaving(prev => ({ ...prev, [userId]: false }));
         }

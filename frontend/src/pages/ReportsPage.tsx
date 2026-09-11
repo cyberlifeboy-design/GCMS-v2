@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Download, Loader2, BarChart2, Building2, Users, FileSpreadsheet, FileText, Tag, Activity, Search, FileSignature, Car } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from 'sonner';
 import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
 import { formatDateTime } from '@/lib/dateUtils';
 
@@ -126,7 +127,9 @@ export function ReportsPage() {
             const res = await handoverApi.listForms(params);
             setHandoverForms(res.data.data || []);
             setFormsPagination(res.data.pagination || { total: 0, totalPages: 1, page: 1 });
-        } catch { /* ignore */ } finally {
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to load handover forms');
+        } finally {
             setFormsLoading(false);
         }
     };
@@ -152,7 +155,9 @@ export function ReportsPage() {
             setFaTrailLogs(res.data.logs || []);
             setFaTrailTotal(res.data.total || 0);
             setFaTrailPage(page);
-        } catch { } finally { setFaTrailLoading(false); }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to load FA audit trail');
+        } finally { setFaTrailLoading(false); }
     };
 
     useEffect(() => {
@@ -161,13 +166,17 @@ export function ReportsPage() {
             try {
                 const res = await reportsApi.getUtilization();
                 setUtilization(res.data);
-            } catch { } finally { setLoadingUtil(false); }
+            } catch (err: any) {
+                toast.error(err.response?.data?.error || 'Failed to load fleet utilization');
+            } finally { setLoadingUtil(false); }
         };
         const loadStadiumsList = async () => {
             try {
                 const res = await stadiumsApi.getAll({ isActive: true });
                 setAllStadiums(res.data.data || res.data || []);
-            } catch { }
+            } catch (err: any) {
+                toast.error(err.response?.data?.error || 'Failed to load stadiums');
+            }
         };
         const loadFaUsersList = async () => {
             try {
@@ -178,7 +187,9 @@ export function ReportsPage() {
                     ? users.filter((u: any) => u.stadiumId === user.stadiumId)
                     : users;
                 setFaUsers(filtered);
-            } catch { }
+            } catch (err: any) {
+                toast.error(err.response?.data?.error || 'Failed to load FA users');
+            }
         };
         loadUtil();
         loadStadiumsList();
@@ -192,7 +203,9 @@ export function ReportsPage() {
             if (selectedStadiumFilter) params.stadiumId = selectedStadiumFilter;
             const res = await reportsApi.getStadiumReports(params);
             setStadiumReports(res.data.data || res.data || []);
-        } catch { } finally { setLoadingStadium(false); }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to load stadium reports');
+        } finally { setLoadingStadium(false); }
     };
 
     const loadDepartmentReports = async () => {
@@ -202,7 +215,9 @@ export function ReportsPage() {
             if (selectedStadiumFilter) params.stadiumId = selectedStadiumFilter;
             const res = await reportsApi.getDepartmentReports(params);
             setDepartmentReports(res.data.data || res.data || []);
-        } catch { } finally { setLoadingDept(false); }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to load department reports');
+        } finally { setLoadingDept(false); }
     };
 
     const loadUserReports = async () => {
@@ -214,7 +229,9 @@ export function ReportsPage() {
             const res = await reportsApi.getUserReports(params);
             setUserReports(res.data.users ?? res.data.data ?? res.data ?? []);
             setPublicBookers(res.data.publicBookers ?? []);
-        } catch { } finally { setLoadingUser(false); }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to load user reports');
+        } finally { setLoadingUser(false); }
     };
 
     const loadPoolReport = async () => {
@@ -224,7 +241,9 @@ export function ReportsPage() {
             if (poolStadiumFilter) params.stadiumId = poolStadiumFilter;
             const res = await reportsApi.getPoolReport(params);
             setPoolReport(res.data);
-        } catch { } finally { setPoolLoading(false); }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to load pool report');
+        } finally { setPoolLoading(false); }
     };
 
     const downloadBlob = (data: Blob, filename: string) => {
@@ -248,7 +267,7 @@ export function ReportsPage() {
             const res = await reportsApi.exportStadiumReport(actualFormat as 'xlsx' | 'pdf');
             const ext = actualFormat === 'pdf' ? 'pdf' : 'xlsx';
             downloadBlob(res.data, `stadium_report_${new Date().toISOString().split('T')[0]}.${ext}`);
-        } catch { alert('Export failed'); }
+        } catch (err: any) { toast.error(err.response?.data?.error || 'Export failed'); }
         finally { setExporting(null); }
     };
 
@@ -258,7 +277,7 @@ export function ReportsPage() {
         try {
             const res = await reportsApi.exportDepartmentReport();
             downloadBlob(res.data, `department_report_${new Date().toISOString().split('T')[0]}.xlsx`);
-        } catch { alert('Export failed'); }
+        } catch (err: any) { toast.error(err.response?.data?.error || 'Export failed'); }
         finally { setExporting(null); }
     };
 
@@ -274,7 +293,7 @@ export function ReportsPage() {
             const res = await reportsApi.exportUserReport(actualFormat as 'xlsx' | 'pdf');
             const ext = actualFormat === 'pdf' ? 'pdf' : 'xlsx';
             downloadBlob(res.data, `user_report_${new Date().toISOString().split('T')[0]}.${ext}`);
-        } catch { alert('Export failed'); }
+        } catch (err: any) { toast.error(err.response?.data?.error || 'Export failed'); }
         finally { setExporting(null); }
     };
 
@@ -285,7 +304,7 @@ export function ReportsPage() {
             if (poolStadiumFilter) params.stadiumId = poolStadiumFilter;
             const res = await reportsApi.exportPoolReport(format, params);
             downloadBlob(res.data, `pool_report_${new Date().toISOString().split('T')[0]}.${format}`);
-        } catch { alert('Export failed'); }
+        } catch (err: any) { toast.error(err.response?.data?.error || 'Export failed'); }
         finally { setExporting(null); }
     };
 
@@ -297,7 +316,7 @@ export function ReportsPage() {
             const res = await reportsApi.exportLabels(format, params);
             const ext = format;
             downloadBlob(res.data, `labels_${new Date().toISOString().split('T')[0]}.${ext}`);
-        } catch { alert('Export failed'); }
+        } catch (err: any) { toast.error(err.response?.data?.error || 'Export failed'); }
         finally { setExporting(null); }
     };
 

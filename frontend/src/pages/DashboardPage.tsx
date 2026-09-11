@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Badge } from '@/components/ui/badge';
 import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
 import { formatDate } from '@/lib/dateUtils';
+import { toast } from 'sonner';
 
 const cartStatusColors: Record<string, string> = {
     Available: 'bg-green-100 text-green-800',
@@ -293,8 +294,8 @@ export function DashboardPage() {
             ]);
             setStats(statsRes.data);
             setNotifStats(notifRes.data);
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to load dashboard data');
         } finally {
             setLoading(false);
         }
@@ -305,7 +306,9 @@ export function DashboardPage() {
             try {
                 const res = await stadiumsApi.getAll();
                 setStadiums(res.data?.data || res.data || []);
-            } catch (e) { /* ignore */ }
+            } catch (e: any) {
+                toast.error(e.response?.data?.error || 'Failed to load venue filter list');
+            }
         };
         // Admin is venue-locked; others need the full list for the filter dropdown
         if (!isAdmin) loadStadiums();
