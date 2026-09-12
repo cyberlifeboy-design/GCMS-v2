@@ -1,20 +1,29 @@
 version: '3.8'
 
+# NOTE (2026-09-12): schema.prisma's datasource moved from postgresql to mysql to
+# match the Azure Database for MySQL Flexible Server IT provisioned for the Azure
+# dev environment. This is now the one supported engine for the whole app.
+# IMPORTANT — do not just redeploy this file against the live gcms.mehaisi.com
+# server: its existing "postgres_data" volume holds real production data in
+# Postgres wire format. Switching the image here only gives that server a new,
+# empty MySQL container — it does NOT migrate the existing rows. A real
+# pg_dump-then-import (or equivalent ETL) into MySQL must happen first.
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: gcms-postgres
+  mysql:
+    image: mysql:8.4
+    container_name: gcms-mysql
     environment:
-      POSTGRES_DB: gcms
-      POSTGRES_USER: gcms_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-gcms_password_2024}
+      MYSQL_DATABASE: gcms
+      MYSQL_USER: gcms_user
+      MYSQL_PASSWORD: ${DB_PASSWORD:-gcms_password_2024}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-gcms_root_password_2024}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     networks:
       - gcms_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gcms_user -d gcms"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "gcms_user", "-p${DB_PASSWORD:-gcms_password_2024}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,7 +50,7 @@ services:
     build: ./backend
     container_name: gcms-backend
     environment:
-      - DATABASE_URL=postgresql://gcms_user:${DB_PASSWORD:-gcms_password_2024}@postgres:5432/gcms
+      - DATABASE_URL=mysql://gcms_user:${DB_PASSWORD:-gcms_password_2024}@mysql:3306/gcms
       - PORT=3005
       - NODE_ENV=development
       - CORS_ORIGIN=https://gcms.mehaisi.com
@@ -52,7 +61,7 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@gcms.local}
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
     networks:
       - gcms_network
@@ -99,7 +108,7 @@ networks:
     external: true
 
 volumes:
-  postgres_data:
+  mysql_data:
     driver: local
   minio_data:
     driver: local
