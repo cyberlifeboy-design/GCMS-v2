@@ -11,22 +11,31 @@ RUN npx vite build
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Create nginx config for SPA routing with API proxy
+# Backend origin and DNS resolver are runtime-templated (envsubst) so the same
+# image works unchanged behind docker-compose (service DNS "gcms-backend") and
+# behind Azure App Service (private-endpoint FQDN + Azure's internal resolver
+# 168.63.129.16), instead of baking one environment's hostname into the image.
+ENV BACKEND_ORIGIN=http://gcms-backend:3005
+ENV DNS_RESOLVER="127.0.0.11"
+ENV BACKEND_HOST=gcms-backend
+
+RUN mkdir -p /etc/nginx/templates
 RUN echo 'server { \
     listen 4173; \
     server_name localhost; \
     root /usr/share/nginx/html; \
     index index.html; \
     \
-    resolver 127.0.0.11 valid=30s ipv6=off; \
-    set $backend http://gcms-backend:3005; \
+    resolver ${DNS_RESOLVER} valid=30s ipv6=off; \
+    set $backend ${BACKEND_ORIGIN}; \
     \
     location /api/v1 { \
         proxy_pass $backend/api/v1; \
+        proxy_ssl_server_name on; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
         proxy_set_header Connection "upgrade"; \
-        proxy_set_header Host $host; \
+        proxy_set_header Host ${BACKEND_HOST}; \
         proxy_set_header X-Real-IP $remote_addr; \
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
         proxy_set_header X-Forwarded-Proto $scheme; \
@@ -43,7 +52,7 @@ RUN echo 'server { \
         expires 1y; \
         add_header Cache-Control "public, immutable"; \
     } \
-}' > /etc/nginx/conf.d/default.conf
+}' > /etc/nginx/templates/default.conf.template
 
 EXPOSE 4173
 CMD ["nginx", "-g", "daemon off;"]
