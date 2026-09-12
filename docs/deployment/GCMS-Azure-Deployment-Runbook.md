@@ -2,6 +2,19 @@
 
 **Prepared:** 2026-09-11 | **Updated:** 2026-09-12 | **Branch:** `feature/pool-booking-system` | **Target:** Azure Container Apps
 
+> **2026-09-12 — Dev environment note:** the actual `rg-gcms-dev-qc-001` environment SC IT
+> provisioned does **not** match this runbook's shape. It uses two Azure **App Services**
+> (Web Apps for Containers, frontend + backend split) instead of one merged Container Apps
+> image, **MySQL** Flexible Server instead of PostgreSQL, and every data-plane resource
+> (MySQL, Storage, the backend App Service) sits behind a **private endpoint with public
+> access fully disabled** — only the frontend is internet-facing. `schema.prisma` was
+> migrated from `postgresql` to `mysql` to match (see the commit on
+> `feature/pool-booking-system`). This runbook's Container Apps / Postgres plan may still
+> apply to a future standalone production deployment, but for how the **dev** environment
+> was actually deployed, see `GCMS-Azure-Deployment-Report.docx`/`.pdf` in
+> `D:\Olddoccs\Documents\Work\GC project\Azure` (not checked into the repo — it contains
+> environment-specific details and a full command log).
+
 ---
 
 ## 0. Purpose & Scope

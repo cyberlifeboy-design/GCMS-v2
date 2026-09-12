@@ -5,6 +5,11 @@ single Express process. Production dependencies: **Azure Database for PostgreSQL
 Flexible Server**, **Azure Blob Storage**, and an **SMTP relay** (Azure Communication
 Services or your O365 relay).
 
+> **2026-09-12:** the dev environment actually deployed (`rg-gcms-dev-qc-001`) does not
+> use Container Apps or Postgres — see the note at the top of
+> `GCMS-Azure-Deployment-Runbook.md` and `GCMS-Azure-Deployment-Report.docx`/`.pdf` for
+> what was really built (two App Services + MySQL, all private-endpoint networking).
+
 > **Not yet live-verified.** This guide, the `Dockerfile`, the Postgres migration, the
 > Azure Blob driver, and the SMTP driver were all written and reviewed in a sandbox with
 > no Docker/Postgres/Azure access. Before trusting this in production, run through
