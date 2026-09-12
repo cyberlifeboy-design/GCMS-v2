@@ -1,5 +1,10 @@
 # GCMS Issue Fix Todo
 
+> **Superseded 2026-09-12** — this list tracks Phase 1-era bug/feature numbers (#31-67).
+> Later phase work (pool booking, incidents/warnings, Azure hardening, this session's
+> fleet/handover/incident/ticket/login updates) is tracked in `docs/superpowers/plans/`
+> and `docs/deployment/GCMS-Azure-Deployment-Runbook.md`, not here.
+
 ## Status Update (2026-04-23)
 - Resolved backend test failures caused by invalid middleware imports.
 - Fixed multiple frontend build errors (missing imports, unused variables, state issues).

@@ -1,7 +1,13 @@
 # GCMS — Handover Document
 **Date:** 2026-02-23  
-**Status:** ✅ **Project Complete** (Backend & Frontend)  
-**Backend port:** **3005** | **Frontend port:** **5173** (Vite)
+**Status:** ✅ **Project Complete** (Backend & Frontend) — historical snapshot, superseded by later phases  
+**Backend port:** **3005** | **Frontend port:** **3000** (Vite — corrected 2026-09-12, was 5173)
+
+> **This document reflects Phase 1-18 only** (the original CRUD-only fleet/handover/
+> maintenance system). Pool booking, incident reports, warning tickets, the reordered
+> handover workflow, and Azure deployment did not exist yet. For current architecture
+> and workflows see `docs/GCMS-WORKFLOW.md`; for Azure deployment see
+> `docs/deployment/GCMS-Azure-Deployment-Runbook.md`.
 
 ---
 

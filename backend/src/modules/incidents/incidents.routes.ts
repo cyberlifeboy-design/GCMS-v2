@@ -15,6 +15,9 @@ router.post('/', IncidentsController.uploadMiddleware, auditLog(), IncidentsCont
 router.get('/', requireRole('SuperAdmin', 'Admin'), IncidentsController.list);
 router.get('/:id', requireRole('SuperAdmin', 'Admin'), IncidentsController.getById);
 router.patch('/:id/status', requireRole('SuperAdmin', 'Admin'), auditLog(), IncidentsController.updateStatus);
+router.patch('/:id/form', requireRole('SuperAdmin', 'Admin'), auditLog(), IncidentsController.saveForm);
+router.post('/:id/form/sign', requireRole('SuperAdmin', 'Admin'), auditLog(), IncidentsController.signForm);
+router.post('/:id/escalate', requireRole('SuperAdmin', 'Admin'), auditLog(), IncidentsController.escalate);
 router.get('/:id/pdf', requireRole('SuperAdmin', 'Admin'), IncidentsController.downloadPdf);
 
 // Issue a warning linked to this incident

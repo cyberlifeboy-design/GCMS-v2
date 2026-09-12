@@ -17,6 +17,9 @@ const reportSchema = z.object({
   stadiumId: z.string().optional(),
 });
 const statusSchema = z.object({ status: z.enum(['Open', 'UnderReview', 'Closed']) });
+const formSchema = z.object({ formData: z.record(z.any()) });
+const signSchema = z.object({ signatureData: z.string().min(1) });
+const escalateSchema = z.object({ contracts: z.boolean().optional(), maintenance: z.boolean().optional() });
 
 /** Admin may only touch incidents within their own venue (by incident stadium, or subject's venue when the incident has none). */
 export function adminCanTouch(user: AuthRequest['user'], incident: { stadiumId: string | null; subjectUser?: { stadiumId: string | null } | null }): boolean {
@@ -94,6 +97,48 @@ export class IncidentsController {
     } catch (error) {
       if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
       else res.status(500).json({ error: 'Failed to update incident' });
+    }
+  }
+
+  static async saveForm(req: AuthRequest, res: Response) {
+    try {
+      const body = formSchema.parse(req.body);
+      const inc = await incidentsService.getById(req.params.id as string);
+      if (!inc) { res.status(404).json({ error: 'Incident not found' }); return; }
+      if (!adminCanTouch(req.user, inc)) { res.status(403).json({ error: 'Access denied' }); return; }
+      const updated = await incidentsService.saveFormData(inc.id, body.formData);
+      res.status(200).json({ data: updated });
+    } catch (error) {
+      if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+      else { console.error('Save incident form failed:', error); res.status(500).json({ error: 'Failed to save incident report form' }); }
+    }
+  }
+
+  static async signForm(req: AuthRequest, res: Response) {
+    try {
+      const body = signSchema.parse(req.body);
+      const inc = await incidentsService.getById(req.params.id as string);
+      if (!inc) { res.status(404).json({ error: 'Incident not found' }); return; }
+      if (!adminCanTouch(req.user, inc)) { res.status(403).json({ error: 'Access denied' }); return; }
+      const updated = await incidentsService.signForm(inc.id, body.signatureData, req.user!.userId);
+      res.status(200).json({ data: updated });
+    } catch (error) {
+      if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+      else { console.error('Sign incident form failed:', error); res.status(500).json({ error: 'Failed to sign incident report form' }); }
+    }
+  }
+
+  static async escalate(req: AuthRequest, res: Response) {
+    try {
+      const body = escalateSchema.parse(req.body);
+      const inc = await incidentsService.getById(req.params.id as string);
+      if (!inc) { res.status(404).json({ error: 'Incident not found' }); return; }
+      if (!adminCanTouch(req.user, inc)) { res.status(403).json({ error: 'Access denied' }); return; }
+      const updated = await incidentsService.escalate(inc.id, body);
+      res.status(200).json({ message: 'Incident escalated', data: updated });
+    } catch (error) {
+      if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+      else { console.error('Escalate incident failed:', error); res.status(500).json({ error: 'Failed to escalate incident' }); }
     }
   }
 

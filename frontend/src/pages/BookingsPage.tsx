@@ -53,6 +53,9 @@ interface Booking {
     returnedAt?: string | null;
     returnedBy?: { id: string; name: string } | null;
     createdAt: string;
+    extensionStatus?: string | null;
+    extensionRequestedEndDate?: string | null;
+    extensionRequestedEndTime?: string | null;
 }
 
 const derivedBadge: Record<string, string> = {
@@ -86,15 +89,20 @@ function LiveBookingsPanel({
     mode,
     stadiumId,
     canManage,
+    currentUserId,
 }: {
     mode: 'live' | 'upcoming';
     stadiumId?: string;
     canManage: boolean;
+    currentUserId?: string;
 }) {
     const [rows, setRows] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
+    const [extendTarget, setExtendTarget] = useState<Booking | null>(null);
+    const [extendDate, setExtendDate] = useState('');
+    const [extendTime, setExtendTime] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -129,6 +137,34 @@ function LiveBookingsPanel({
         }
     };
 
+    const submitExtension = async () => {
+        if (!extendTarget || !extendDate || !extendTime) return;
+        setBusy(extendTarget.id);
+        try {
+            await poolBookingRequestsApi.requestExtension(extendTarget.id, extendDate, extendTime);
+            toast.success('Extension requested — waiting for Admin approval');
+            setExtendTarget(null);
+            load();
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to request extension');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const reviewExtension = async (id: string, approve: boolean) => {
+        setBusy(id);
+        try {
+            await poolBookingRequestsApi.reviewExtension(id, approve);
+            toast.success(approve ? 'Extension approved' : 'Extension rejected');
+            load();
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to review extension');
+        } finally {
+            setBusy(null);
+        }
+    };
+
     if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
     if (rows.length === 0) return <div className="text-center py-8 text-muted-foreground">Nothing here right now.</div>;
 
@@ -142,7 +178,7 @@ function LiveBookingsPanel({
                         <TableHead>Requester / FA</TableHead>
                         <TableHead>Window</TableHead>
                         <TableHead>State</TableHead>
-                        {mode === 'live' && canManage && <TableHead className="text-right">Action</TableHead>}
+                        {mode === 'live' && <TableHead className="text-right">Action</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -172,12 +208,34 @@ function LiveBookingsPanel({
                                     {b.derivedState === 'Overdue' && (
                                         <span className="ml-2 text-xs text-red-600 font-semibold">should be returned</span>
                                     )}
+                                    {b.extensionStatus === 'Pending' && (
+                                        <div className="mt-1 text-[10px] text-amber-700 font-semibold">
+                                            Extension requested → {b.extensionRequestedEndDate} {b.extensionRequestedEndTime}
+                                        </div>
+                                    )}
                                 </TableCell>
-                                {mode === 'live' && canManage && (
-                                    <TableCell className="text-right">
-                                        <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => markReturned(b.id)}>
-                                            <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
-                                        </Button>
+                                {mode === 'live' && (
+                                    <TableCell className="text-right space-x-1 space-y-1">
+                                        {canManage && (
+                                            <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => markReturned(b.id)}>
+                                                <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
+                                            </Button>
+                                        )}
+                                        {canManage && b.extensionStatus === 'Pending' && (
+                                            <>
+                                                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={busy === b.id} onClick={() => reviewExtension(b.id, true)}>
+                                                    Approve Extension
+                                                </Button>
+                                                <Button size="sm" variant="destructive" disabled={busy === b.id} onClick={() => reviewExtension(b.id, false)}>
+                                                    Reject
+                                                </Button>
+                                            </>
+                                        )}
+                                        {!canManage && b.faUser?.id === currentUserId && b.extensionStatus !== 'Pending' && (
+                                            <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => { setExtendTarget(b); setExtendDate(b.endDate); setExtendTime(b.endTime); }}>
+                                                Request Extension
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 )}
                             </TableRow>
@@ -190,6 +248,31 @@ function LiveBookingsPanel({
                     ))}
                 </TableBody>
             </Table>
+
+            <Dialog open={!!extendTarget} onOpenChange={o => !o && setExtendTarget(null)}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Request Extension — {extendTarget?.fleet?.carNumber}</DialogTitle>
+                        <DialogDescription>Pick the new return date/time. An Admin or SuperAdmin must approve it before it takes effect.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <Label className="text-xs">New return date</Label>
+                            <Input type="date" value={extendDate} onChange={e => setExtendDate(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-xs">New return time</Label>
+                            <Input type="time" value={extendTime} onChange={e => setExtendTime(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setExtendTarget(null)}>Cancel</Button>
+                        <Button onClick={submitExtension} disabled={busy === extendTarget?.id || !extendDate || !extendTime}>
+                            Submit Request
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -621,7 +704,7 @@ export function BookingsPage() {
 
                 <TabsContent value="live" className="pt-4">
                     <Card><CardContent className="pt-6">
-                        <LiveBookingsPanel mode="live" stadiumId={panelStadiumId} canManage={canManage} />
+                        <LiveBookingsPanel mode="live" stadiumId={panelStadiumId} canManage={canManage} currentUserId={user?.id} />
                     </CardContent></Card>
                 </TabsContent>
                 <TabsContent value="upcoming" className="pt-4">

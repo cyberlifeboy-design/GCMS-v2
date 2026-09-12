@@ -31,6 +31,12 @@ const rejectSchema = z.object({
     comment: z.string().min(1, 'A comment is required when rejecting a booking'),
 });
 
+const extensionRequestSchema = z.object({
+    endDate: z.string().min(1),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/, 'endTime must be HH:mm'),
+});
+const extensionReviewSchema = z.object({ approve: z.boolean() });
+
 const amendSchema = z.object({
     fleetId: z.string().optional(),
     startDate: z.string().optional(),
@@ -340,6 +346,40 @@ export class PoolBookingRequestsController {
                 console.error('Reject pool booking error:', error);
                 res.status(400).json({ error: err.message || 'Failed to reject booking' });
             }
+        }
+    }
+
+    /** POST /api/v1/pool-booking-requests/:id/extension — FA requests more time */
+    static async requestExtension(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const { endDate, endTime } = extensionRequestSchema.parse(req.body);
+            const booking = await poolBookingRequestsService.requestExtension(id, req.user!.userId, endDate, endTime);
+            res.json({ message: 'Extension requested', data: booking });
+        } catch (error) {
+            const err = error as Error;
+            if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+            else res.status(400).json({ error: err.message || 'Failed to request extension' });
+        }
+    }
+
+    /** PATCH /api/v1/pool-booking-requests/:id/extension — Admin/SuperAdmin approves or rejects */
+    static async reviewExtension(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const { approve } = extensionReviewSchema.parse(req.body);
+            const existing = await poolBookingRequestsService.getById(id);
+            if (!existing) { res.status(404).json({ error: 'Booking request not found' }); return; }
+            if (req.user?.role === 'Admin' && existing.stadiumId !== req.user.stadiumId) {
+                res.status(403).json({ error: 'Access denied' });
+                return;
+            }
+            const booking = await poolBookingRequestsService.reviewExtension(id, approve, req.user!.userId);
+            res.json({ message: approve ? 'Extension approved' : 'Extension rejected', data: booking });
+        } catch (error) {
+            const err = error as Error;
+            if (error instanceof z.ZodError) res.status(400).json({ error: 'Validation error', details: error.errors });
+            else res.status(400).json({ error: err.message || 'Failed to review extension' });
         }
     }
 

@@ -453,6 +453,10 @@ export const poolBookingRequestsApi = {
         apiClient.patch(`/pool-booking-requests/${id}`, data),
     markReturned: (id: string) =>
         apiClient.patch(`/pool-booking-requests/${id}/return`),
+    requestExtension: (id: string, endDate: string, endTime: string) =>
+        apiClient.post(`/pool-booking-requests/${id}/extension`, { endDate, endTime }),
+    reviewExtension: (id: string, approve: boolean) =>
+        apiClient.patch(`/pool-booking-requests/${id}/extension`, { approve }),
     getHistory: (params?: Record<string, string | undefined>) =>
         apiClient.get('/pool-booking-requests/history', { params }),
     exportHistory: (params: Record<string, string | undefined>) =>
@@ -473,6 +477,12 @@ export const incidentsApi = {
         apiClient.get(`/incidents/${id}/pdf`, { responseType: 'blob' }),
     issueWarning: (id: string, data: { level: number; reason: string }) =>
         apiClient.post(`/incidents/${id}/warnings`, data),
+    saveForm: (id: string, formData: Record<string, unknown>) =>
+        apiClient.patch(`/incidents/${id}/form`, { formData }),
+    signForm: (id: string, signatureData: string) =>
+        apiClient.post(`/incidents/${id}/form/sign`, { signatureData }),
+    escalate: (id: string, data: { contracts?: boolean; maintenance?: boolean }) =>
+        apiClient.post(`/incidents/${id}/escalate`, data),
 };
 
 export const warningsApi = {

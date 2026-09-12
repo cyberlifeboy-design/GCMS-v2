@@ -2,8 +2,14 @@
 ## Full System Workflow Documentation
 
 **Repository:** O96a/GCMS  
-**Generated:** 2026-03-21  
-**Status:** Production-ready with known issues
+**Generated:** 2026-03-21 | **Last major update:** 2026-09-12  
+**Status:** Production-ready — Azure migration in progress, see `docs/deployment/GCMS-Azure-Deployment-Runbook.md`
+
+> **Note:** Sections 3, 5, 8 and 12 below (roles, fleet status flow, ports, feature
+> flags) predate several phases of work and have been corrected as of 2026-09-12.
+> Sections 10 ("Known Issues") and 11 ("Test Credentials") are historical — check
+> `docs/superpowers/plans/` for the current phase-by-phase status instead of trusting
+> those two sections at face value.
 
 ---
 
@@ -27,7 +33,7 @@
 | **Storage** | MinIO (photos & branding) |
 | **Frontend** | React 18 + Vite + Tailwind CSS + Zustand |
 | **Auth** | JWT (access + refresh tokens) |
-| **Ports** | Backend: 3005, Frontend: 5173 |
+| **Ports** | Backend: 3005, Frontend (Vite dev): 3000 |
 
 ---
 
@@ -36,9 +42,11 @@
 | Role | Permissions |
 |------|-------------|
 | **SuperAdmin** | Full system access — all venues, users, settings, stadiums |
-| **Admin** | Own venue only — manage FA users, fleet, view reports |
-| **FA (Fleet Attendant)** | Check in/out assigned carts, report issues |
+| **Admin** | Own venue only — manage FA users, fleet, view reports, sign handover/incident forms, approve pool extensions |
+| **FA (Fleet Attendant)** | Check in/out assigned carts, report issues, request pool booking extensions |
 | **Observer** | Read-only — view everything across all venues |
+| **Contracts** | Receives incident escalations for contract/legal follow-up |
+| **MaintenanceTeam** | Receives incident escalations and maintenance workflow tasks |
 
 ---
 
@@ -108,12 +116,21 @@
                       └───────────┘
 ```
 
+> **Correction (2026-09-12):** the diagram above is the original Phase 1 design and is
+> no longer accurate. The actual `Fleet.status` values in use today are: `Available`,
+> `Assigned` (Focal Point set, handover not yet signed), `Active` (handover complete,
+> in service), `Dispatched` (checked in for a usage session), `Returned` (checked out,
+> awaiting handback), `HandbackPending` (handback requested, awaiting Admin sign-off),
+> `Under Maintenance`, and `Retired`. Pool carts (`Fleet.isPool = true`) display as a
+> distinct **Pool** status in the UI regardless of the underlying value, since they have
+> no dedicated Focal Point. See Section 15 below for the pool booking and handover
+> workflows that actually drive these transitions.
+
 ### Cart Types
-- **2-Seater** — Standard golf cart
-- **4-Seater** — Larger cart
+- **Cargo** — Cargo/utility cart
+- **Accessibility** — Accessible cart
 - **6-Seater** — Passenger cart
-- **Utility** — Cargo/utility cart
-- **Ambulance** — Medical cart
+- **4-Seater** — Standard passenger cart
 
 ---
 
@@ -329,18 +346,21 @@ Admin Reviews:
 
 ```
 backend/src/modules/
-├── auth/           # JWT auth, login, refresh tokens
-├── fleet/          # Cart CRUD, bulk import, assignment
-├── handover/       # Check-in/out, history
-├── maintenance/    # Issue reports, status updates
-├── users/          # User CRUD, role management
-├── stadiums/       # Stadium CRUD (SuperAdmin)
-├── departments/    # Department management
-├── reports/        # Utilization, audit logs, exports
-├── settings/       # System settings, branding
-├── notifications/   # User alerts
-├── announcements/  # System announcements
-└── requests/       # Public car requests
+├── auth/                    # JWT auth, login, refresh tokens
+├── fleet/                   # Cart CRUD, bulk import, assignment (+ Focal Point→Department sync)
+├── handover/                # Handover form lifecycle, check-in/out, history
+├── maintenance/             # Issue reports, status updates
+├── users/                   # User CRUD, role management
+├── stadiums/                # Stadium CRUD (SuperAdmin)
+├── departments/              # Department management
+├── reports/                 # Utilization, audit logs, exports
+├── settings/                # System settings, branding
+├── notifications/           # User alerts
+├── announcements/            # System announcements
+├── requests/                # Public car requests
+├── pool-bookings/           # Pool cart short checkout (no handover form)
+├── pool-booking-requests/   # Admin-approved pool bookings — reminders + extension workflow
+└── incidents/                # Incident reports (full template form + PDF) and Warning tickets
 ```
 
 ---
@@ -386,21 +406,26 @@ backend/src/modules/
 ## 12. Quick Start Commands
 
 ```bash
-# Start infrastructure
-docker-compose up -d
+# Start infrastructure (Postgres + MinIO)
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres minio
 
 # Start backend (port 3005)
 cd backend && npm run dev
 
-# Start frontend (port 5173)
+# Start frontend (port 3000)
 cd frontend && npm run dev
 
 # Run Prisma migrations
 cd backend && npx prisma migrate dev
 
 # Seed test data
-cd backend && npm run seed
+cd backend && npx tsx prisma/seed.ts
 ```
+
+For a live-reload Docker stack instead of running `npm run dev` on the host, see
+`docker-compose.dev-live.yml` at the repo root (git-ignored — machine-local dev tooling,
+not deployed anywhere). For Azure Container Apps deployment, see
+`docs/deployment/GCMS-Azure-Deployment-Runbook.md`.
 
 ---
 
@@ -467,5 +492,49 @@ cd backend && npm run seed
 
 ---
 
+## 15. Pool Booking, Incidents & Warning Tickets (added 2026-09-12)
+
+These subsystems didn't exist when this document was first generated (2026-03-21).
+
+### 15.1 Pool Booking Workflow
+Pool carts (`Fleet.isPool = true`) are shared resources with no dedicated Focal Point.
+1. A requester (public link or internal) submits a `PoolBookingRequest` — cart, FA,
+   date/time window.
+2. Admin/SuperAdmin approves or rejects (conflict-checked against other approved
+   bookings on the same cart).
+3. An in-process reminder loop (`server.ts`, polls every 60s) notifies the FA and venue
+   Admin/SuperAdmin as the return time approaches (`POOL_REMINDER_MINUTES_BEFORE`,
+   default 30 min), and once more if it passes unreturned.
+4. The FA can request an extension (`POST /pool-booking-requests/:id/extension`); only
+   Admin/SuperAdmin can approve it (`PATCH .../extension`), which updates the booking's
+   end date/time.
+5. The FA (or Admin) marks the cart returned (`PATCH .../return`).
+
+### 15.2 Handover Cycle
+1. Admin assigns a cart to a Focal Point (Fleet Management) — the cart's department is
+   auto-set from that Focal Point's own department.
+2. Admin creates & signs the handover form; the FA then signs it — cart becomes usable.
+3. FA checks in (starts a usage session) and checks out (ends it), optionally reporting
+   an issue (creates a `MaintenanceLog`).
+4. FA requests handback; Admin inspects and signs the return — cart is released back to
+   `Available`/pool.
+Full bilingual (EN/AR) fillable form with signature capture and a branded PDF export —
+see `HandoverFormModal.tsx` / `pdf.service.ts`'s `handoverFormPdf`.
+
+### 15.3 Incident Reports & Warning Tickets
+- **Incident Report**: "Create Incident Report" opens a fillable form matching the
+  official Golf Cart/UTV Incident Report template (incident type, injury/treatment
+  details, investigation checklist, sign-off). Generates a branded PDF and can escalate
+  to the Contracts and/or Maintenance teams (`POST /incidents/:id/escalate`), which
+  notifies those roles.
+- **Warning Tickets**: "Issue a Ticket" on an incident picks a violation from a 3-level
+  catalog (`frontend/src/lib/ticketCatalog.ts`) — Level 1 (warning, on record), Level 2
+  (event ban), Level 3 (permanent ban — blocks system access). Reaching 3 active
+  warnings, or any Level 3, blocks the user automatically (`warning-rules.ts`) and
+  emails a warning notice.
+
+---
+
 **Document Generated by Cyberboy** 🤖  
-*Golf Cart Management System - Workflow Documentation*
+*Golf Cart Management System - Workflow Documentation*  
+*Sections 3, 5, 8, 12, and 15 corrected/added 2026-09-12 — see git history for the diff.*

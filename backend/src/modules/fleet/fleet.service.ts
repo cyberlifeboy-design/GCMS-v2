@@ -51,7 +51,7 @@ export class FleetService {
                 stadium: { select: { id: true, name: true, code: true } },
                 department: { select: { id: true, name: true, code: true } },
                 assignedUser: {
-                    select: { id: true, name: true, phone: true, email: true, role: true },
+                    select: { id: true, name: true, phone: true, email: true, role: true, accreditationNumber: true },
                 },
             },
         });
@@ -123,17 +123,27 @@ export class FleetService {
 
     async assignUser(fleetId: string, userId: string | null) {
         const newStatus = userId ? 'Assigned' : 'Available';
+
+        // Cart's department follows its assigned Focal Point's own department
+        let departmentId: string | null | undefined = undefined;
+        if (userId) {
+            const focalPoint = await prisma.user.findUnique({ where: { id: userId }, select: { departmentId: true } });
+            departmentId = focalPoint?.departmentId ?? null;
+        }
+
         const fleet = await prisma.fleet.update({
             where: { id: fleetId },
-            data: { 
-                assignedUserId: userId, 
+            data: {
+                assignedUserId: userId,
                 status: newStatus,
                 handoverSigned: false,
                 handoverSignedAt: null,
+                ...(departmentId !== undefined && { departmentId }),
             },
-            include: { 
-                assignedUser: { select: { id: true, name: true, phone: true } },
+            include: {
+                assignedUser: { select: { id: true, name: true, phone: true, department: { select: { id: true, name: true, code: true } } } },
                 stadium: { select: { id: true, name: true } },
+                department: { select: { id: true, name: true, code: true } },
             },
         });
 
@@ -211,7 +221,11 @@ export class FleetService {
             }),
             prisma.user.findMany({
                 where: { role: 'FA', isActive: true, ...(stadiumId ? { stadiumId } : {}) },
-                select: { id: true, name: true, email: true, phone: true, stadium: { select: { id: true, name: true } } },
+                select: {
+                    id: true, name: true, email: true, phone: true, accreditationNumber: true,
+                    stadium: { select: { id: true, name: true } },
+                    department: { select: { id: true, name: true, code: true } },
+                },
                 orderBy: { name: 'asc' },
             }),
         ]);
@@ -233,13 +247,19 @@ export class FleetService {
         for (const { fleetId, userId } of assignments) {
             try {
                 const newStatus = userId ? 'Assigned' : 'Available';
+                let departmentId: string | null | undefined = undefined;
+                if (userId) {
+                    const focalPoint = await prisma.user.findUnique({ where: { id: userId }, select: { departmentId: true } });
+                    departmentId = focalPoint?.departmentId ?? null;
+                }
                 await prisma.fleet.update({
                     where: { id: fleetId },
-                    data: { 
-                        assignedUserId: userId, 
+                    data: {
+                        assignedUserId: userId,
                         status: newStatus,
                         handoverSigned: false,
                         handoverSignedAt: null,
+                        ...(departmentId !== undefined && { departmentId }),
                     },
                 });
                 results.success++;

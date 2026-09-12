@@ -15,6 +15,7 @@ RUN npm run build
 
 # ---- Stage 2: build the backend ----
 FROM node:22-alpine AS backend-build
+RUN apk add --no-cache openssl
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm ci
@@ -24,7 +25,7 @@ RUN npm run build
 
 # ---- Stage 3: runtime ----
 FROM node:22-alpine AS runtime
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl openssl
 WORKDIR /app
 
 RUN addgroup -S gcms && adduser -S gcms -G gcms

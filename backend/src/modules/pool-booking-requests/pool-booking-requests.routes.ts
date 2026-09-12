@@ -63,5 +63,11 @@ router.patch('/pool-booking-requests/:id/reject', authenticate, requireRole('Sup
 router.patch('/pool-booking-requests/:id', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
     PoolBookingRequestsController.amend(req as any, res),
 );
+router.post('/pool-booking-requests/:id/extension', authenticate, requireRole('FA'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.requestExtension(req as any, res),
+);
+router.patch('/pool-booking-requests/:id/extension', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.reviewExtension(req as any, res),
+);
 
 export default router;

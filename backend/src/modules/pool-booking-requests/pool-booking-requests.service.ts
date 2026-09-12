@@ -396,6 +396,140 @@ export class PoolBookingRequestsService {
             include: BOOKING_INCLUDE,
         });
     }
+
+    /** FA requests more time on an Approved pool booking. Only Admin/SuperAdmin can approve it. */
+    async requestExtension(id: string, requestedById: string, newEndDate: string, newEndTime: string) {
+        const existing = await prisma.poolBookingRequest.findUnique({ where: { id }, include: BOOKING_INCLUDE });
+        if (!existing) throw new Error('Booking request not found');
+        if (existing.status !== 'Approved') throw new Error('Only an approved booking can request an extension');
+        if (existing.faUserId !== requestedById) throw new Error('Only the assigned Focal Point can request an extension for this booking');
+
+        const updated = await prisma.poolBookingRequest.update({
+            where: { id },
+            data: {
+                extensionRequestedEndDate: newEndDate,
+                extensionRequestedEndTime: newEndTime,
+                extensionRequestedAt: new Date(),
+                extensionStatus: 'Pending',
+            },
+            include: BOOKING_INCLUDE,
+        });
+
+        const message = `${updated.faUser?.name ?? updated.requesterName} requested an extension on ${updated.fleet.carNumber} until ${newEndDate} ${newEndTime}`;
+        await notificationService.createForRoles(
+            { type: 'PoolBookingExtensionRequested', title: 'Pool Booking Extension Requested', message, entityType: 'PoolBookingRequest', entityId: id },
+            ['Admin'],
+            existing.stadiumId,
+        );
+        await notificationService.createForRoles(
+            { type: 'PoolBookingExtensionRequested', title: 'Pool Booking Extension Requested', message, entityType: 'PoolBookingRequest', entityId: id },
+            ['SuperAdmin'],
+        );
+
+        return updated;
+    }
+
+    /** Admin/SuperAdmin approves or rejects a pending extension request. */
+    async reviewExtension(id: string, approve: boolean, reviewedById: string) {
+        const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
+        if (!existing) throw new Error('Booking request not found');
+        if (existing.extensionStatus !== 'Pending') throw new Error('There is no pending extension request on this booking');
+
+        const updated = await prisma.poolBookingRequest.update({
+            where: { id },
+            data: approve
+                ? {
+                      endDate: existing.extensionRequestedEndDate!,
+                      endTime: existing.extensionRequestedEndTime!,
+                      extensionStatus: 'Approved',
+                      // window changed — let the reminder poller re-evaluate it
+                      reminderSentAt: null,
+                      overdueNotifiedAt: null,
+                  }
+                : { extensionStatus: 'Rejected' },
+            include: BOOKING_INCLUDE,
+        });
+
+        await notificationService.create({
+            type: approve ? 'PoolBookingExtensionApproved' : 'PoolBookingExtensionRejected',
+            title: approve ? 'Extension approved' : 'Extension rejected',
+            message: approve
+                ? `Your extension for ${updated.fleet.carNumber} was approved — new return time ${updated.endDate} ${updated.endTime}`
+                : `Your extension request for ${updated.fleet.carNumber} was rejected. Please return the car as scheduled.`,
+            entityType: 'PoolBookingRequest',
+            entityId: id,
+            userId: updated.faUserId,
+        });
+
+        return updated;
+    }
+
+    /**
+     * In-process reminder scan (called on an interval from server.ts). For every
+     * Approved booking: notify FA + Admin once as the return time approaches, and
+     * once more if it has passed with no return/extension — no external scheduler needed.
+     *
+     * Azure Container Apps can run multiple replicas, each with its own interval timer,
+     * so two replicas can race to notify the same booking in the same poll window. Each
+     * branch below "claims" the row with a conditional `updateMany` (only succeeds if
+     * the flag is still null) *before* sending anything, so only the replica that wins
+     * the race sends notifications — count === 0 means another replica already claimed it.
+     */
+    async scanReminders(minutesBefore: number) {
+        const now = new Date();
+        const approved = await prisma.poolBookingRequest.findMany({
+            where: { status: 'Approved' },
+            include: BOOKING_INCLUDE,
+        });
+
+        for (const b of approved) {
+            const endAt = new Date(`${b.endDate}T${b.endTime}:00`);
+            if (Number.isNaN(endAt.getTime())) continue;
+            const msUntilEnd = endAt.getTime() - now.getTime();
+
+            if (!b.reminderSentAt && msUntilEnd > 0 && msUntilEnd <= minutesBefore * 60 * 1000) {
+                const claimed = await prisma.poolBookingRequest.updateMany({
+                    where: { id: b.id, reminderSentAt: null },
+                    data: { reminderSentAt: now },
+                });
+                if (claimed.count === 0) continue; // another replica already sent this one
+
+                const message = `${b.fleet.carNumber} is due back at ${b.endDate} ${b.endTime}. Return it or request an extension.`;
+                await notificationService.create({
+                    type: 'PoolBookingReminder', title: 'Pool cart due soon', message,
+                    entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
+                });
+                await notificationService.createForRoles(
+                    { type: 'PoolBookingReminder', title: 'Pool cart due soon', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
+                    ['Admin'], b.stadiumId,
+                );
+                await notificationService.createForRoles(
+                    { type: 'PoolBookingReminder', title: 'Pool cart due soon', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
+                    ['SuperAdmin'],
+                );
+            } else if (!b.overdueNotifiedAt && msUntilEnd <= 0) {
+                const claimed = await prisma.poolBookingRequest.updateMany({
+                    where: { id: b.id, overdueNotifiedAt: null },
+                    data: { overdueNotifiedAt: now },
+                });
+                if (claimed.count === 0) continue;
+
+                const message = `${b.fleet.carNumber} was due back at ${b.endDate} ${b.endTime} and has not been returned.`;
+                await notificationService.create({
+                    type: 'PoolBookingOverdue', title: 'Pool cart overdue', message,
+                    entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
+                });
+                await notificationService.createForRoles(
+                    { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
+                    ['Admin'], b.stadiumId,
+                );
+                await notificationService.createForRoles(
+                    { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
+                    ['SuperAdmin'],
+                );
+            }
+        }
+    }
 }
 
 export const poolBookingRequestsService = new PoolBookingRequestsService();

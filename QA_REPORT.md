@@ -1,5 +1,9 @@
 # GCMS QA Report - March 9, 2026
 
+> **Historical snapshot** — predates pool booking, incidents/warnings, and this
+> session's (2026-09-12) fleet/handover/incident/ticket/login work. Not re-verified
+> against current code; treat findings below as Phase 1-era only.
+
 ## Summary
 
 Comprehensive QA scan of the Golf Cart Management System (GCMS) covering authentication, fleet management, handover workflows, user management, stadium management, departments, settings, maintenance, and RBAC.

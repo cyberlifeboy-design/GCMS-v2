@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Printer, CheckCircle2, PenLine, X } from 'lucide-react';
-import { handoverApi, publicSettingsApi } from '@/lib/api';
+import { handoverApi, publicSettingsApi, fleetApi } from '@/lib/api';
 import { RichContent } from '@/components/ui/rich-editor';
 import { toast } from 'sonner';
 
@@ -268,6 +268,9 @@ function cartTypeFromString(carType: string): Partial<CartTypeData> {
 
 export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm, currentUserName, adminName, adminPhone, logoUrl, onComplete }: Props) {
     const [form, setForm] = useState<HandoverFormData | null>(null);
+    // Cart/FA system record for a brand-new form (before a HandoverForm row exists) —
+    // fetched directly from Fleet since `form.fleet` isn't available until first save.
+    const [fleetInfo, setFleetInfo] = useState<HandoverFormData['fleet'] | null>(null);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [tc, setTc] = useState<TcSettings>({ handoverTcEnTitle: null, handoverTcEnBody: null, handoverTcArTitle: null, handoverTcArBody: null, handoverTcCheckboxes: null });
@@ -310,6 +313,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
 
     const loadForm = useCallback(async () => {
         setLoading(true);
+        setFleetInfo(null);
         try {
             const [formRes, settingsRes] = await Promise.all([
                 handoverApi.getHandoverForm(fleetId),
@@ -358,12 +362,20 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 if (data.finalSignatureData) setFinalSig(data.finalSignatureData);
                 if (data.returnAdminSigData) setReturnSig(data.returnAdminSigData);
             } else if (mode === 'admin') {
-                // No form yet — auto-fill everything from system data
-                const pf = preloadedForm;
-                const fleet = pf?.fleet;
+                // No form yet — auto-fill everything from system data. preloadedForm is
+                // rarely passed by callers, so fetch the Fleet record directly as the
+                // source of truth for the cart/FA fields (serial number, FA code, etc.)
+                let fleet = preloadedForm?.fleet;
+                if (!fleet) {
+                    try {
+                        const fleetRes = await fleetApi.getById(fleetId);
+                        fleet = fleetRes.data;
+                        setFleetInfo(fleet ?? null);
+                    } catch { /* fall through with blank fields */ }
+                }
                 setF(prev => ({
                     ...prev,
-                    serialNumber: fleet?.carNumber || pf?.serialNumber || '',
+                    serialNumber: fleet?.carNumber || preloadedForm?.serialNumber || '',
                     faCode: fleet?.assignedUser?.accreditationNumber || '',
                     handoverDate: today,
                     handoverLocation: fleet?.stadium?.code || '',
@@ -572,29 +584,25 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                         <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
                     ) : (
                         <div className="bg-white text-sm text-gray-900">
-
-                            {/* System record — pulled from the cart, always read-only */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 px-4 py-3 bg-muted/40 border-b text-sm">
-                                <div><span className="text-muted-foreground">Car #:</span> <b>{form?.fleet?.carNumber ?? '—'}</b></div>
-                                <div><span className="text-muted-foreground">Type:</span> <b>{form?.fleet?.carType ?? '—'}</b></div>
-                                <div><span className="text-muted-foreground">Venue:</span> <b>{form?.fleet?.stadium?.name ?? '—'}</b></div>
-                                <div><span className="text-muted-foreground">Assigned FA:</span> <b>{form?.fleet?.assignedUser?.name ?? '—'}</b></div>
-                                <div><span className="text-muted-foreground">FA code:</span> <b>{form?.fleet?.assignedUser?.accreditationNumber ?? '—'}</b></div>
-                                <div><span className="text-muted-foreground">FA phone:</span> <b>{form?.fleet?.assignedUser?.phone ?? '—'}</b></div>
-                            </div>
-
-                            {/* Serial + FA Code bars */}
-                            <div className="bg-zinc-800 text-white px-4 py-2 flex items-center gap-4">
+                            {(() => { const fleet = form?.fleet ?? fleetInfo; return (
+                            <>
+                            {/* Serial + FA Code bars — both fetched from the system record (assigned cart / Focal Point), never hand-typed */}
+                            <div className="bg-zinc-800 text-white px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1">
                                 <span className="text-xs font-bold uppercase">Golf Cart Serial Number:</span>
                                 <input className="bg-white/10 border border-white/30 text-white rounded px-3 py-1 text-sm flex-1 max-w-xs placeholder:text-white/40"
-                                    placeholder="Serial number..." value={f.serialNumber || form?.fleet?.carNumber || ''} readOnly />
+                                    placeholder="Serial number..." value={f.serialNumber || fleet?.carNumber || ''} readOnly />
+                                <span className="text-xs text-white/50">Type: <b className="text-white/90">{fleet?.carType ?? '—'}</b></span>
+                                <span className="text-xs text-white/50">Venue: <b className="text-white/90">{fleet?.stadium?.name ?? '—'}</b></span>
                             </div>
-                            <div className="bg-zinc-700 text-white px-4 py-2 flex items-center gap-4">
+                            <div className="bg-zinc-700 text-white px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1">
                                 <span className="text-xs font-bold uppercase">FA Code:</span>
                                 <input className="bg-white/10 border border-white/30 text-white rounded px-3 py-1 text-sm flex-1 max-w-xs placeholder:text-white/40"
-                                    placeholder="FA code..." value={f.faCode} readOnly={isAdminReadonly}
-                                    onChange={e => setF(p => ({ ...p, faCode: e.target.value }))} />
+                                    placeholder="FA code..." value={f.faCode || fleet?.assignedUser?.accreditationNumber || ''} readOnly />
+                                <span className="text-xs text-white/50">Assigned FA: <b className="text-white/90">{fleet?.assignedUser?.name ?? '—'}</b></span>
+                                <span className="text-xs text-white/50">FA phone: <b className="text-white/90">{fleet?.assignedUser?.phone ?? '—'}</b></span>
                             </div>
+                            </>
+                            ); })()}
 
                             <div className={handoverLocked ? 'opacity-50 pointer-events-none select-none' : ''} aria-disabled={handoverLocked}>
                             {handoverLocked && (

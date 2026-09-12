@@ -556,72 +556,6 @@ export function HandoverPage() {
                 </div>
             )}
 
-            {/* ADMIN SECTION: HANDBACK MANAGEMENT */}
-            {isAdmin && (
-                <div className="space-y-6">
-                    <h2 className="text-2xl font-bold flex items-center gap-2"><History className="text-primary w-6 h-6" /> Releases & Returns</h2>
-                    <Card className="border-none shadow-md overflow-hidden">
-                         <CardHeader className="bg-muted/10 flex flex-row items-center justify-between space-y-0 pb-4">
-                            <div>
-                                <CardTitle className="text-lg">Handback Requests</CardTitle>
-                                <CardDescription>Carts returned by users awaiting admin inspection and sign-off before re-entering the pool.</CardDescription>
-                            </div>
-                            {handbackCarts.length > 0 && (
-                                <span className="bg-indigo-600 text-white text-[11px] font-black rounded-full px-2.5 py-1">{handbackCarts.length}</span>
-                            )}
-                         </CardHeader>
-                         <CardContent className="p-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Cart #</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Returned By</TableHead>
-                                        <TableHead>Venue</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {handbackLoading ? (
-                                        <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
-                                    ) : handbackCarts.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <CheckCircle2 className="w-8 h-8 opacity-20" />
-                                                    <p className="font-medium">No pending returns</p>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : handbackCarts.map(cart => (
-                                        <TableRow key={cart.id}>
-                                            <TableCell className="font-black font-mono text-primary">{cart.carNumber}</TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">{cart.carType}</TableCell>
-                                            <TableCell>
-                                                <div className="text-sm font-medium">{cart.assignedUser?.name ?? '—'}</div>
-                                                <div className="text-[10px] text-muted-foreground">{cart.assignedUser?.email}</div>
-                                            </TableCell>
-                                            <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium?.code}</Badge></TableCell>
-                                            <TableCell>
-                                                {cart.status === 'Returned' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px]">Checked Out</Badge>}
-                                                {cart.status === 'HandbackPending' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Handback Pending</Badge>}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                                                    onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'admin-return' })}>
-                                                    <FileSignature className="w-3 h-3 mr-1" /> Inspect &amp; Sign Return
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                         </CardContent>
-                    </Card>
-                </div>
-            )}
-
             {/* TABS: Admin operational views */}
             {isAdmin && <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-muted/50 p-1 rounded-xl flex-wrap">
@@ -870,6 +804,73 @@ export function HandoverPage() {
 
 
             </Tabs>}
+
+            {/* ADMIN SECTION: HANDBACK MANAGEMENT — shown below Pending Handovers, since a cart must complete
+                handover + usage before it can reach the handback stage. */}
+            {isAdmin && (
+                <div className="space-y-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-2"><History className="text-primary w-6 h-6" /> Releases & Returns</h2>
+                    <Card className="border-none shadow-md overflow-hidden">
+                         <CardHeader className="bg-muted/10 flex flex-row items-center justify-between space-y-0 pb-4">
+                            <div>
+                                <CardTitle className="text-lg">Handback Requests</CardTitle>
+                                <CardDescription>Carts returned by users awaiting admin inspection and sign-off before re-entering the pool.</CardDescription>
+                            </div>
+                            {handbackCarts.length > 0 && (
+                                <span className="bg-indigo-600 text-white text-[11px] font-black rounded-full px-2.5 py-1">{handbackCarts.length}</span>
+                            )}
+                         </CardHeader>
+                         <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Cart #</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Returned By</TableHead>
+                                        <TableHead>Venue</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Action</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {handbackLoading ? (
+                                        <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
+                                    ) : handbackCarts.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <CheckCircle2 className="w-8 h-8 opacity-20" />
+                                                    <p className="font-medium">No pending returns</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : handbackCarts.map(cart => (
+                                        <TableRow key={cart.id}>
+                                            <TableCell className="font-black font-mono text-primary">{cart.carNumber}</TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">{cart.carType}</TableCell>
+                                            <TableCell>
+                                                <div className="text-sm font-medium">{cart.assignedUser?.name ?? '—'}</div>
+                                                <div className="text-[10px] text-muted-foreground">{cart.assignedUser?.email}</div>
+                                            </TableCell>
+                                            <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium?.code}</Badge></TableCell>
+                                            <TableCell>
+                                                {cart.status === 'Returned' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px]">Checked Out</Badge>}
+                                                {cart.status === 'HandbackPending' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Handback Pending</Badge>}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                    onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'admin-return' })}>
+                                                    <FileSignature className="w-3 h-3 mr-1" /> Inspect &amp; Sign Return
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                         </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* ADDITIONAL DRIVERS MODAL */}
             <Dialog open={!!driversModal} onOpenChange={open => !open && setDriversModal(null)}>

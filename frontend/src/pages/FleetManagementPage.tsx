@@ -22,6 +22,7 @@ interface FleetCart {
     carType: string;
     status: string;
     requiresVAP: boolean;
+    isPool: boolean;
     stadiumId: string;
     stadium: { id: string; name: string; code: string };
     department?: { id: string; name: string; code?: string };
@@ -33,8 +34,14 @@ interface FAUser {
     name: string;
     email: string;
     phone?: string;
+    accreditationNumber?: string;
     stadium?: { id: string; name: string };
     department?: { id: string; name: string; code?: string };
+}
+
+/** A pool cart has no dedicated Focal Point — it's a shared resource, so its status reads "Pool" everywhere. */
+function displayStatus(cart: { status: string; isPool: boolean }): string {
+    return cart.isPool ? 'Pool' : cart.status;
 }
 
 interface Stadium {
@@ -48,6 +55,7 @@ const STATUS_COLORS: Record<string, string> = {
     'Assigned': 'text-purple-600 font-semibold',
     'Dispatched': 'text-blue-600 font-semibold',
     'Under Maintenance': 'text-red-600 font-semibold',
+    'Pool': 'text-teal-600 font-semibold',
 };
 
 const CAR_TYPES = ['Cargo', 'Accessibility', '6-Seater', '4-Seater'] as const;
@@ -431,7 +439,13 @@ export function FleetManagementPage() {
                                                 <div className="flex justify-between">
                                                     <span>Available:</span>
                                                     <span className="font-medium text-green-600">
-                                                        {carts.filter(c => c.status === 'Available').length}
+                                                        {carts.filter(c => c.status === 'Available' && !c.isPool).length}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Pool Carts:</span>
+                                                    <span className="font-medium text-teal-600">
+                                                        {carts.filter(c => c.isPool).length}
                                                     </span>
                                                 </div>
                                             </div>
@@ -588,8 +602,8 @@ export function FleetManagementPage() {
                                                         <TableCell>{cart.stadium?.code || cart.stadium?.name || '—'}</TableCell>
                                                     )}
                                                     <TableCell>
-                                                        <span className={STATUS_COLORS[cart.status] || 'text-gray-600'}>
-                                                            {cart.status}
+                                                        <span className={STATUS_COLORS[displayStatus(cart)] || 'text-gray-600'}>
+                                                            {displayStatus(cart)}
                                                         </span>
                                                     </TableCell>
                                                     <TableCell>
@@ -677,7 +691,7 @@ export function FleetManagementPage() {
                                         .filter(u => !selectedStadium || selectedStadium === 'all' || u.stadium?.id === selectedStadium)
                                         .map(u => (
                                             <SelectItem key={u.id} value={u.id}>
-                                                {u.name}{u.phone ? ` · ${u.phone}` : ''} {u.stadium ? `(${u.stadium.name})` : ''}
+                                                {u.name}{u.phone ? ` · ${u.phone}` : ''} {u.department ? `· ${u.department.code || u.department.name}` : ''} {u.stadium ? `(${u.stadium.name})` : ''}
                                             </SelectItem>
                                         ))
                                     }
@@ -687,6 +701,14 @@ export function FleetManagementPage() {
                         <p className="text-xs text-muted-foreground">
                             Current Focal Point: {selectedCart?.assignedUser?.name || 'Unassigned'}
                             {selectedCart?.assignedUser?.phone ? ` · ${selectedCart.assignedUser.phone}` : ''}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Department follows the Focal Point automatically:{' '}
+                            <span className="font-medium">
+                                {assignUserId
+                                    ? faUsers.find(u => u.id === assignUserId)?.department?.name ?? 'No department set for this Focal Point'
+                                    : selectedCart?.department?.name ?? '—'}
+                            </span>
                         </p>
                     </div>
                     <DialogFooter>

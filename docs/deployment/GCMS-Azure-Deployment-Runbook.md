@@ -1,6 +1,6 @@
 # GCMS — Azure Deployment & Migration Runbook
 
-**Prepared:** 2026-09-11 | **Branch:** `feature/pool-booking-system` (commit `4eb80bc`) | **Target:** Azure Container Apps
+**Prepared:** 2026-09-11 | **Updated:** 2026-09-12 | **Branch:** `feature/pool-booking-system` | **Target:** Azure Container Apps
 
 ---
 
@@ -25,9 +25,9 @@ point DNS at it — until then, the old deployment is your safety net.
 
 | Area | Status |
 |---|---|
-| Application code | Feature-complete for this milestone: fleet, handover, maintenance, pool booking, incidents & warnings ticketing, reports, settings |
-| Database | Switched from SQLite to **PostgreSQL** in `prisma/schema.prisma` — this is a breaking, already-made decision, not a future step |
-| Backend build | `tsc --noEmit` clean, 60/60 unit tests passing |
+| Application code | Feature-complete for this milestone: fleet (with Focal-Point→Department auto-sync), Pool status, handover (reordered workflow, deduplicated form, system-fetched serial/FA-code), maintenance, pool booking (with due-time reminders + FA extension-request/Admin-approval workflow), a full template-matched Incident Report form (fillable, PDF, Contracts/Maintenance escalation), a catalog-driven 3-level Warning Ticket system, reports, settings, and a restyled login page |
+| Database | **PostgreSQL** in `prisma/schema.prisma`. Two migrations added 2026-09-12: `20260912173213_incident_form_and_ticket_fields` (Incident report-form fields + escalation flags) and `20260912173805_pool_booking_reminders_and_extensions` (reminder/overdue flags + extension-request fields on `PoolBookingRequest`) — both additive, no destructive changes, applied automatically by `prisma migrate deploy` in Step 5.5 |
+| Backend build | `tsc --noEmit` clean (backend and frontend), 60/60 unit tests passing |
 | Frontend build | `tsc --noEmit` clean, production build succeeds, `eslint` reports 0 errors (24 reviewed low-risk warnings remain) |
 | Docker image | Written (`Dockerfile`, root of repo) — multi-stage build producing one image that serves both the API and the built React app |
 | Storage driver | Abstracted — supports local disk, MinIO, or **Azure Blob Storage** behind one interface, selected via `STORAGE_DRIVER` env var |
@@ -413,6 +413,7 @@ Two independent safety nets:
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Yes (if smtp) | Your relay's connection details |
 | `EMAIL_FROM` | No | Sender address shown to recipients |
 | `LOG_LEVEL` | No | Defaults to `info` |
+| `POOL_REMINDER_MINUTES_BEFORE` | No | Defaults to `30`. How long before a pool booking's return time the FA + Admin get a "due soon" notification (a one-time "overdue" notice fires once it passes). The in-process poller (`server.ts`, every 60s) is safe under `--max-replicas > 1` — each tick claims a row with a conditional `updateMany` before notifying, so only one replica ever sends a given reminder even with several replicas polling concurrently |
 
 ---
 

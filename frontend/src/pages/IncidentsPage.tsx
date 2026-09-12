@@ -8,10 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Download, ShieldAlert, Plus } from 'lucide-react';
+import { Loader2, Download, ShieldAlert, Plus, FileWarning, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateTime } from '@/lib/dateUtils';
 import { ReportIncidentModal } from '@/components/incidents/ReportIncidentModal';
+import { IncidentReportFormModal } from '@/components/incidents/IncidentReportFormModal';
+import { TICKET_CATALOG, TICKET_LEVEL_LABELS, type TicketViolation } from '@/lib/ticketCatalog';
 
 const STATUS_COLORS: Record<string, string> = {
     Open: 'bg-red-100 text-red-800',
@@ -30,12 +32,20 @@ export function IncidentsPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [detail, setDetail] = useState<any | null>(null);
     const [reportOpen, setReportOpen] = useState(false);
+    const [reportFormOpen, setReportFormOpen] = useState(false);
+    const [reportFormIncidentId, setReportFormIncidentId] = useState<string | null>(null);
 
-    // issue-warning state
+    // issue-ticket state
     const [issueOn, setIssueOn] = useState(false);
-    const [wLevel, setWLevel] = useState(1);
+    const [wLevel, setWLevel] = useState<1 | 2 | 3>(1);
+    const [wViolation, setWViolation] = useState<TicketViolation | null>(null);
     const [wReason, setWReason] = useState('');
     const [issuing, setIssuing] = useState(false);
+
+    // escalate state
+    const [escalContracts, setEscalContracts] = useState(false);
+    const [escalMaintenance, setEscalMaintenance] = useState(false);
+    const [escalating, setEscalating] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -56,12 +66,31 @@ export function IncidentsPage() {
     const openDetail = async (id: string) => {
         try {
             const res = await incidentsApi.get(id);
-            setDetail(res.data.data);
+            const d = res.data.data;
+            setDetail(d);
             setIssueOn(false);
             setWReason('');
-            setWLevel(recommendLevel(res.data.data.warnings ?? []));
+            setWViolation(null);
+            setWLevel(recommendLevel(d.warnings ?? []) as 1 | 2 | 3);
+            setEscalContracts(!!d.escalatedToContracts);
+            setEscalMaintenance(!!d.escalatedToMaintenance);
         } catch {
             toast.error('Failed to open incident');
+        }
+    };
+
+    const escalate = async () => {
+        if (!detail) return;
+        if (!escalContracts && !escalMaintenance) { toast.error('Pick at least one team to escalate to'); return; }
+        setEscalating(true);
+        try {
+            await incidentsApi.escalate(detail.id, { contracts: escalContracts, maintenance: escalMaintenance });
+            toast.success('Escalated for follow-up');
+            await openDetail(detail.id);
+        } catch (e: any) {
+            toast.error(e?.response?.data?.error || 'Failed to escalate');
+        } finally {
+            setEscalating(false);
         }
     };
 
@@ -90,18 +119,21 @@ export function IncidentsPage() {
         }
     };
 
-    const issueWarning = async () => {
-        if (!detail || !wReason.trim()) { toast.error('Reason is required'); return; }
+    const issueTicket = async () => {
+        if (!detail) return;
+        const reason = [wViolation?.text, wReason.trim()].filter(Boolean).join(' — ');
+        if (!reason) { toast.error('Pick a violation or enter a reason'); return; }
         setIssuing(true);
         try {
-            const res = await incidentsApi.issueWarning(detail.id, { level: wLevel, reason: wReason.trim() });
-            toast.success(res.data.message || 'Warning issued');
+            const res = await incidentsApi.issueWarning(detail.id, { level: wLevel, reason });
+            toast.success(res.data.message || 'Ticket issued');
             setIssueOn(false);
             setWReason('');
+            setWViolation(null);
             await openDetail(detail.id);
             load();
         } catch (e: any) {
-            toast.error(e?.response?.data?.error || 'Failed to issue warning');
+            toast.error(e?.response?.data?.error || 'Failed to issue ticket');
         } finally {
             setIssuing(false);
         }
@@ -111,7 +143,12 @@ export function IncidentsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <h1 className="text-3xl font-bold flex items-center gap-2"><ShieldAlert className="w-7 h-7" /> Incidents</h1>
-                <Button onClick={() => setReportOpen(true)}><Plus className="w-4 h-4 mr-2" />Report incident</Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setReportOpen(true)}><Plus className="w-4 h-4 mr-2" />Report incident</Button>
+                    <Button className="bg-red-900 hover:bg-red-800 text-white" onClick={() => { setReportFormIncidentId(null); setReportFormOpen(true); }}>
+                        <FileWarning className="w-4 h-4 mr-2" />Create Incident Report
+                    </Button>
+                </div>
             </div>
 
             <Card>
@@ -225,22 +262,45 @@ export function IncidentsPage() {
                                     </div>
                                 </div>
 
-                                {/* Issue a warning */}
+                                {/* Escalate to Contracts / Maintenance */}
+                                <div className="rounded border p-3 space-y-2">
+                                    <span className="text-sm font-medium">Escalate for follow-up</span>
+                                    <div className="flex flex-wrap items-center gap-4">
+                                        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                            <input type="checkbox" checked={escalContracts} onChange={e => setEscalContracts(e.target.checked)} />
+                                            Contracts team
+                                        </label>
+                                        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                            <input type="checkbox" checked={escalMaintenance} onChange={e => setEscalMaintenance(e.target.checked)} />
+                                            Maintenance team
+                                        </label>
+                                        <Button size="sm" variant="outline" onClick={escalate} disabled={escalating}>
+                                            <Send className="w-3 h-3 mr-1" />{escalating ? 'Escalating…' : 'Escalate'}
+                                        </Button>
+                                    </div>
+                                    {(detail.escalatedToContracts || detail.escalatedToMaintenance) && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Already escalated to: {[detail.escalatedToContracts && 'Contracts', detail.escalatedToMaintenance && 'Maintenance'].filter(Boolean).join(', ')}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Issue a Ticket — warning catalog from the 3-level violation table */}
                                 <div className="rounded border p-3 space-y-2">
                                     <label className="flex items-center gap-2 text-sm font-medium">
                                         <input type="checkbox" checked={issueOn} onChange={e => setIssueOn(e.target.checked)} />
-                                        Issue a warning
+                                        Issue a Ticket
                                     </label>
                                     {issueOn && (
                                         <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                                 <Label className="text-xs">Level</Label>
-                                                <Select value={String(wLevel)} onValueChange={v => setWLevel(parseInt(v))}>
-                                                    <SelectTrigger className="w-40 h-8"><SelectValue /></SelectTrigger>
+                                                <Select value={String(wLevel)} onValueChange={v => { setWLevel(parseInt(v) as 1 | 2 | 3); setWViolation(null); }}>
+                                                    <SelectTrigger className="w-64 h-8"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="1">Level 1 — soft</SelectItem>
-                                                        <SelectItem value="2">Level 2</SelectItem>
-                                                        <SelectItem value="3">Level 3 — ban</SelectItem>
+                                                        {([1, 2, 3] as const).map(l => (
+                                                            <SelectItem key={l} value={String(l)}>{TICKET_LEVEL_LABELS[l]}</SelectItem>
+                                                        ))}
                                                     </SelectContent>
                                                 </Select>
                                                 <span className="text-xs text-muted-foreground">
@@ -250,13 +310,24 @@ export function IncidentsPage() {
                                             {wLevel === 3 && (
                                                 <div className="text-xs text-red-600 font-medium">Level 3 will block this user from the system.</div>
                                             )}
-                                            <Textarea rows={2} placeholder="Reason" value={wReason} onChange={e => setWReason(e.target.value)} />
-                                            <Button size="sm" onClick={issueWarning} disabled={issuing}>{issuing ? 'Issuing…' : 'Issue warning'}</Button>
+                                            <Select value={wViolation?.code ?? ''} onValueChange={code => setWViolation(TICKET_CATALOG[wLevel].find(v => v.code === code) ?? null)}>
+                                                <SelectTrigger className="h-8"><SelectValue placeholder="Select the violation…" /></SelectTrigger>
+                                                <SelectContent>
+                                                    {TICKET_CATALOG[wLevel].map(v => (
+                                                        <SelectItem key={v.code} value={v.code}>{v.text}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Textarea rows={2} placeholder="Additional notes (optional)" value={wReason} onChange={e => setWReason(e.target.value)} />
+                                            <Button size="sm" onClick={issueTicket} disabled={issuing}>{issuing ? 'Issuing…' : 'Issue Ticket'}</Button>
                                         </div>
                                     )}
                                 </div>
                             </div>
                             <DialogFooter>
+                                <Button variant="outline" onClick={() => { setReportFormIncidentId(detail.id); setReportFormOpen(true); }}>
+                                    <FileWarning className="w-4 h-4 mr-2" />Open Report Form
+                                </Button>
                                 <Button variant="outline" onClick={() => downloadPdf(detail.id)}>
                                     <Download className="w-4 h-4 mr-2" />Download PDF
                                 </Button>
@@ -268,6 +339,13 @@ export function IncidentsPage() {
             </Dialog>
 
             <ReportIncidentModal open={reportOpen} onOpenChange={setReportOpen} onFiled={load} />
+
+            <IncidentReportFormModal
+                open={reportFormOpen}
+                onClose={() => setReportFormOpen(false)}
+                incidentId={reportFormIncidentId}
+                onSaved={() => { load(); if (detail) openDetail(detail.id); }}
+            />
         </div>
     );
 }

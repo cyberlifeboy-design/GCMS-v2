@@ -1,8 +1,21 @@
 import app from './app';
 import { initializeStorage } from './config/storage';
 import { checkDatabaseConnection } from './config/database';
+import { poolBookingRequestsService } from './modules/pool-booking-requests/pool-booking-requests.service';
 
 const PORT = process.env.PORT || 3005;
+const POOL_REMINDER_MINUTES_BEFORE = parseInt(process.env.POOL_REMINDER_MINUTES_BEFORE || '30', 10);
+const POOL_REMINDER_POLL_MS = 60 * 1000;
+
+/** No external scheduler in this app — a simple interval is enough for this poll's cadence. */
+function startPoolBookingReminderLoop() {
+    setInterval(() => {
+        poolBookingRequestsService.scanReminders(POOL_REMINDER_MINUTES_BEFORE).catch((err) => {
+            console.error('Pool booking reminder scan failed:', err);
+        });
+    }, POOL_REMINDER_POLL_MS);
+    console.log(`⏰ Pool booking reminder loop started (checks every ${POOL_REMINDER_POLL_MS / 1000}s, warns ${POOL_REMINDER_MINUTES_BEFORE}min before due)`);
+}
 
 async function startServer() {
     try {
@@ -27,6 +40,8 @@ async function startServer() {
             console.log(`🔐 Auth: http://localhost:${PORT}/api/v1/auth`);
             console.log(`\n🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
         });
+
+        startPoolBookingReminderLoop();
     } catch (error) {
         console.error('❌ Server startup failed:', error);
         process.exit(1);

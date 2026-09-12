@@ -313,3 +313,49 @@ own (not blindly `--force`d):
 - `nodemailer` → 10.0.7 (major) — re-test SMTP + Resend email sending after bumping.
 - `pptxgenjs` → 1.1.5 (npm's reported fix target, also a downgrade from `^4.0.1`) — same
   caveat as `exceljs`; verify PPTX label export still works before adopting.
+
+## 12. Session update (2026-09-12)
+
+Feature work landed on top of Phase 7, still within the same deployment shape (no new
+managed resources, no breaking env var renames):
+
+- **Fleet Management**: assigning a Focal Point now auto-syncs the cart's `departmentId`
+  from that user's own department (`fleet.service.ts`); the assignment-matrix query now
+  actually returns FA department data (it silently didn't before).
+- **Pool status**: pool carts now display a distinct "Pool" status everywhere instead of
+  borrowing "Available"/"Assigned"; Fleet Management's per-venue card shows a pool-car
+  count.
+- **Pool booking reminders + extensions** (new): an in-process poller in `server.ts`
+  (60s interval, `POOL_REMINDER_MINUTES_BEFORE`, default 30) notifies the FA and venue
+  Admin/SuperAdmin as a booking's return time approaches, and again once if it passes
+  unreturned. FAs can request an extension; only Admin/SuperAdmin can approve it
+  (`POST/PATCH /pool-booking-requests/:id/extension`). The poller is safe under multiple
+  Container Apps replicas — each tick claims a row with a conditional `updateMany`
+  before notifying, so only one replica ever sends a given reminder.
+- **Handover Cycle**: "Carts Awaiting Handover Form" now renders above "Handback
+  Requests" (previously reversed); the handover form's duplicated header block was
+  removed, and Serial Number / FA Code are now genuinely system-fetched read-only
+  fields (previously blank on a brand-new form since the cart record was never actually
+  loaded client-side) — fixed by fetching the Fleet record directly (`GET /fleet/:id`,
+  now also returning `accreditationNumber`) when a form doesn't exist yet.
+- **Incident Report** (new): `Incident` gained `formData` (JSON, the full
+  template-matched form), `formSignatureData`/`formSignedAt`/`formSignedById`, and
+  `escalatedToContracts`/`escalatedToMaintenance`/`escalatedAt`. New endpoints
+  `PATCH /incidents/:id/form`, `POST /incidents/:id/form/sign`,
+  `POST /incidents/:id/escalate` (notifies the Contracts/Maintenance roles via
+  `notificationService.createForRoles`). The incident PDF (`pdf.service.ts`) now renders
+  every template field when present.
+- **Warning Tickets**: the existing 3-level warning/block system is now driven by a
+  16-violation catalog (`frontend/src/lib/ticketCatalog.ts`) matching the LOC's
+  documented ticket criteria, surfaced as "Issue a Ticket" in the Incidents UI. No
+  backend/schema change — same `Warning` model and `/warnings` endpoints as before.
+- **Login page**: restyled to match the organization's other SC/LOC portals (gradient
+  theme, layout, button styling) — static asset/branding change only, no auth behavior
+  change. The Microsoft sign-in button is still a placeholder (`toast.info(...)`); no
+  OAuth route exists yet.
+- **Migrations**: `20260912173213_incident_form_and_ticket_fields`,
+  `20260912173805_pool_booking_reminders_and_extensions` — both additive-only, applied
+  automatically by `prisma migrate deploy` (Section 5) with no manual data backfill
+  needed.
+- **New env var**: `POOL_REMINDER_MINUTES_BEFORE` (optional, default `30`) — see the
+  entry added inline near `LOG_LEVEL` above and in `backend/.env.example`.

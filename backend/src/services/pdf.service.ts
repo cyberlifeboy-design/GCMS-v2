@@ -242,6 +242,31 @@ export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfDat
   );
 }
 
+/** Matches the fillable Golf Cart/UTV Incident Report Form template — see IncidentReportFormModal.tsx. */
+export interface IncidentFormData {
+  incidentTypes?: string[];
+  venueLocationAddress?: string;
+  userFullNameFunction?: string;
+  userContact?: string;
+  witnessFullNameFunction?: string;
+  witnessContact?: string;
+  injury?: {
+    prefix?: string; firstName?: string; lastName?: string; dob?: string; contact?: string;
+    designation?: string; designationOther?: string;
+    descriptionInjury?: string;
+    treatmentReceived?: string;
+    treatmentProvidedBy?: string;
+  };
+  incidentReportedTo?: string[];
+  reportCompletedBy?: string;
+  reportCompletedByOther?: string;
+  reporterName?: string;
+  reporterJobTitle?: string;
+  reporterContact?: string;
+  otherInfo?: string;
+  checklist?: Record<string, string>;
+}
+
 export interface IncidentReportPdfData {
   reference: string;
   title: string;
@@ -254,12 +279,35 @@ export interface IncidentReportPdfData {
   carNumber: string | null;
   stadiumName: string | null;
   photoCount: number;
+  formData?: IncidentFormData | null;
+  formSignedByName?: string | null;
+  formSignedAt?: string | null;
+  escalatedToContracts?: boolean;
+  escalatedToMaintenance?: boolean;
   warnings: Array<{ reference: string; level: number; reason: string; issuedBy: string | null; issuedAt: string; revoked: boolean }>;
 }
 
-/** Branded incident report — the incident plus every warning issued against it. */
+const CHECKLIST_LABELS: Record<string, string> = {
+  headLightsOperational: 'Head lights fully operational (both sides)',
+  headLightsLensesOk: 'Head lights free of cracks/missing lenses',
+  tailLightsOperational: 'Tail lights / turn signals operational (both sides)',
+  tailLightsLensesOk: 'Tail light lenses free of cracks/missing',
+  brakeLightsOperational: 'Brake lights fully operational',
+  turnSignalsOperational: 'Turn signals fully operational (both sides)',
+  tiresNoCracks: 'Tires free of visible cracks/uneven wear',
+  tiresNoForeignObjects: 'Tires free of foreign objects (nails/screws)',
+  batteryCablesOk: 'Battery cables free of corrosion/cracks',
+  brakesOperable: 'Brakes fully operable (stopping ability)',
+  brakesNoNoise: 'Brakes free of squeak/squeal/grinding',
+  wipersOperable: 'Windshield wipers operable',
+  windshieldClear: 'Windshield clear of cracks/scratches',
+  hornOperable: 'Horn operable and adequate',
+};
+
+/** Branded incident report — the full template fields (when filled) plus every warning issued against it. */
 export async function incidentReportPdf(args: { data: IncidentReportPdfData }): Promise<Buffer> {
   const { data } = args;
+  const f = data.formData ?? null;
   const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
     doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
@@ -269,22 +317,71 @@ export async function incidentReportPdf(args: { data: IncidentReportPdfData }): 
     doc.font('Helvetica').fontSize(10);
   };
   return renderPdf(
-    { title: 'Incident Report', subtitle: data.subjectName ? `Subject: ${data.subjectName}` : undefined, reference: data.reference },
+    { title: 'Golf Cart/Utility Vehicle Incident Report Form', subtitle: data.subjectName ? `Subject: ${data.subjectName}` : undefined, reference: data.reference },
     (doc) => {
       heading(doc, 'Incident');
       kv(doc, 'Title', data.title);
       kv(doc, 'Status', data.status);
+      kv(doc, 'Incident type', f?.incidentTypes?.length ? f.incidentTypes.join(', ') : '—');
       kv(doc, 'Occurred at', new Date(data.occurredAt).toLocaleString());
-      kv(doc, 'Venue', data.stadiumName);
+      kv(doc, 'Venue / location / address', f?.venueLocationAddress || data.stadiumName);
       kv(doc, 'Cart', data.carNumber);
       kv(doc, 'Photos attached', data.photoCount);
       doc.moveDown(0.3).font('Helvetica').fontSize(10).fillColor('#000').text(data.description);
+
+      heading(doc, 'User of the golf cart / UTV when the incident happened');
+      kv(doc, 'Full name and function', f?.userFullNameFunction || data.subjectName);
+      kv(doc, 'Contact number', f?.userContact);
+
+      heading(doc, 'Witness');
+      kv(doc, 'Full name and function', f?.witnessFullNameFunction);
+      kv(doc, 'Contact number', f?.witnessContact);
+
+      if (f?.injury && (f.injury.firstName || f.injury.lastName || f.injury.descriptionInjury)) {
+        heading(doc, 'Injury / illness and treatment details');
+        kv(doc, 'Name', `${f.injury.prefix ?? ''} ${f.injury.firstName ?? ''} ${f.injury.lastName ?? ''}`.trim());
+        kv(doc, 'DOB', f.injury.dob);
+        kv(doc, 'Contact number', f.injury.contact);
+        kv(doc, 'Designation', f.injury.designation === 'Other' ? f.injury.designationOther : f.injury.designation);
+        kv(doc, 'Description of injury/illness', f.injury.descriptionInjury);
+        kv(doc, 'Treatment received', f.injury.treatmentReceived);
+        kv(doc, 'Treatment provided by', f.injury.treatmentProvidedBy);
+      }
+
+      heading(doc, 'Reporting');
+      kv(doc, 'Incident reported to', f?.incidentReportedTo?.length ? f.incidentReportedTo.join(', ') : '—');
+      kv(doc, 'Report completed by', f?.reportCompletedBy === 'Other' ? f.reportCompletedByOther : f?.reportCompletedBy);
+      kv(doc, 'Name', f?.reporterName || data.reporterName);
+      kv(doc, 'Job title', f?.reporterJobTitle);
+      kv(doc, 'Contact no.', f?.reporterContact);
+      if (f?.otherInfo) kv(doc, 'Other relevant information', f.otherInfo);
+
+      if (f?.checklist && Object.keys(f.checklist).length) {
+        heading(doc, 'Golf Cart/UTV investigation checklist after incident');
+        Object.entries(CHECKLIST_LABELS).forEach(([key, label]) => {
+          const v = f.checklist?.[key];
+          if (v) kv(doc, label, v === 'yes' ? 'Yes' : v === 'no' ? 'No' : v);
+        });
+        if (f.checklist.roadTestAbnormalities) kv(doc, 'Road test — abnormalities noted', f.checklist.roadTestAbnormalities);
+      }
+
+      if (data.formSignedByName) {
+        heading(doc, 'Sign-off');
+        kv(doc, 'Signed by', data.formSignedByName);
+        kv(doc, 'Signed at', data.formSignedAt ? new Date(data.formSignedAt).toLocaleString() : '—');
+      }
+
+      if (data.escalatedToContracts || data.escalatedToMaintenance) {
+        heading(doc, 'Escalation');
+        kv(doc, 'Escalated to Contracts', data.escalatedToContracts ? 'Yes' : 'No');
+        kv(doc, 'Escalated to Maintenance', data.escalatedToMaintenance ? 'Yes' : 'No');
+      }
 
       heading(doc, 'People');
       kv(doc, 'Subject', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`);
       kv(doc, 'Reported by', data.reporterName);
 
-      heading(doc, 'Warnings issued');
+      heading(doc, 'Warnings / tickets issued');
       if (data.warnings.length === 0) {
         doc.text('None.');
       } else {

@@ -16,7 +16,10 @@ export const minioClient = new Minio.Client({
 });
 
 // Local fallback directory when the selected driver is unavailable
-export const UPLOADS_DIR = path.join(__dirname, '../../../uploads');
+// Relative to cwd (not __dirname) so it resolves the same whether running
+// from src/ via tsx (dev) or from the compiled dist/ (prod) — dist sits one
+// directory shallower than src, which broke a fixed "../../../uploads" offset.
+export const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 
 // Bucket names
 export const BUCKETS = {

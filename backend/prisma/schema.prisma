@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -132,6 +133,7 @@ model User {
   blockedUsers        User[]          @relation("UserBlockedBy")
   incidentsAbout      Incident[]      @relation("IncidentSubject")
   incidentsReported   Incident[]      @relation("IncidentReporter")
+  incidentFormsSigned Incident[]      @relation("IncidentFormSigner")
   warnings            Warning[]       @relation("WarningUser")
   warningsIssued      Warning[]       @relation("WarningIssuer")
   warningsRevoked     Warning[]       @relation("WarningRevoker")
@@ -516,6 +518,16 @@ model PoolBookingRequest {
   returnedById   String?
   returnedBy     User?     @relation("PoolBookingRequestReturnedBy", fields: [returnedById], references: [id])
 
+  // Time-limit reminders — sent once each so the in-process poller doesn't spam
+  reminderSentAt     DateTime?
+  overdueNotifiedAt  DateTime?
+
+  // Extension request — the FA asks for more time; only Admin/SuperAdmin can approve
+  extensionRequestedEndDate String?
+  extensionRequestedEndTime String?
+  extensionRequestedAt      DateTime?
+  extensionStatus           String?   // Pending, Approved, Rejected
+
   requestToken   String    @unique
 
   createdById    String?
@@ -549,6 +561,20 @@ model Incident {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   warnings       Warning[]
+
+  // Full Golf Cart/UTV Incident Report Form — matches the official LOC template.
+  // JSON: incident type checkboxes, user/witness info, injury & treatment details,
+  // reported-to/completed-by fields, and the vehicle investigation checklist.
+  formData              String?
+  formSignatureData     String?
+  formSignedAt          DateTime?
+  formSignedById        String?
+  formSignedByUser      User?     @relation("IncidentFormSigner", fields: [formSignedById], references: [id])
+
+  // Escalation to Contracts / Maintenance teams for follow-up on the car involved
+  escalatedToContracts   Boolean   @default(false)
+  escalatedToMaintenance Boolean   @default(false)
+  escalatedAt            DateTime?
 
   @@index([subjectUserId])
   @@index([status])

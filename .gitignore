@@ -39,3 +39,6 @@ coverage/
 
 # Git worktrees (local dev isolation)
 .worktrees/
+
+# Local live-reload dev stack override (machine-specific, not for CI/prod)
+docker-compose.dev-live.yml
