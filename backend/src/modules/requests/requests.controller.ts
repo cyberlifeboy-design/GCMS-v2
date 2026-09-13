@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { emailService } from '../../services/email.service';
 import { settingsService } from '../settings/settings.service';
+import * as ExcelJS from 'exceljs';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
+import { renderPdf } from '../../services/pdf.service';
 
 const createRequestSchema = z.object({
     requesterName: z.string().min(1, 'Name is required'),
@@ -17,7 +20,12 @@ const createRequestSchema = z.object({
     fourSeaterCount: z.number().int().min(0).default(0),
     sixSeaterCount: z.number().int().min(0).default(0),
     accessibilityCount: z.number().int().min(0).default(0),
+    justification: z.string().min(1, 'Please explain why your department needs these carts'),
     notes: z.string().optional(),
+});
+
+const emailRequesterSchema = z.object({
+    message: z.string().min(1, 'A message is required'),
 });
 
 const reviewRequestSchema = z.object({
@@ -123,6 +131,25 @@ export class RequestsController {
     }
 
     /**
+     * Admin endpoint: Email the requester asking for more details
+     * POST /api/v1/requests/:id/email-requester
+     */
+    static async emailRequester(req: AuthRequest, res: Response) {
+        try {
+            const { message } = emailRequesterSchema.parse(req.body);
+            await requestsService.emailRequester(req.params.id as string, message);
+            res.status(200).json({ message: 'Email sent to requester' });
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else {
+                console.error('Email requester error:', error);
+                res.status(500).json({ error: error.message || 'Failed to email requester' });
+            }
+        }
+    }
+
+    /**
      * Admin endpoint: Get all requests with filters
      * GET /api/v1/requests
      */
@@ -153,6 +180,120 @@ export class RequestsController {
         } catch (error) {
             console.error('Get all requests error:', error);
             res.status(500).json({ error: 'Failed to fetch requests' });
+        }
+    }
+
+    /**
+     * Admin endpoint: Export the (filtered) request list as xlsx / pdf / docx —
+     * full requested cars, types and departments, shareable outside the app.
+     * GET /api/v1/requests/export?format=xlsx|pdf|docx
+     */
+    static async exportRequests(req: AuthRequest, res: Response) {
+        try {
+            const { status, stadiumId, departmentId, requestType, format } = req.query;
+            let filterStadiumId = stadiumId as string | undefined;
+            if (req.user?.role === 'Admin') filterStadiumId = req.user.stadiumId;
+
+            const { data: rows } = await requestsService.getAll({
+                status: status as string,
+                stadiumId: filterStadiumId,
+                departmentId: departmentId as string,
+                requestType: requestType as string | undefined,
+            });
+
+            const fmt = String(format || 'xlsx');
+            const rowData = rows.map((r: any) => ({
+                number: r.requestNumber,
+                requester: r.requesterName,
+                email: r.requesterEmail,
+                stadium: r.stadium?.name ?? '—',
+                stadiumCode: r.stadium?.code ?? '—',
+                department: r.department?.name ?? '—',
+                deptCode: r.department?.code ?? '—',
+                type: r.requestType,
+                cargo: r.cargoCount, fourSeater: r.fourSeaterCount, sixSeater: r.sixSeaterCount, accessibility: r.accessibilityCount,
+                total: r.cargoCount + r.fourSeaterCount + r.sixSeaterCount + r.accessibilityCount,
+                status: r.status,
+                justification: r.justification ?? '',
+                createdAt: new Date(r.createdAt).toLocaleDateString(),
+            }));
+
+            if (fmt === 'xlsx') {
+                const wb = new ExcelJS.Workbook();
+                const sheet = wb.addWorksheet('Car Requests');
+                sheet.columns = [
+                    { header: 'Request #', key: 'number', width: 10 },
+                    { header: 'Requester', key: 'requester', width: 22 },
+                    { header: 'Email', key: 'email', width: 26 },
+                    { header: 'Venue', key: 'stadiumCode', width: 10 },
+                    { header: 'Department', key: 'department', width: 22 },
+                    { header: 'Dept Code', key: 'deptCode', width: 10 },
+                    { header: 'Type', key: 'type', width: 12 },
+                    { header: 'Cargo', key: 'cargo', width: 8 },
+                    { header: '4-Seater', key: 'fourSeater', width: 10 },
+                    { header: '6-Seater', key: 'sixSeater', width: 10 },
+                    { header: 'Accessibility', key: 'accessibility', width: 12 },
+                    { header: 'Total Carts', key: 'total', width: 12 },
+                    { header: 'Status', key: 'status', width: 12 },
+                    { header: 'Justification', key: 'justification', width: 40 },
+                    { header: 'Submitted', key: 'createdAt', width: 14 },
+                ];
+                sheet.getRow(1).font = { bold: true };
+                rowData.forEach(r => sheet.addRow(r));
+                const buffer = await wb.xlsx.writeBuffer();
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                res.setHeader('Content-Disposition', 'attachment; filename=car_requests.xlsx');
+                res.send(buffer);
+                return;
+            }
+
+            if (fmt === 'docx') {
+                const headerRow = ['#', 'Requester', 'Venue', 'Department', 'Type', 'Carts', 'Status'];
+                const table = new Table({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    rows: [
+                        new TableRow({ children: headerRow.map(h => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })] })) }),
+                        ...rowData.map(r => new TableRow({
+                            children: [
+                                String(r.number), r.requester, r.stadiumCode, `${r.department} (${r.deptCode})`,
+                                r.type ?? '—', String(r.total), r.status,
+                            ].map(v => new TableCell({ children: [new Paragraph(v)] })),
+                        })),
+                    ],
+                });
+                const doc = new Document({
+                    sections: [{ children: [new Paragraph({ children: [new TextRun({ text: 'Car Requests Report', bold: true, size: 32 })] }), new Paragraph(''), table] }],
+                });
+                const buffer = await Packer.toBuffer(doc);
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                res.setHeader('Content-Disposition', 'attachment; filename=car_requests.docx');
+                res.send(buffer);
+                return;
+            }
+
+            // PDF (default fallback)
+            const buffer = await renderPdf(
+                { title: 'Car Requests Report', subtitle: `${rowData.length} request(s)`, reference: `REQ-${Date.now().toString(36).toUpperCase()}` },
+                (doc) => {
+                    rowData.forEach((r, i) => {
+                        if (i > 0) doc.moveDown(0.5);
+                        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000')
+                            .text(`#${r.number} — ${r.requester} (${r.email})`);
+                        doc.font('Helvetica').fontSize(9).fillColor('#333')
+                            .text(`${r.stadiumCode} · ${r.department} (${r.deptCode}) · ${r.type} · ${r.status}`);
+                        doc.text(`Carts — Cargo: ${r.cargo}  4-Seater: ${r.fourSeater}  6-Seater: ${r.sixSeater}  Accessibility: ${r.accessibility}  (Total: ${r.total})`);
+                        if (r.justification) doc.text(`Justification: ${r.justification}`);
+                        doc.fillColor('#000');
+                    });
+                    if (rowData.length === 0) doc.text('No requests match the selected filters.');
+                },
+            );
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename=car_requests.pdf');
+            res.end(buffer);
+        } catch (error) {
+            console.error('Export requests error:', error);
+            res.status(500).json({ error: 'Failed to export requests' });
         }
     }
 

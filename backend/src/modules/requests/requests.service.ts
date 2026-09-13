@@ -15,6 +15,7 @@ export interface CreateCarRequestData {
     fourSeaterCount: number;
     sixSeaterCount: number;
     accessibilityCount: number;
+    justification?: string;
     notes?: string;
 }
 
@@ -85,6 +86,7 @@ export class RequestsService {
                 fourSeaterCount: data.fourSeaterCount,
                 sixSeaterCount: data.sixSeaterCount,
                 accessibilityCount: data.accessibilityCount,
+                justification: data.justification,
                 notes: data.notes,
                 requestToken,
                 status: 'Pending',
@@ -137,6 +139,24 @@ export class RequestsService {
                 department: { select: { id: true, name: true, code: true } },
             },
         });
+    }
+
+    /** Admin/SuperAdmin asks the requester for more detail on their car request. */
+    async emailRequester(id: string, message: string) {
+        const request = await prisma.carRequest.findUnique({ where: { id } });
+        if (!request) throw new Error('Request not found');
+
+        await emailService.send({
+            to: request.requesterEmail,
+            subject: `More information needed on your car request`,
+            text:
+                `Hello ${request.requesterName},\n\n` +
+                `The Logistics team needs more information about your car request:\n\n` +
+                `${message}\n\n` +
+                `Please reply to this email with the details.\n\nThank you,\nGCMS`,
+        });
+
+        return request;
     }
 
     /**

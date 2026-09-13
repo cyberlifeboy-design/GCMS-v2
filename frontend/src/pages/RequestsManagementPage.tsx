@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Loader2, CheckCircle, XCircle, Eye, RefreshCw, Edit2, UserPlus, Link2, Copy } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Eye, RefreshCw, Edit2, UserPlus, Link2, Copy, MailQuestion, Download } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import {
     Dialog,
@@ -43,6 +43,7 @@ interface CarRequest {
     fourSeaterCount: number;
     sixSeaterCount: number;
     accessibilityCount: number;
+    justification?: string;
     notes?: string;
     status: string;
     reviewNotes?: string;
@@ -112,6 +113,14 @@ export function RequestsManagementPage() {
     const [linkDepartmentId, setLinkDepartmentId] = useState<string>('');
     const [generatedLink, setGeneratedLink] = useState<string>('');
     const [emailRecipient, setEmailRecipient] = useState('');
+
+    // "Email requester for more details" dialog
+    const [emailRequesterOpen, setEmailRequesterOpen] = useState(false);
+    const [emailRequesterMessage, setEmailRequesterMessage] = useState('');
+    const [emailRequesterSending, setEmailRequesterSending] = useState(false);
+
+    // Report export
+    const [exporting, setExporting] = useState(false);
 
     useEffect(() => {
         const loadStadiums = async () => {
@@ -274,6 +283,42 @@ export function RequestsManagementPage() {
         toast.success('Link copied to clipboard');
     };
 
+    const handleSendEmailRequester = async () => {
+        if (!selectedRequest || !emailRequesterMessage.trim()) return;
+        setEmailRequesterSending(true);
+        try {
+            await requestsApi.emailRequester(selectedRequest.id, emailRequesterMessage.trim());
+            toast.success(`Email sent to ${selectedRequest.requesterEmail}`);
+            setEmailRequesterOpen(false);
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to send email');
+        } finally {
+            setEmailRequesterSending(false);
+        }
+    };
+
+    const handleExport = async (format: 'xlsx' | 'pdf' | 'docx') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = {};
+            if (statusFilter) params.status = statusFilter;
+            if (typeFilter) params.requestType = typeFilter;
+            if (stadiumFilter) params.stadiumId = stadiumFilter;
+            if (departmentFilter) params.departmentId = departmentFilter;
+            const res = await requestsApi.export(format, params);
+            const url = URL.createObjectURL(new Blob([res.data]));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `car_requests.${format}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Failed to export requests');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const openReviewDialog = (request: CarRequest, action: 'approve' | 'reject') => {
         setSelectedRequest(request);
         setReviewAction(action);
@@ -326,7 +371,7 @@ export function RequestsManagementPage() {
                         Review and manage car requests from department leads
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     {isSuperAdmin && (
                         <Button variant="outline" size="sm" onClick={() => setLinkGeneratorOpen(true)}>
                             <Link2 className="w-4 h-4 mr-2" />
@@ -336,6 +381,15 @@ export function RequestsManagementPage() {
                     <Button variant="outline" size="sm" onClick={loadRequests}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         Refresh
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={exporting} onClick={() => handleExport('xlsx')}>
+                        <Download className="w-4 h-4 mr-2" /> Excel
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={exporting} onClick={() => handleExport('pdf')}>
+                        <Download className="w-4 h-4 mr-2" /> PDF
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={exporting} onClick={() => handleExport('docx')}>
+                        <Download className="w-4 h-4 mr-2" /> Word
                     </Button>
                 </div>
             </div>
@@ -592,6 +646,12 @@ export function RequestsManagementPage() {
                                     {selectedRequest.accessibilityCount > 0 && <span>Accessibility: {selectedRequest.accessibilityCount}</span>}
                                 </div>
                             </div>
+                            {selectedRequest.justification && (
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Justification</p>
+                                    <p>{selectedRequest.justification}</p>
+                                </div>
+                            )}
                             {selectedRequest.notes && (
                                 <div>
                                     <p className="text-sm text-muted-foreground">Notes</p>
@@ -628,6 +688,17 @@ export function RequestsManagementPage() {
                                 <p>{formatDate(selectedRequest.createdAt)}</p>
                             </div>
 
+                            {canManage && (
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => { setEmailRequesterMessage(''); setEmailRequesterOpen(true); }}
+                                >
+                                    <MailQuestion className="w-4 h-4 mr-2" />
+                                    Email Requester for More Details
+                                </Button>
+                            )}
+
                             {/* Create User Button */}
                             {canManage && selectedRequest.status === 'Approved' && (
                                 <Button
@@ -644,6 +715,34 @@ export function RequestsManagementPage() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setDetailsOpen(false)}>
                             Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Email Requester Dialog */}
+            <Dialog open={emailRequesterOpen} onOpenChange={setEmailRequesterOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Email Requester for More Details</DialogTitle>
+                        <DialogDescription>
+                            {selectedRequest && <span>This will email <strong>{selectedRequest.requesterEmail}</strong> directly.</span>}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                        <Label>Message</Label>
+                        <Textarea
+                            value={emailRequesterMessage}
+                            onChange={(e) => setEmailRequesterMessage(e.target.value)}
+                            placeholder="Please clarify the intended use of the requested carts..."
+                            rows={5}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEmailRequesterOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSendEmailRequester} disabled={emailRequesterSending || !emailRequesterMessage.trim()}>
+                            {emailRequesterSending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Send Email
                         </Button>
                     </DialogFooter>
                 </DialogContent>

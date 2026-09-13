@@ -60,8 +60,14 @@ router.use(authenticate);
 // GET /api/v1/requests - Get all requests (filtered by role)
 router.get('/requests', requireRole('SuperAdmin', 'Admin', 'Observer'), (req: Request, res: Response) => RequestsController.getAll(req as any, res));
 
+// GET /api/v1/requests/export - Download the (filtered) request list as xlsx/pdf/docx
+router.get('/requests/export', requireRole('SuperAdmin', 'Admin', 'Observer'), (req: Request, res: Response) => RequestsController.exportRequests(req as any, res));
+
 // GET /api/v1/requests/:id - Get request by ID
 router.get('/requests/:id', requireRole('SuperAdmin', 'Admin', 'Observer'), (req: Request, res: Response) => RequestsController.getById(req as any, res));
+
+// POST /api/v1/requests/:id/email-requester - Ask the requester for more details
+router.post('/requests/:id/email-requester', requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) => RequestsController.emailRequester(req as any, res));
 
 // POST /api/v1/requests/:id/approve - Approve a request
 router.post('/requests/:id/approve', requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) => RequestsController.approve(req as any, res));

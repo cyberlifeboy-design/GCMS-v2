@@ -353,6 +353,7 @@ model CarRequest {
   fourSeaterCount  Int       @default(0)
   sixSeaterCount   Int       @default(0)
   accessibilityCount Int     @default(0)
+  justification    String?   @db.Text // Why the department needs these carts
   notes            String?   @db.Text
   requestToken     String    @unique  // Unique token for the public link
   status           String    @default("Pending") // Pending, Approved, Rejected

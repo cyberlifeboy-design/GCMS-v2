@@ -67,6 +67,7 @@ export function PublicRequestPage() {
         fourSeaterCount: 0,
         sixSeaterCount: 0,
         accessibilityCount: 0,
+        justification: '',
         notes: '',
     });
 
@@ -134,6 +135,12 @@ export function PublicRequestPage() {
             return;
         }
 
+        if (!formData.justification.trim()) {
+            setError('Please explain why your department needs these carts');
+            setLoading(false);
+            return;
+        }
+
         try {
             const res = await requestsApi.createPublic({
                 requesterName: formData.requesterName,
@@ -147,6 +154,7 @@ export function PublicRequestPage() {
                 fourSeaterCount: formData.fourSeaterCount,
                 sixSeaterCount: formData.sixSeaterCount,
                 accessibilityCount: formData.accessibilityCount,
+                justification: formData.justification,
                 notes: formData.notes || undefined,
             });
 
@@ -209,7 +217,8 @@ export function PublicRequestPage() {
                                         requesterName: '', requesterEmail: '', requesterPhone: '', accreditationNumber: '',
                                         requestType: 'dedicated',
                                         stadiumId: stadiumIdParam || '', departmentId: departmentIdParam || '',
-                                        cargoCount: 0, fourSeaterCount: 0, sixSeaterCount: 0, accessibilityCount: 0, notes: '',
+                                        cargoCount: 0, fourSeaterCount: 0, sixSeaterCount: 0, accessibilityCount: 0,
+                                        justification: '', notes: '',
                                     });
                                 }}
                             >
@@ -459,6 +468,19 @@ export function PublicRequestPage() {
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Justification */}
+                            <div className="space-y-2">
+                                <Label htmlFor="justification">Business Justification *</Label>
+                                <Textarea
+                                    id="justification"
+                                    value={formData.justification}
+                                    onChange={(e) => setFormData({ ...formData, justification: e.target.value })}
+                                    placeholder="Explain why your department needs these carts (e.g. operational requirement, event coverage)..."
+                                    rows={3}
+                                    required
+                                />
                             </div>
 
                             {/* Notes */}

@@ -339,6 +339,7 @@ export const requestsApi = {
         fourSeaterCount: number;
         sixSeaterCount: number;
         accessibilityCount: number;
+        justification?: string;
         notes?: string;
     }) => axios.post(`${API_URL}/public/requests`, data),
     getByTokenPublic: (token: string) =>
@@ -363,6 +364,10 @@ export const requestsApi = {
     }) => apiClient.patch(`/requests/${id}/quantities`, data),
     delete: (id: string) =>
         apiClient.delete(`/requests/${id}`),
+    emailRequester: (id: string, message: string) =>
+        apiClient.post(`/requests/${id}/email-requester`, { message }),
+    export: (format: 'xlsx' | 'pdf' | 'docx', params?: Record<string, unknown>) =>
+        apiClient.get('/requests/export', { params: { ...params, format }, responseType: 'blob' }),
 };
 
 // Notifications
