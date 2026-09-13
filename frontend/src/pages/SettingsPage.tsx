@@ -9,7 +9,7 @@ import {
     File, Link as LinkIcon, Copy, Check, Bell, Clock,
     Megaphone, Sun, Moon, Monitor,
     ChevronDown, ChevronUp, User, Plus, Trash2, GripVertical,
-    Palette, ShieldCheck, Wrench, Globe, Users
+    Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send
 } from 'lucide-react';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
@@ -58,6 +58,13 @@ interface Settings {
     handoverTcArTitle?: string;
     handoverTcArBody?: string;
     handoverTcCheckboxes?: string;
+    smtpHost?: string | null;
+    smtpPort?: number | null;
+    smtpSecure?: boolean;
+    smtpUser?: string | null;
+    smtpFromEmail?: string | null;
+    smtpFromName?: string | null;
+    smtpPasswordSet?: boolean;
 }
 
 interface Stadium {
@@ -181,6 +188,18 @@ export function SettingsPage() {
     ];
     const [tcCheckboxes, setTcCheckboxes] = useState<TcCheckbox[]>(DEFAULT_TC_CHECKBOXES);
 
+    // SMTP (corporate email server) settings
+    const [smtpHost, setSmtpHost] = useState('');
+    const [smtpPort, setSmtpPort] = useState('587');
+    const [smtpSecure, setSmtpSecure] = useState(false);
+    const [smtpUser, setSmtpUser] = useState('');
+    const [smtpPassword, setSmtpPassword] = useState('');
+    const [smtpPasswordSet, setSmtpPasswordSet] = useState(false);
+    const [smtpFromEmail, setSmtpFromEmail] = useState('');
+    const [smtpFromName, setSmtpFromName] = useState('');
+    const [testEmailTo, setTestEmailTo] = useState('');
+    const [testingSmtp, setTestingSmtp] = useState(false);
+
     useEffect(() => {
         if (user?.exportFormat) setExportFormat(user.exportFormat as any);
         if (user?.exportPreferences) {
@@ -236,6 +255,13 @@ export function SettingsPage() {
                 if (d.handoverTcCheckboxes) {
                     try { setTcCheckboxes(JSON.parse(d.handoverTcCheckboxes)); } catch { /* malformed stored JSON — keep default checkboxes */ }
                 }
+                setSmtpHost(d.smtpHost || '');
+                setSmtpPort(d.smtpPort ? String(d.smtpPort) : '587');
+                setSmtpSecure(d.smtpSecure ?? false);
+                setSmtpUser(d.smtpUser || '');
+                setSmtpPasswordSet(d.smtpPasswordSet ?? false);
+                setSmtpFromEmail(d.smtpFromEmail || '');
+                setSmtpFromName(d.smtpFromName || '');
                 setStadiums(stadiumsRes.data.data || []);
             } catch (e) { console.error(e); } finally { setLoading(false); }
         };
@@ -334,6 +360,13 @@ export function SettingsPage() {
             fd.append('handoverTcArTitle', tcArTitle);
             fd.append('handoverTcArBody', tcArBody);
             fd.append('handoverTcCheckboxes', JSON.stringify(tcCheckboxes));
+            fd.append('smtpHost', smtpHost);
+            fd.append('smtpPort', smtpPort);
+            fd.append('smtpSecure', String(smtpSecure));
+            fd.append('smtpUser', smtpUser);
+            if (smtpPassword) fd.append('smtpPassword', smtpPassword);
+            fd.append('smtpFromEmail', smtpFromEmail);
+            fd.append('smtpFromName', smtpFromName);
             await settingsApi.update(fd);
             toast.success('System settings saved');
         } catch (err: any) {
@@ -421,6 +454,9 @@ export function SettingsPage() {
                             </TabsTrigger>
                             <TabsTrigger value="handover-tc" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
                                 <FileText className="w-5 h-5 mr-3" /> Handover T&amp;C
+                            </TabsTrigger>
+                            <TabsTrigger value="email" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
+                                <Mail className="w-5 h-5 mr-3" /> Email (SMTP)
                             </TabsTrigger>
                             <TabsTrigger value="access" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
                                 <ShieldCheck className="w-5 h-5 mr-3" /> Access Control
@@ -871,6 +907,88 @@ export function SettingsPage() {
                                     <CardFooter className="justify-end border-t p-5 bg-muted/5">
                                         <Button onClick={handleSaveSystem} className="rounded-xl px-8 h-11">Save Checkboxes</Button>
                                     </CardFooter>
+                                </Card>
+                            </TabsContent>
+
+                            <TabsContent value="email" className="mt-0 space-y-6">
+                                <Card className="border-none shadow-md overflow-hidden">
+                                    <CardHeader className="bg-muted/10">
+                                        <CardTitle className="text-2xl flex items-center gap-3"><Mail className="w-6 h-6" /> Email (SMTP) Configuration</CardTitle>
+                                        <CardDescription>
+                                            Configure the corporate SMTP server (e.g. SC Azure email) used to send system
+                                            emails and notifications. Leave the password blank to keep the one already saved.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">SMTP Host</Label>
+                                                <Input value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.office365.com" className="h-12 rounded-xl" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Port</Label>
+                                                <Input type="number" value={smtpPort} onChange={e => setSmtpPort(e.target.value)} placeholder="587" className="h-12 rounded-xl" />
+                                            </div>
+                                            <div className="flex items-center gap-3 pt-8">
+                                                <Switch checked={smtpSecure} onCheckedChange={setSmtpSecure} />
+                                                <Label className="font-medium">Use TLS/SSL (secure)</Label>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Username</Label>
+                                                <Input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="notifications@sc.qa" className="h-12 rounded-xl" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                                                    Password {smtpPasswordSet && <span className="text-green-600 normal-case font-normal">(currently set)</span>}
+                                                </Label>
+                                                <Input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)} placeholder={smtpPasswordSet ? '••••••••' : 'Enter password'} className="h-12 rounded-xl" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">From Email</Label>
+                                                <Input type="email" value={smtpFromEmail} onChange={e => setSmtpFromEmail(e.target.value)} placeholder="gcms-noreply@sc.qa" className="h-12 rounded-xl" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">From Name</Label>
+                                                <Input value={smtpFromName} onChange={e => setSmtpFromName(e.target.value)} placeholder="GCMS" className="h-12 rounded-xl" />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                        <Button onClick={handleSaveSystem} className="rounded-xl px-8 h-11" disabled={saving}>
+                                            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save SMTP Settings
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+
+                                <Card className="border-none shadow-md overflow-hidden">
+                                    <CardHeader className="bg-muted/10">
+                                        <CardTitle className="text-lg flex items-center gap-2"><Send className="w-5 h-5" /> Send a Test Email</CardTitle>
+                                        <CardDescription>Verify the saved SMTP configuration actually delivers mail.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 flex flex-col sm:flex-row gap-3 items-end">
+                                        <div className="space-y-2 flex-1 w-full">
+                                            <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Send To</Label>
+                                            <Input type="email" value={testEmailTo} onChange={e => setTestEmailTo(e.target.value)} placeholder="you@sc.qa" className="h-12 rounded-xl" />
+                                        </div>
+                                        <Button
+                                            className="h-12 rounded-xl px-6"
+                                            disabled={testingSmtp || !testEmailTo.trim()}
+                                            onClick={async () => {
+                                                setTestingSmtp(true);
+                                                try {
+                                                    await settingsApi.testSmtp(testEmailTo.trim());
+                                                    toast.success(`Test email sent to ${testEmailTo.trim()}`);
+                                                } catch (err: any) {
+                                                    toast.error(err.response?.data?.error || 'Failed to send test email');
+                                                } finally {
+                                                    setTestingSmtp(false);
+                                                }
+                                            }}
+                                        >
+                                            {testingSmtp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                                            Send Test Email
+                                        </Button>
+                                    </CardContent>
                                 </Card>
                             </TabsContent>
 

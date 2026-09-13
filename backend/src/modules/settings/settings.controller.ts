@@ -83,6 +83,16 @@ const updateSettingsSchema = z.object({
     handoverTcArTitle: z.string().optional().nullable(),
     handoverTcArBody: z.string().optional().nullable(),
     handoverTcCheckboxes: z.string().optional().nullable(),
+    // Corporate SMTP (SuperAdmin only — enforced at route level). smtpPassword
+    // is optional and only overwritten when a caller sends a non-empty value —
+    // leaving the field blank in the UI keeps whatever is already stored.
+    smtpHost: z.string().optional().nullable(),
+    smtpPort: coerceOptionalNumber,
+    smtpSecure: coerceBoolean.optional(),
+    smtpUser: z.string().optional().nullable(),
+    smtpPassword: z.string().optional(),
+    smtpFromEmail: z.string().optional().nullable(),
+    smtpFromName: z.string().optional().nullable(),
 });
 
 export class SettingsController {
@@ -94,8 +104,10 @@ export class SettingsController {
 
     static async get(req: AuthRequest, res: Response) {
         try {
-            const settings = await settingsService.get();
-            res.status(200).json({ data: settings });
+            const settings: any = await settingsService.get();
+            // smtpPassword must never leave the server — only whether one is set.
+            const { smtpPassword, ...safe } = settings;
+            res.status(200).json({ data: { ...safe, smtpPasswordSet: !!smtpPassword } });
         } catch (error) {
             res.status(500).json({ error: 'Failed to get settings' });
         }
@@ -104,6 +116,8 @@ export class SettingsController {
     static async update(req: AuthRequest, res: Response) {
         try {
             const validatedData: any = updateSettingsSchema.parse(req.body);
+            // Blank password in the form means "leave it as-is", not "clear it".
+            if (!validatedData.smtpPassword) delete validatedData.smtpPassword;
             const files = req.files as Record<string, Express.Multer.File[]> | undefined;
 
             // Upload branding assets if provided
@@ -132,14 +146,35 @@ export class SettingsController {
                 );
             }
 
-            const settings = await settingsService.update(validatedData, req.user?.userId);
-            res.status(200).json(settings);
+            const settings: any = await settingsService.update(validatedData, req.user?.userId);
+            const { smtpPassword, ...safe } = settings;
+            res.status(200).json({ ...safe, smtpPasswordSet: !!smtpPassword });
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
             } else {
                 res.status(500).json({ error: 'Failed to update settings' });
             }
+        }
+    }
+
+    /** POST /api/v1/settings/smtp/test — SuperAdmin only. Sends a real email through the configured SMTP transport. */
+    static async testSmtp(req: AuthRequest, res: Response) {
+        try {
+            const to = String(req.body?.to || '').trim();
+            if (!to) {
+                res.status(400).json({ error: 'A recipient email address is required' });
+                return;
+            }
+            await emailService.send({
+                to,
+                subject: 'GCMS — SMTP test email',
+                text: `This is a test email from GCMS, confirming the configured SMTP server can deliver mail.\n\nSent: ${new Date().toLocaleString()}`,
+            });
+            res.json({ message: `Test email sent to ${to}` });
+        } catch (error: any) {
+            console.error('SMTP test failed:', error);
+            res.status(502).json({ error: error?.message || 'Failed to send test email — check the SMTP settings' });
         }
     }
 

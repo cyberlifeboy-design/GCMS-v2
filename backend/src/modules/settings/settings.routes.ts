@@ -52,4 +52,7 @@ router.put(
 // POST /api/v1/settings/request-window/announce — SuperAdmin only
 router.post('/request-window/announce', requireRole('SuperAdmin'), SettingsController.announceWindow);
 
+// POST /api/v1/settings/smtp/test — SuperAdmin only
+router.post('/smtp/test', requireRole('SuperAdmin'), SettingsController.testSmtp);
+
 export default router;

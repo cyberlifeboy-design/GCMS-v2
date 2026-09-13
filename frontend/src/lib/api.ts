@@ -311,6 +311,8 @@ export const settingsApi = {
         }),
     announceWindow: () =>
         apiClient.post('/settings/request-window/announce'),
+    testSmtp: (to: string) =>
+        apiClient.post('/settings/smtp/test', { to }),
 };
 
 export const publicSettingsApi = {

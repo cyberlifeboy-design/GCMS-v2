@@ -68,30 +68,71 @@ class ResendTransport implements EmailTransport {
 }
 
 /**
- * MailHog/SMTP transport for development
+ * MailHog/SMTP transport for development — and, once configured, the org's
+ * own corporate SMTP server (Super Admin > Settings > Email/SMTP). DB-stored
+ * settings are checked on every send and take priority over the SMTP_* env
+ * vars, so an admin can change/rotate them without a redeploy; the
+ * transporter is rebuilt only when the resolved config actually changes.
  */
 class SmtpTransport implements EmailTransport {
-    private transporter: nodemailer.Transporter;
-    private defaultFrom: string;
+    private cachedTransporter: nodemailer.Transporter | null = null;
+    private cachedConfigKey = '';
+    private envFallbackFrom: string;
 
     constructor() {
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
-        this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'localhost',
-            port: Number(process.env.SMTP_PORT) || 1025,
-            secure: process.env.SMTP_SECURE === 'true',
-            ...(user && pass ? { auth: { user, pass } } : {}),
-        });
-        this.defaultFrom = process.env.EMAIL_FROM || '"GCMS Admin" <admin@gcms.local>';
+        this.envFallbackFrom = process.env.EMAIL_FROM || '"GCMS Admin" <admin@gcms.local>';
+    }
+
+    private async resolveConfig() {
+        let dbSettings: {
+            smtpHost: string | null; smtpPort: number | null; smtpSecure: boolean;
+            smtpUser: string | null; smtpPassword: string | null;
+            smtpFromEmail: string | null; smtpFromName: string | null;
+        } | null = null;
+        try {
+            const { prisma } = await import('../config/database');
+            dbSettings = await prisma.systemSettings.findFirst({
+                select: {
+                    smtpHost: true, smtpPort: true, smtpSecure: true, smtpUser: true,
+                    smtpPassword: true, smtpFromEmail: true, smtpFromName: true,
+                },
+            });
+        } catch (e) {
+            console.error('Could not load SMTP settings from DB, falling back to env:', e);
+        }
+
+        const host = dbSettings?.smtpHost || process.env.SMTP_HOST || 'localhost';
+        const port = dbSettings?.smtpPort || Number(process.env.SMTP_PORT) || 1025;
+        const secure = dbSettings?.smtpHost ? !!dbSettings.smtpSecure : process.env.SMTP_SECURE === 'true';
+        const user = dbSettings?.smtpUser || process.env.SMTP_USER;
+        const pass = dbSettings?.smtpPassword || process.env.SMTP_PASS;
+        const from = dbSettings?.smtpFromEmail
+            ? `"${dbSettings.smtpFromName || 'GCMS'}" <${dbSettings.smtpFromEmail}>`
+            : this.envFallbackFrom;
+
+        return { host, port, secure, user, pass, from };
+    }
+
+    private async getTransporter(): Promise<{ transporter: nodemailer.Transporter; from: string }> {
+        const { host, port, secure, user, pass, from } = await this.resolveConfig();
+        const configKey = JSON.stringify({ host, port, secure, user, pass });
+        if (!this.cachedTransporter || configKey !== this.cachedConfigKey) {
+            this.cachedTransporter = nodemailer.createTransport({
+                host, port, secure,
+                ...(user && pass ? { auth: { user, pass } } : {}),
+            });
+            this.cachedConfigKey = configKey;
+        }
+        return { transporter: this.cachedTransporter, from };
     }
 
     async send(options: EmailOptions): Promise<void> {
         const { to, subject, text, html, from } = options;
+        const { transporter, from: configuredFrom } = await this.getTransporter();
 
         try {
-            const info = await this.transporter.sendMail({
-                from: from || this.defaultFrom,
+            const info = await transporter.sendMail({
+                from: from || configuredFrom,
                 to: Array.isArray(to) ? to.join(', ') : to,
                 subject,
                 text,

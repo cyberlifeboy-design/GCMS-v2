@@ -278,6 +278,18 @@ model SystemSettings {
   // JSON: [{id:string, en:string, ar:string}] — confirmation checkboxes shown on form
   handoverTcCheckboxes          String?   @db.Text
 
+  // Corporate SMTP configuration — lets the system send emails/notifications
+  // through the org's own mail server instead of only the SMTP_* env vars.
+  // smtpPassword is never returned to the frontend (settings.controller.ts
+  // redacts it to a smtpPasswordSet boolean on GET).
+  smtpHost                      String?
+  smtpPort                      Int?
+  smtpSecure                    Boolean   @default(false)
+  smtpUser                      String?
+  smtpPassword                  String?   @db.Text
+  smtpFromEmail                 String?
+  smtpFromName                  String?
+
   updatedAt                     DateTime  @updatedAt
   updatedById                   String?
 }
