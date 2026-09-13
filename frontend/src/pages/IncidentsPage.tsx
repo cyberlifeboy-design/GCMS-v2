@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { incidentsApi } from '@/lib/api';
+import { incidentsApi, usersApi, warningsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Download, ShieldAlert, Plus, FileWarning, Send } from 'lucide-react';
+import { Loader2, Download, ShieldAlert, Plus, FileWarning, Send, Ticket } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateTime } from '@/lib/dateUtils';
 import { ReportIncidentModal } from '@/components/incidents/ReportIncidentModal';
@@ -46,6 +46,42 @@ export function IncidentsPage() {
     const [escalContracts, setEscalContracts] = useState(false);
     const [escalMaintenance, setEscalMaintenance] = useState(false);
     const [escalating, setEscalating] = useState(false);
+
+    // standalone "Issue a Ticket" dialog (top-level — not tied to an existing incident)
+    const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
+    const [ticketUsers, setTicketUsers] = useState<Array<{ id: string; name: string; email: string; role: string }>>([]);
+    const [ticketUserId, setTicketUserId] = useState('');
+    const [ticketLevel, setTicketLevel] = useState<1 | 2 | 3>(1);
+    const [ticketViolation, setTicketViolation] = useState<TicketViolation | null>(null);
+    const [ticketReason, setTicketReason] = useState('');
+    const [ticketIssuing, setTicketIssuing] = useState(false);
+
+    const openTicketDialog = async () => {
+        setTicketDialogOpen(true);
+        setTicketUserId(''); setTicketLevel(1); setTicketViolation(null); setTicketReason('');
+        try {
+            const res = await usersApi.getAll({ isActive: true });
+            setTicketUsers(res.data.data || []);
+        } catch {
+            toast.error('Failed to load users');
+        }
+    };
+
+    const submitStandaloneTicket = async () => {
+        if (!ticketUserId) { toast.error('Select a user'); return; }
+        const reason = [ticketViolation?.text, ticketReason.trim()].filter(Boolean).join(' — ');
+        if (!reason) { toast.error('Pick a violation or enter a reason'); return; }
+        setTicketIssuing(true);
+        try {
+            const res = await warningsApi.issue({ userId: ticketUserId, level: ticketLevel, reason });
+            toast.success(res.data.message || 'Ticket issued');
+            setTicketDialogOpen(false);
+        } catch (e: any) {
+            toast.error(e?.response?.data?.error || 'Failed to issue ticket');
+        } finally {
+            setTicketIssuing(false);
+        }
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -147,6 +183,9 @@ export function IncidentsPage() {
                     <Button variant="outline" onClick={() => setReportOpen(true)}><Plus className="w-4 h-4 mr-2" />Report incident</Button>
                     <Button className="bg-red-900 hover:bg-red-800 text-white" onClick={() => { setReportFormIncidentId(null); setReportFormOpen(true); }}>
                         <FileWarning className="w-4 h-4 mr-2" />Create Incident Report
+                    </Button>
+                    <Button variant="outline" className="border-amber-300 text-amber-800 hover:bg-amber-50" onClick={openTicketDialog}>
+                        <Ticket className="w-4 h-4 mr-2" />Issue a Ticket
                     </Button>
                 </div>
             </div>
@@ -346,6 +385,62 @@ export function IncidentsPage() {
                 incidentId={reportFormIncidentId}
                 onSaved={() => { load(); if (detail) openDetail(detail.id); }}
             />
+
+            {/* Standalone Issue-a-Ticket dialog — issue a 3-level ticket against any user
+                without first having to open a specific incident. */}
+            <Dialog open={ticketDialogOpen} onOpenChange={setTicketDialogOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><Ticket className="w-5 h-5" /> Issue a Ticket</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <Label>User</Label>
+                            <Select value={ticketUserId} onValueChange={setTicketUserId}>
+                                <SelectTrigger><SelectValue placeholder="Select a user" /></SelectTrigger>
+                                <SelectContent>
+                                    {ticketUsers.map(u => (
+                                        <SelectItem key={u.id} value={u.id}>{u.name} ({u.role}) — {u.email}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Level</Label>
+                            <Select value={String(ticketLevel)} onValueChange={v => { setTicketLevel(Number(v) as 1 | 2 | 3); setTicketViolation(null); }}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {[1, 2, 3].map(l => (
+                                        <SelectItem key={l} value={String(l)}>{TICKET_LEVEL_LABELS[l as 1 | 2 | 3]}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Violation</Label>
+                            <Select value={ticketViolation?.code ?? ''} onValueChange={code => setTicketViolation(TICKET_CATALOG[ticketLevel].find(v => v.code === code) ?? null)}>
+                                <SelectTrigger><SelectValue placeholder="Select a violation (optional)" /></SelectTrigger>
+                                <SelectContent>
+                                    {TICKET_CATALOG[ticketLevel].map(v => (
+                                        <SelectItem key={v.code} value={v.code}>{v.text}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Reason / Notes</Label>
+                            <Textarea rows={3} placeholder="Additional notes (required if no violation selected)" value={ticketReason} onChange={e => setTicketReason(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setTicketDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={submitStandaloneTicket} disabled={ticketIssuing}>
+                            {ticketIssuing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Issue Ticket
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../config/database';
 import { makeReference, incidentReportPdf } from '../../services/pdf.service';
 import { notificationService } from '../notifications/notification.service';
+import { emailService } from '../../services/email.service';
 
 const INCIDENT_INCLUDE = {
   subjectUser: { select: { id: true, name: true, email: true, accreditationNumber: true, stadiumId: true, isBlocked: true } },
@@ -111,6 +112,34 @@ export class IncidentsService {
         roles,
         inc.stadiumId ?? undefined,
       );
+
+      // Escalation also emails the full incident report (PDF) to every user in
+      // the target role(s) — an in-app ping alone isn't enough for a team that
+      // may not be logged into GCMS day-to-day.
+      const recipients = await prisma.user.findMany({
+        where: { role: { in: roles }, isActive: true },
+        select: { email: true },
+      });
+      if (recipients.length) {
+        const report = await this.buildPdf(id);
+        if (report) {
+          for (const r of recipients) {
+            try {
+              await emailService.send({
+                to: r.email,
+                subject: `Incident escalated — ${inc.reference}`,
+                text:
+                  `An incident has been escalated to your team for follow-up.\n\n` +
+                  `${inc.title}${inc.fleet?.carNumber ? ` (car ${inc.fleet.carNumber})` : ''}\n` +
+                  `Reference: ${inc.reference}\n\nThe full report is attached.`,
+                attachments: [{ filename: `${report.reference}.pdf`, content: report.buffer, contentType: 'application/pdf' }],
+              });
+            } catch (e) {
+              console.error('Escalation report email failed:', r.email, e);
+            }
+          }
+        }
+      }
     }
     return updated;
   }
