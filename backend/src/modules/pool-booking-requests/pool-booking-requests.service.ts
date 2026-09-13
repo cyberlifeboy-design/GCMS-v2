@@ -288,7 +288,7 @@ export class PoolBookingRequestsService {
             await notificationService.create({
                 type: 'PoolBookingApproved',
                 title: 'Pool Booking Approved',
-                message: `Your pool booking for ${updated.fleet.carNumber} at ${updated.stadium.name} was approved`,
+                message: `Your pool booking for ${updated.fleet.carNumber} at ${updated.stadium.name} was approved — collect the key and return the car to the charging station when done.`,
                 entityType: 'PoolBookingRequest',
                 entityId: id,
                 userId: updated.createdById,
@@ -332,12 +332,16 @@ export class PoolBookingRequestsService {
         reviewComment?: string,
     ) {
         try {
+            const approvedInstructions =
+                `\n\nPlease collect the car key and ensure the car is returned to the charging station ` +
+                `once you are done, and hand back the key to the venue's logistics representative.`;
             await emailService.send({
                 to: booking.requesterEmail,
                 subject: `Pool booking ${status}: ${booking.fleet.carNumber}`,
                 text:
                     `Hello ${booking.requesterName},\n\n` +
                     `Your pool booking for ${booking.fleet.carNumber} at ${booking.stadium.name} has been ${status}.` +
+                    (status === 'approved' ? approvedInstructions : '') +
                     (reviewComment ? `\n\nReviewer notes: ${reviewComment}` : '') +
                     `\n\nThank you,\nGCMS`,
             });

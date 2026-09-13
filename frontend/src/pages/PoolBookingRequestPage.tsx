@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { poolBookingRequestsApi, publicDataApi, publicSettingsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,6 +109,15 @@ function BookingConfirmationView({ token }: { token: string }) {
                                 <p className="font-medium">{booking.startTime} – {booking.endTime}</p>
                             </div>
                         </div>
+                        {booking.status === 'Approved' && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-900">
+                                <p className="font-semibold mb-1">Request approved — please collect the car key.</p>
+                                <p>
+                                    Ensure the car is returned to the charging station once you are done, and hand
+                                    back the key to the venue's logistics representative.
+                                </p>
+                            </div>
+                        )}
                         {booking.reviewComment && (
                             <div>
                                 <p className="text-sm text-muted-foreground">Review Comment</p>
@@ -121,6 +130,11 @@ function BookingConfirmationView({ token }: { token: string }) {
                                 <p className="font-medium">{booking.reviewedBy.name}</p>
                             </div>
                         )}
+                        <div className="pt-2">
+                            <Button asChild variant="outline" className="w-full">
+                                <Link to="/login">Close</Link>
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -254,18 +268,37 @@ function NewPoolBookingRequestView() {
         const trackingUrl = `${window.location.origin}/book-pool/confirm/${requestToken}`;
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <Card className="max-w-md w-full">
-                    <CardContent className="pt-6 text-center">
-                        <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold mb-2">Booking Request Submitted!</h2>
+                <Card className="max-w-md w-full shadow-lg">
+                    <CardContent className="pt-8 pb-6 text-center">
+                        <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
+                        <h2 className="text-2xl font-bold mb-2">Request Submitted!</h2>
                         <p className="text-muted-foreground mb-4">
-                            Your pool booking request has been sent to the venue admin for approval.
+                            Logistics team will review your request and respond to you shortly.
                         </p>
-                        <div className="bg-muted p-3 rounded-md">
+                        <div className="bg-muted p-3 rounded-md mb-6">
                             <p className="text-sm text-muted-foreground mb-2">Track your booking:</p>
                             <a href={trackingUrl} className="text-primary hover:underline text-sm break-all">
                                 {trackingUrl}
                             </a>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <Button asChild variant="outline" className="flex-1">
+                                <Link to="/login">Close</Link>
+                            </Button>
+                            <Button
+                                className="flex-1"
+                                onClick={() => {
+                                    setSubmitted(false);
+                                    setRequestToken('');
+                                    setFormData({
+                                        stadiumId: '', requesterName: '', requesterEmail: '', requesterPhone: '',
+                                        faUserId: '', bookingType: 'Single', startDate: '', endDate: '',
+                                        startTime: '', endTime: '', fleetId: '', purpose: '',
+                                    });
+                                }}
+                            >
+                                Submit Another Request
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
@@ -280,9 +313,20 @@ function NewPoolBookingRequestView() {
                     <img src={branding.headerUrl} alt="Header" className="w-full max-h-32 object-contain" />
                 </div>
             ) : (
-                <div className="w-full bg-primary py-4 px-6 flex items-center gap-3">
-                    {branding.logoUrl && <img src={branding.logoUrl} alt="Logo" className="h-10 object-contain" />}
-                    <span className="text-white font-bold text-xl">{branding.tournamentName}</span>
+                <div
+                    className="w-full py-4 px-6 flex items-center gap-3"
+                    style={{ background: 'linear-gradient(135deg, #5b2a9e 0%, #4a4fc4 38%, #2f6fd6 62%, #14a3ac 100%)' }}
+                >
+                    <img
+                        src={branding.logoUrl || '/branding/sc-logo.png'}
+                        alt="Logo"
+                        className="h-10 object-contain"
+                        onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
+                            else img.style.display = 'none';
+                        }}
+                    />
                 </div>
             )}
 

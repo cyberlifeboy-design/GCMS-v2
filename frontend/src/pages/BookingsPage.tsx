@@ -284,28 +284,48 @@ function AvailableCarsPanel({ stadiumId }: { stadiumId?: string }) {
         setLoading(true);
         poolBookingsApi
             .getPoolFleet(stadiumId ? { stadiumId } : undefined)
-            .then((res) => setCarts((res.data?.data ?? res.data ?? []).filter((c: any) => !c.currentBooking)))
+            .then((res) => setCarts(res.data?.data ?? res.data ?? []))
             .finally(() => setLoading(false));
     }, [stadiumId]);
 
     if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
-    if (carts.length === 0) return <div className="text-center py-8 text-muted-foreground">No pool cars are free right now.</div>;
+    if (carts.length === 0) return <div className="text-center py-8 text-muted-foreground">No pool cars configured for this venue.</div>;
+
+    const availableCount = carts.filter((c) => !c.currentBooking).length;
+
     return (
-        <div className="overflow-x-auto">
-            <Table>
-                <TableHeader>
-                    <TableRow><TableHead>Cart</TableHead><TableHead>Type</TableHead><TableHead>Venue</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>
-                    {carts.map((c) => (
-                        <TableRow key={c.id}>
-                            <TableCell className="font-medium">{c.carNumber}</TableCell>
-                            <TableCell>{c.carType}</TableCell>
-                            <TableCell>{c.stadium?.name ?? '—'}</TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+        <div className="space-y-4">
+            <div className="flex items-center gap-4 text-sm">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Available ({availableCount})</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" /> Booked ({carts.length - availableCount})</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {carts.map((c) => {
+                    const booked = !!c.currentBooking;
+                    return (
+                        <div
+                            key={c.id}
+                            className={`rounded-xl border p-4 ${booked ? 'bg-gray-100 border-gray-200' : 'bg-emerald-50 border-emerald-200'}`}
+                        >
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className={`font-bold text-lg ${booked ? 'text-gray-500' : 'text-emerald-900'}`}>{c.carNumber}</p>
+                                    <p className={`text-xs ${booked ? 'text-gray-400' : 'text-emerald-700'}`}>{c.carType} · {c.stadium?.name ?? '—'}</p>
+                                </div>
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${booked ? 'bg-gray-300 text-gray-700' : 'bg-emerald-500 text-white'}`}>
+                                    {booked ? 'Booked' : 'Available'}
+                                </span>
+                            </div>
+                            {booked && c.currentBooking && (
+                                <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500 space-y-0.5">
+                                    <p>FA: {c.currentBooking.faUser?.name ?? '—'}</p>
+                                    <p>Until {c.currentBooking.endDate} {c.currentBooking.endTime}</p>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }
