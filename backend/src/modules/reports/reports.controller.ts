@@ -1054,7 +1054,7 @@ export class ReportsController {
             const margin = 28;
 
             const HEADER_IMG_H = 64;   // event banner, full width, top
-            const LOGO_SIZE    = 46;   // event logo, centered under the banner
+            const LOGO_SIZE    = 46;   // tournament logo, top-left corner
             const FOOTER_IMG_H = 48;   // footer banner, full width, bottom
 
             labelsData.forEach((label, index) => {
@@ -1067,26 +1067,26 @@ export class ReportsController {
                     top = HEADER_IMG_H + 8;
                 }
 
-                // ── Event logo (centered) + tournament name ───────────────
+                // ── Tournament logo — top-left corner ─────────────────────
                 if (logoBuffer) {
-                    doc.image(logoBuffer, (pageW - LOGO_SIZE) / 2, top, { fit: [LOGO_SIZE, LOGO_SIZE] });
-                    top += LOGO_SIZE + 6;
+                    doc.image(logoBuffer, margin, top, { fit: [LOGO_SIZE, LOGO_SIZE] });
                 }
                 if (settings?.tournamentName) {
                     doc.font('Helvetica-Bold').fontSize(13).fillColor('#222222')
-                        .text(settings.tournamentName, margin, top, { width: pageW - margin * 2, align: 'center', lineBreak: false });
-                    top += 20;
+                        .text(settings.tournamentName, margin + (logoBuffer ? LOGO_SIZE + 8 : 0), top + (logoBuffer ? (LOGO_SIZE - 13) / 2 : 0),
+                            { width: pageW - margin * 2 - (logoBuffer ? LOGO_SIZE + 8 : 0), lineBreak: false });
                 }
+                top += LOGO_SIZE + 6;
 
                 // ── Footer block sits at the bottom ──────────────────────
                 const footerTextH = settings?.footerText ? 16 : 0;
                 const footerBlockH = (footerBuffer ? FOOTER_IMG_H : 0) + footerTextH + 10;
                 const footerTop = pageH - footerBlockH;
 
-                // ── Car number — very large, centered in the free space ───
-                const faLineH = 42;
+                // ── Car number + department code — the largest, boldest text the page can fit ──
+                const deptLineH = 42;
                 const availTop = top + 10;
-                const availH = footerTop - availTop - faLineH - 16;
+                const availH = footerTop - availTop - deptLineH - 16;
                 const availW = pageW - margin * 2;
 
                 const carFont = labelCarFontSize(label.carNumber, availW, availH);
@@ -1094,10 +1094,10 @@ export class ReportsController {
                 doc.font('Helvetica-Bold').fontSize(carFont).fillColor('#000000')
                     .text(label.carNumber, margin, carY, { width: availW, align: 'center', lineBreak: false });
 
-                // ── FA code directly beneath the car number ──────────────
-                const faFont = Math.min(38, Math.max(24, Math.round(carFont * 0.22)));
-                doc.font('Helvetica-Bold').fontSize(faFont).fillColor('#333333')
-                    .text(`FA: ${label.faAccreditationNumber || '—'}`, margin, carY + carFont * 0.92, { width: availW, align: 'center', lineBreak: false });
+                // ── Department code directly beneath the car number ──────
+                const deptFont = Math.min(38, Math.max(24, Math.round(carFont * 0.22)));
+                doc.font('Helvetica-Bold').fontSize(deptFont).fillColor('#333333')
+                    .text(label.departmentCode || '—', margin, carY + carFont * 0.92, { width: availW, align: 'center', lineBreak: false });
 
                 // ── Footer banner + text ─────────────────────────────────
                 let fy = footerTop;
