@@ -23,6 +23,16 @@ const createSchema = z.object({
     purpose: z.string().optional(),
 });
 
+const createInstantSchema = z.object({
+    stadiumId: z.string().min(1),
+    fleetId: z.string().min(1),
+    requesterName: z.string().min(1),
+    requesterEmail: z.string().email(),
+    requesterPhone: z.string().min(1),
+    faUserId: z.string().min(1),
+    purpose: z.string().optional(),
+});
+
 const approveSchema = z.object({
     comment: z.string().optional(),
 });
@@ -116,6 +126,88 @@ export class PoolBookingRequestsController {
                 console.error('Create pool booking request error:', error);
                 res.status(500).json({ error: 'Failed to submit booking request' });
             }
+        }
+    }
+
+    /**
+     * POST /api/v1/public/pool-booking-requests/instant — no date/time chosen; the
+     * requester wants any currently-free pool car right now, subject to admin approval.
+     */
+    static async createInstantPublic(req: AuthRequest, res: Response) {
+        try {
+            const windowState = await settingsService.getRequestWindowState();
+            if (!windowState.isOpen) {
+                res.status(403).json({ error: windowState.message || 'The request window is currently closed.' });
+                return;
+            }
+
+            const data = createInstantSchema.parse(req.body);
+            const booking = await poolBookingRequestsService.createInstant({ ...data, createdById: req.user?.userId });
+            res.status(201).json({ message: 'Instant booking request submitted', data: booking });
+        } catch (error) {
+            const err = error as Error & { code?: string };
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (err.code === 'P2003') {
+                console.error('Create instant booking request error:', error);
+                res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
+            } else if (!err.code && err.message) {
+                console.error('Create instant booking request error:', error);
+                res.status(400).json({ error: err.message });
+            } else {
+                console.error('Create instant booking request error:', error);
+                res.status(500).json({ error: 'Failed to submit instant booking request' });
+            }
+        }
+    }
+
+    /** GET /api/v1/public/pool-booking-requests/venues/:stadiumId/instant-available-carts */
+    static async getInstantAvailableCartsPublic(req: Request, res: Response) {
+        try {
+            const carts = await poolBookingRequestsService.getInstantAvailableCarts(req.params.stadiumId as string);
+            res.json({ data: carts });
+        } catch (error) {
+            console.error('Get instant available carts error:', error);
+            res.status(500).json({ error: 'Failed to fetch available carts' });
+        }
+    }
+
+    /** PATCH /api/v1/public/pool-booking-requests/:token/collect — requester self-reports key collection */
+    static async markKeyCollectedPublic(req: Request, res: Response) {
+        try {
+            const booking = await poolBookingRequestsService.getByToken(req.params.token as string);
+            if (!booking) {
+                res.status(404).json({ error: 'Booking request not found' });
+                return;
+            }
+            const updated = await poolBookingRequestsService.markKeyCollected(booking.id);
+            res.json({ message: 'Key collection confirmed', data: updated });
+        } catch (error) {
+            const err = error as Error;
+            console.error('Mark key collected (public) error:', error);
+            res.status(400).json({ error: err.message || 'Failed to confirm key collection' });
+        }
+    }
+
+    /** PATCH /api/v1/pool-booking-requests/:id/collect — venue staff confirms key collection */
+    static async markKeyCollected(req: AuthRequest, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const existing = await poolBookingRequestsService.getById(id);
+            if (!existing) {
+                res.status(404).json({ error: 'Booking request not found' });
+                return;
+            }
+            if (req.user?.role === 'Admin' && existing.stadiumId !== req.user.stadiumId) {
+                res.status(403).json({ error: 'Access denied' });
+                return;
+            }
+            const updated = await poolBookingRequestsService.markKeyCollected(id);
+            res.json({ message: 'Key collection confirmed', data: updated });
+        } catch (error) {
+            const err = error as Error;
+            console.error('Mark key collected error:', error);
+            res.status(400).json({ error: err.message || 'Failed to confirm key collection' });
         }
     }
 

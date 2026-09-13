@@ -56,6 +56,7 @@ interface Booking {
     extensionStatus?: string | null;
     extensionRequestedEndDate?: string | null;
     extensionRequestedEndTime?: string | null;
+    keyCollectedAt?: string | null;
 }
 
 const derivedBadge: Record<string, string> = {
@@ -76,8 +77,15 @@ function BookerDetail({ b }: { b: Booking }) {
             <div>
                 Type: <b>{b.bookingType}</b>
                 {b.bookingType === 'Recurring' && ' — daily window repeats across the date range'}
+                {b.bookingType === 'Instant' && ' — no schedule chosen, key must be collected within 10 min of approval'}
             </div>
-            <div>Window: {b.startDate} {b.startTime} → {b.endDate} {b.endTime}</div>
+            {b.bookingType !== 'Instant' && <div>Window: {b.startDate} {b.startTime} → {b.endDate} {b.endTime}</div>}
+            {b.bookingType === 'Instant' && (
+                <div>
+                    Key collected:{' '}
+                    <b>{b.keyCollectedAt ? new Date(b.keyCollectedAt).toLocaleString() : 'Not yet'}</b>
+                </div>
+            )}
             {b.returnedAt && (
                 <div>Returned {new Date(b.returnedAt).toLocaleString()} by {b.returnedBy?.name ?? '—'}</div>
             )}
@@ -132,6 +140,19 @@ function LiveBookingsPanel({
             load();
         } catch (e: any) {
             toast.error(e.response?.data?.error || 'Failed to mark returned');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const markCollected = async (id: string) => {
+        setBusy(id);
+        try {
+            await poolBookingRequestsApi.markKeyCollected(id);
+            toast.success('Key collection confirmed');
+            load();
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to confirm key collection');
         } finally {
             setBusy(null);
         }
@@ -216,6 +237,11 @@ function LiveBookingsPanel({
                                 </TableCell>
                                 {mode === 'live' && (
                                     <TableCell className="text-right space-x-1 space-y-1">
+                                        {canManage && b.bookingType === 'Instant' && !b.keyCollectedAt && (
+                                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy === b.id} onClick={() => markCollected(b.id)}>
+                                                Confirm Key Collected
+                                            </Button>
+                                        )}
                                         {canManage && (
                                             <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => markReturned(b.id)}>
                                                 <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
@@ -817,11 +843,20 @@ export function BookingsPage() {
                                         </TableCell>
                                         <TableCell>{b.faUser?.name}</TableCell>
                                         <TableCell>
-                                            <p className="text-sm">{b.startDate}{b.endDate !== b.startDate ? ` – ${b.endDate}` : ''}</p>
-                                            <p className="text-sm text-muted-foreground">{b.startTime} – {b.endTime}</p>
+                                            {b.bookingType === 'Instant' ? (
+                                                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Instant — right now</Badge>
+                                            ) : (
+                                                <>
+                                                    <p className="text-sm">{b.startDate}{b.endDate !== b.startDate ? ` – ${b.endDate}` : ''}</p>
+                                                    <p className="text-sm text-muted-foreground">{b.startTime} – {b.endTime}</p>
+                                                </>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant={statusVariants[b.status] || 'outline'}>{b.status}</Badge>
+                                            {b.bookingType === 'Instant' && b.status === 'Approved' && !b.keyCollectedAt && (
+                                                <p className="text-[10px] text-amber-700 font-semibold mt-1">Awaiting key collection</p>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">

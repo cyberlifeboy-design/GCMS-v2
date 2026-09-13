@@ -6,6 +6,7 @@ import { poolBookingRequestsService } from './modules/pool-booking-requests/pool
 const PORT = process.env.PORT || 3005;
 const POOL_REMINDER_MINUTES_BEFORE = parseInt(process.env.POOL_REMINDER_MINUTES_BEFORE || '30', 10);
 const POOL_REMINDER_POLL_MS = 60 * 1000;
+const INSTANT_EXPIRY_POLL_MS = 30 * 1000;
 
 /** No external scheduler in this app — a simple interval is enough for this poll's cadence. */
 function startPoolBookingReminderLoop() {
@@ -15,6 +16,13 @@ function startPoolBookingReminderLoop() {
         });
     }, POOL_REMINDER_POLL_MS);
     console.log(`⏰ Pool booking reminder loop started (checks every ${POOL_REMINDER_POLL_MS / 1000}s, warns ${POOL_REMINDER_MINUTES_BEFORE}min before due)`);
+
+    setInterval(() => {
+        poolBookingRequestsService.scanInstantExpiry().catch((err) => {
+            console.error('Instant booking expiry scan failed:', err);
+        });
+    }, INSTANT_EXPIRY_POLL_MS);
+    console.log(`⏰ Instant booking expiry loop started (checks every ${INSTANT_EXPIRY_POLL_MS / 1000}s)`);
 }
 
 async function startServer() {

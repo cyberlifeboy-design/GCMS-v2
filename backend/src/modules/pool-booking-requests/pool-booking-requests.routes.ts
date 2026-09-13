@@ -15,11 +15,20 @@ const router = Router();
 router.post('/public/pool-booking-requests', optionalAuth, (req: Request, res: Response) =>
     PoolBookingRequestsController.createPublic(req as any, res),
 );
+router.post('/public/pool-booking-requests/instant', optionalAuth, (req: Request, res: Response) =>
+    PoolBookingRequestsController.createInstantPublic(req as any, res),
+);
 router.get('/public/pool-booking-requests/venues/:stadiumId/fas', (req: Request, res: Response) =>
     PoolBookingRequestsController.getFAsPublic(req, res),
 );
 router.get('/public/pool-booking-requests/venues/:stadiumId/available-carts', (req: Request, res: Response) =>
     PoolBookingRequestsController.getAvailableCartsPublic(req, res),
+);
+router.get('/public/pool-booking-requests/venues/:stadiumId/instant-available-carts', (req: Request, res: Response) =>
+    PoolBookingRequestsController.getInstantAvailableCartsPublic(req, res),
+);
+router.patch('/public/pool-booking-requests/:token/collect', (req: Request, res: Response) =>
+    PoolBookingRequestsController.markKeyCollectedPublic(req, res),
 );
 router.get('/public/pool-booking-requests/:token', (req: Request, res: Response) =>
     PoolBookingRequestsController.getByTokenPublic(req, res),
@@ -59,6 +68,9 @@ router.patch('/pool-booking-requests/:id/return', authenticate, requireRole('Sup
 );
 router.patch('/pool-booking-requests/:id/reject', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
     PoolBookingRequestsController.reject(req as any, res),
+);
+router.patch('/pool-booking-requests/:id/collect', authenticate, requireRole('SuperAdmin', 'Admin', 'FA'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.markKeyCollected(req as any, res),
 );
 router.patch('/pool-booking-requests/:id', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
     PoolBookingRequestsController.amend(req as any, res),

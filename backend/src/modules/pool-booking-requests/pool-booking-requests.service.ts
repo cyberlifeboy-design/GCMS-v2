@@ -20,6 +20,31 @@ export interface CreatePoolBookingRequestData {
     createdById?: string;
 }
 
+export interface CreateInstantBookingRequestData {
+    stadiumId: string;
+    fleetId: string;
+    requesterName: string;
+    requesterEmail: string;
+    requesterPhone: string;
+    faUserId: string;
+    purpose?: string;
+    createdById?: string;
+}
+
+const INSTANT_COLLECTION_WINDOW_MINUTES = 10;
+
+function pad(n: number): string {
+    return n < 10 ? `0${n}` : `${n}`;
+}
+
+function formatDate(d: Date): string {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function formatTime(d: Date): string {
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export interface AmendPoolBookingRequestData {
     fleetId?: string;
     startDate?: string;
@@ -79,6 +104,42 @@ export class PoolBookingRequestsService {
                         endDate >= b.startDate &&
                         startTime < b.endTime &&
                         endTime > b.startTime,
+                )
+                .map((b) => b.fleetId),
+        );
+
+        return carts.filter((c) => !busyFleetIds.has(c.id));
+    }
+
+    /**
+     * Pool carts at a venue that are free RIGHT NOW for an instant booking — i.e. not
+     * currently the subject of an Approved booking whose window covers this moment.
+     * Unlike getAvailableCarts (which checks a chosen future window), this has no
+     * window to check against, so it looks at "is any Approved booking active now".
+     */
+    async getInstantAvailableCarts(stadiumId: string) {
+        const carts = await prisma.fleet.findMany({
+            where: { stadiumId, isPool: true },
+            select: { id: true, carNumber: true, carType: true },
+            orderBy: { carNumber: 'asc' },
+        });
+        if (carts.length === 0) return [];
+
+        const now = new Date();
+        const nowDate = formatDate(now);
+        const nowTime = formatTime(now);
+
+        const approved = await prisma.poolBookingRequest.findMany({
+            where: { fleetId: { in: carts.map((c) => c.id) }, status: 'Approved', returnedAt: null },
+            select: { fleetId: true, startDate: true, endDate: true, startTime: true, endTime: true },
+        });
+
+        const busyFleetIds = new Set(
+            approved
+                .filter(
+                    (b) =>
+                        (nowDate > b.startDate || (nowDate === b.startDate && nowTime >= b.startTime)) &&
+                        (nowDate < b.endDate || (nowDate === b.endDate && nowTime <= b.endTime)),
                 )
                 .map((b) => b.fleetId),
         );
@@ -193,6 +254,75 @@ export class PoolBookingRequestsService {
         return booking;
     }
 
+    /**
+     * Instant booking: no date/time is chosen — the requester wants a car right now.
+     * A wide-open 24h window is stamped so the existing overlap/derived-state logic
+     * (built for scheduled bookings) still applies; the real end is whenever an admin
+     * marks it returned, exactly like a scheduled booking.
+     */
+    async createInstant(data: CreateInstantBookingRequestData) {
+        await this.assertFleetBelongsToStadium(data.fleetId, data.stadiumId);
+        await this.assertFABelongsToStadium(data.faUserId, data.stadiumId);
+
+        const now = new Date();
+        const startDate = formatDate(now);
+        const startTime = formatTime(now);
+        const endMoment = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const endDate = formatDate(endMoment);
+        const endTime = startTime;
+
+        const requestToken = this.generateRequestToken();
+
+        const booking = await prisma.poolBookingRequest.create({
+            data: {
+                stadiumId: data.stadiumId,
+                fleetId: data.fleetId,
+                requesterName: data.requesterName,
+                requesterEmail: data.requesterEmail,
+                requesterPhone: data.requesterPhone,
+                faUserId: data.faUserId,
+                bookingType: 'Instant',
+                startDate,
+                endDate,
+                startTime,
+                endTime,
+                purpose: data.purpose,
+                requestToken,
+                createdById: data.createdById,
+                status: 'Pending',
+            },
+            include: BOOKING_INCLUDE,
+        });
+
+        const message = `${data.requesterName} requested an instant booking for ${booking.fleet.carNumber} at ${booking.stadium.name}`;
+        await notificationService.createForRoles(
+            { type: 'PoolBookingRequested', title: 'New Instant Booking Request', message, entityType: 'PoolBookingRequest', entityId: booking.id },
+            ['Admin'],
+            data.stadiumId,
+        );
+        await notificationService.createForRoles(
+            { type: 'PoolBookingRequested', title: 'New Instant Booking Request', message, entityType: 'PoolBookingRequest', entityId: booking.id },
+            ['SuperAdmin'],
+        );
+
+        return booking;
+    }
+
+    /** Requester (or venue staff) confirms the key has physically been collected — stops the 10-minute auto-cancel clock. */
+    async markKeyCollected(id: string) {
+        const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
+        if (!existing) throw new Error('Booking request not found');
+        if (existing.bookingType !== 'Instant') throw new Error('Only instant bookings track key collection');
+        if (existing.status !== 'Approved') throw new Error('Booking is not in an approved state');
+        if (existing.keyCollectedAt) return existing;
+
+        return prisma.poolBookingRequest.update({
+            where: { id },
+            data: { keyCollectedAt: new Date() },
+            include: BOOKING_INCLUDE,
+        });
+    }
+
     async getByToken(token: string) {
         return prisma.poolBookingRequest.findUnique({ where: { requestToken: token }, include: BOOKING_INCLUDE });
     }
@@ -284,11 +414,15 @@ export class PoolBookingRequestsService {
             include: BOOKING_INCLUDE,
         });
 
+        const instantWarning =
+            updated.bookingType === 'Instant'
+                ? ` Collect the key within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes or this booking will be automatically cancelled and the car returned to the pool.`
+                : '';
         if (updated.createdById) {
             await notificationService.create({
                 type: 'PoolBookingApproved',
                 title: 'Pool Booking Approved',
-                message: `Your pool booking for ${updated.fleet.carNumber} at ${updated.stadium.name} was approved — collect the key and return the car to the charging station when done.`,
+                message: `Your pool booking for ${updated.fleet.carNumber} at ${updated.stadium.name} was approved — collect the key and return the car to the charging station when done.${instantWarning}`,
                 entityType: 'PoolBookingRequest',
                 entityId: id,
                 userId: updated.createdById,
@@ -327,14 +461,19 @@ export class PoolBookingRequestsService {
 
     /** Best-effort email to the (possibly no-login) requester on approve/reject. */
     private async notifyBookingRequester(
-        booking: { requesterEmail: string; requesterName: string; fleet: { carNumber: string }; stadium: { name: string } },
+        booking: { requesterEmail: string; requesterName: string; fleet: { carNumber: string }; stadium: { name: string }; bookingType?: string },
         status: 'approved' | 'rejected',
         reviewComment?: string,
     ) {
         try {
             const approvedInstructions =
                 `\n\nPlease collect the car key and ensure the car is returned to the charging station ` +
-                `once you are done, and hand back the key to the venue's logistics representative.`;
+                `once you are done, and hand back the key to the venue's logistics representative.` +
+                (booking.bookingType === 'Instant'
+                    ? ` If the request is not attended and the key has not been collected within ` +
+                      `${INSTANT_COLLECTION_WINDOW_MINUTES} minutes, this booking will be automatically ` +
+                      `cancelled and the car will return to the pool due to demand from other users.`
+                    : '');
             await emailService.send({
                 to: booking.requesterEmail,
                 subject: `Pool booking ${status}: ${booking.fleet.carNumber}`,
@@ -531,6 +670,60 @@ export class PoolBookingRequestsService {
                     { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
                     ['SuperAdmin'],
                 );
+            }
+        }
+    }
+
+    /**
+     * In-process scan (called on an interval from server.ts, same pattern as
+     * scanReminders): any Approved Instant booking whose key hasn't been collected
+     * within INSTANT_COLLECTION_WINDOW_MINUTES of Admin approval is auto-cancelled,
+     * returning the car to the pool for other requesters.
+     */
+    async scanInstantExpiry() {
+        const now = new Date();
+        const candidates = await prisma.poolBookingRequest.findMany({
+            where: { status: 'Approved', bookingType: 'Instant', keyCollectedAt: null, reviewedAt: { not: null } },
+            include: BOOKING_INCLUDE,
+        });
+
+        for (const b of candidates) {
+            if (!b.reviewedAt) continue;
+            const deadline = b.reviewedAt.getTime() + INSTANT_COLLECTION_WINDOW_MINUTES * 60 * 1000;
+            if (now.getTime() < deadline) continue;
+
+            const claimed = await prisma.poolBookingRequest.updateMany({
+                where: { id: b.id, status: 'Approved', keyCollectedAt: null },
+                data: {
+                    status: 'Cancelled',
+                    autoCancelledAt: now,
+                    reviewComment: `Auto-cancelled — key not collected within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes of approval.`,
+                },
+            });
+            if (claimed.count === 0) continue; // another replica already claimed/collected it
+
+            const message = `${b.fleet.carNumber} instant booking for ${b.requesterName} was auto-cancelled (key not collected in time) and returned to the pool at ${b.stadium.name}.`;
+            await notificationService.createForRoles(
+                { type: 'PoolBookingAutoCancelled', title: 'Instant booking auto-cancelled', message, entityType: 'PoolBookingRequest', entityId: b.id },
+                ['Admin'], b.stadiumId,
+            );
+            await notificationService.createForRoles(
+                { type: 'PoolBookingAutoCancelled', title: 'Instant booking auto-cancelled', message, entityType: 'PoolBookingRequest', entityId: b.id },
+                ['SuperAdmin'],
+            );
+            try {
+                await emailService.send({
+                    to: b.requesterEmail,
+                    subject: `Instant booking cancelled: ${b.fleet.carNumber}`,
+                    text:
+                        `Hello ${b.requesterName},\n\n` +
+                        `Your instant booking for ${b.fleet.carNumber} at ${b.stadium.name} was cancelled because ` +
+                        `the key was not collected within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes of approval. ` +
+                        `The car has returned to the pool due to demand from other users. You're welcome to submit a new request.\n\n` +
+                        `Thank you,\nGCMS`,
+                });
+            } catch (e) {
+                console.error('Instant booking auto-cancel email failed:', e);
             }
         }
     }

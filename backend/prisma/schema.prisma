@@ -542,6 +542,12 @@ model PoolBookingRequest {
   reminderSentAt     DateTime?
   overdueNotifiedAt  DateTime?
 
+  // Instant booking (bookingType "Instant") — no date/time chosen up front; the
+  // requester must collect the key within 10 minutes of Admin approval or the
+  // booking is auto-cancelled by the in-process poller and the car returns to the pool.
+  keyCollectedAt     DateTime?
+  autoCancelledAt    DateTime?
+
   // Extension request — the FA asks for more time; only Admin/SuperAdmin can approve
   extensionRequestedEndDate String?
   extensionRequestedEndTime String?

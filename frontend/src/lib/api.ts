@@ -434,6 +434,8 @@ export const poolBookingRequestsApi = {
         stadiumId: string,
         params: { startDate: string; endDate: string; startTime: string; endTime: string; excludeBookingId?: string },
     ) => apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/available-carts`, { params }),
+    getInstantAvailableCarts: (stadiumId: string) =>
+        apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/instant-available-carts`),
     createPublic: (data: {
         stadiumId: string;
         fleetId: string;
@@ -448,8 +450,19 @@ export const poolBookingRequestsApi = {
         endTime: string;
         purpose?: string;
     }) => apiClient.post('/public/pool-booking-requests', data),
+    createInstantPublic: (data: {
+        stadiumId: string;
+        fleetId: string;
+        requesterName: string;
+        requesterEmail: string;
+        requesterPhone: string;
+        faUserId: string;
+        purpose?: string;
+    }) => apiClient.post('/public/pool-booking-requests/instant', data),
     getByTokenPublic: (token: string) =>
         apiClient.get(`/public/pool-booking-requests/${token}`),
+    markKeyCollectedPublic: (token: string) =>
+        apiClient.patch(`/public/pool-booking-requests/${token}/collect`),
 
     // Admin/FA/Observer endpoints (auth required)
     getAll: (params?: { status?: string; stadiumId?: string; derivedState?: string }) =>
@@ -462,6 +475,8 @@ export const poolBookingRequestsApi = {
         apiClient.patch(`/pool-booking-requests/${id}`, data),
     markReturned: (id: string) =>
         apiClient.patch(`/pool-booking-requests/${id}/return`),
+    markKeyCollected: (id: string) =>
+        apiClient.patch(`/pool-booking-requests/${id}/collect`),
     requestExtension: (id: string, endDate: string, endTime: string) =>
         apiClient.post(`/pool-booking-requests/${id}/extension`, { endDate, endTime }),
     reviewExtension: (id: string, approve: boolean) =>

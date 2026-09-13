@@ -40,6 +40,27 @@ const statusColors: Record<string, string> = {
     Cancelled: 'bg-gray-100 text-gray-800',
 };
 
+function ConfirmCollectedButton({ token, onConfirmed }: { token: string; onConfirmed: () => void }) {
+    const [busy, setBusy] = useState(false);
+    const confirm = async () => {
+        setBusy(true);
+        try {
+            await poolBookingRequestsApi.markKeyCollectedPublic(token);
+            onConfirmed();
+        } catch {
+            // best-effort — leave the button clickable to retry
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <Button size="sm" onClick={confirm} disabled={busy} className="bg-emerald-600 hover:bg-emerald-700">
+            {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            I've collected the key
+        </Button>
+    );
+}
+
 function BookingConfirmationView({ token }: { token: string }) {
     const [loading, setLoading] = useState(true);
     const [booking, setBooking] = useState<any>(null);
@@ -110,12 +131,31 @@ function BookingConfirmationView({ token }: { token: string }) {
                             </div>
                         </div>
                         {booking.status === 'Approved' && (
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-900">
-                                <p className="font-semibold mb-1">Request approved — please collect the car key.</p>
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-900 space-y-2">
+                                <p className="font-semibold">Request approved — please collect the car key.</p>
                                 <p>
                                     Ensure the car is returned to the charging station once you are done, and hand
                                     back the key to the venue's logistics representative.
                                 </p>
+                                {booking.bookingType === 'Instant' && !booking.keyCollectedAt && (
+                                    <>
+                                        <p className="font-medium text-amber-800">
+                                            If the key is not collected within 10 minutes of approval, this booking
+                                            will be automatically cancelled and the car returned to the pool due to
+                                            demand from other users.
+                                        </p>
+                                        <ConfirmCollectedButton token={token} onConfirmed={() => setBooking({ ...booking, keyCollectedAt: new Date().toISOString() })} />
+                                    </>
+                                )}
+                                {booking.bookingType === 'Instant' && booking.keyCollectedAt && (
+                                    <p className="text-emerald-700">Key collection confirmed — enjoy your booking.</p>
+                                )}
+                            </div>
+                        )}
+                        {booking.status === 'Cancelled' && booking.bookingType === 'Instant' && (
+                            <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
+                                This instant booking was automatically cancelled because the key was not collected in
+                                time, and the car has returned to the pool. You're welcome to submit a new request.
                             </div>
                         )}
                         {booking.reviewComment && (
@@ -157,12 +197,17 @@ function NewPoolBookingRequestView() {
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
     const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
 
+    const [mode, setMode] = useState<'schedule' | 'instant'>('schedule');
+
     const [fas, setFAs] = useState<FA[]>([]);
     const [availableCarts, setAvailableCarts] = useState<AvailableCart[]>([]);
     const [loadingCarts, setLoadingCarts] = useState(false);
+    const [instantCarts, setInstantCarts] = useState<AvailableCart[]>([]);
+    const [loadingInstantCarts, setLoadingInstantCarts] = useState(false);
 
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const [submittedMode, setSubmittedMode] = useState<'schedule' | 'instant'>('schedule');
     const [requestToken, setRequestToken] = useState('');
     const [error, setError] = useState<string | null>(null);
 
@@ -221,11 +266,29 @@ function NewPoolBookingRequestView() {
             .finally(() => setLoadingCarts(false));
     }, [formData.stadiumId, formData.startDate, formData.endDate, formData.startTime, formData.endTime, formData.bookingType]);
 
+    useEffect(() => {
+        if (mode !== 'instant' || !formData.stadiumId) {
+            setInstantCarts([]);
+            return;
+        }
+        setLoadingInstantCarts(true);
+        poolBookingRequestsApi
+            .getInstantAvailableCarts(formData.stadiumId)
+            .then((res) => setInstantCarts(res.data.data || []))
+            .catch((err) => console.error('Failed to load instant available carts:', err))
+            .finally(() => setLoadingInstantCarts(false));
+    }, [mode, formData.stadiumId]);
+
+    const switchMode = (next: 'schedule' | 'instant') => {
+        setMode(next);
+        setError(null);
+        setFormData((f) => ({ ...f, fleetId: '' }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
-        const effectiveEndDate = formData.bookingType === 'Single' ? formData.startDate : formData.endDate;
         if (!formData.fleetId) {
             setError('Please select a cart');
             return;
@@ -233,6 +296,23 @@ function NewPoolBookingRequestView() {
 
         setSubmitting(true);
         try {
+            if (mode === 'instant') {
+                const res = await poolBookingRequestsApi.createInstantPublic({
+                    stadiumId: formData.stadiumId,
+                    fleetId: formData.fleetId,
+                    requesterName: formData.requesterName,
+                    requesterEmail: formData.requesterEmail,
+                    requesterPhone: formData.requesterPhone,
+                    faUserId: formData.faUserId,
+                    purpose: formData.purpose || undefined,
+                });
+                setRequestToken(res.data.data.requestToken);
+                setSubmittedMode('instant');
+                setSubmitted(true);
+                return;
+            }
+
+            const effectiveEndDate = formData.bookingType === 'Single' ? formData.startDate : formData.endDate;
             const res = await poolBookingRequestsApi.createPublic({
                 stadiumId: formData.stadiumId,
                 fleetId: formData.fleetId,
@@ -248,6 +328,7 @@ function NewPoolBookingRequestView() {
                 purpose: formData.purpose || undefined,
             });
             setRequestToken(res.data.data.requestToken);
+            setSubmittedMode('schedule');
             setSubmitted(true);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to submit booking request');
@@ -275,6 +356,14 @@ function NewPoolBookingRequestView() {
                         <p className="text-muted-foreground mb-4">
                             Logistics team will review your request and respond to you shortly.
                         </p>
+                        {submittedMode === 'instant' && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4 text-sm text-amber-900">
+                                Once approved, collect the key within <strong>10 minutes</strong> — if the request
+                                has not been attended and the key has not been collected in time, the booking will
+                                be automatically cancelled and the car returned to the pool due to demand from other
+                                users.
+                            </div>
+                        )}
                         <div className="bg-muted p-3 rounded-md mb-6">
                             <p className="text-sm text-muted-foreground mb-2">Track your booking:</p>
                             <a href={trackingUrl} className="text-primary hover:underline text-sm break-all">
@@ -337,6 +426,25 @@ function NewPoolBookingRequestView() {
                         <p className="text-muted-foreground mt-2">Request a shared pool cart at a venue — subject to admin approval</p>
                     </div>
 
+                    <div className="flex justify-center gap-3 mb-6">
+                        <Button
+                            type="button"
+                            variant={mode === 'schedule' ? 'default' : 'outline'}
+                            onClick={() => switchMode('schedule')}
+                            className="flex-1 max-w-[220px]"
+                        >
+                            Schedule a Booking
+                        </Button>
+                        <Button
+                            type="button"
+                            variant={mode === 'instant' ? 'default' : 'outline'}
+                            onClick={() => switchMode('instant')}
+                            className="flex-1 max-w-[220px]"
+                        >
+                            Instant Booking
+                        </Button>
+                    </div>
+
                     {branding.requestWindow && !branding.requestWindow.isOpen ? (
                         <Card className="max-w-lg mx-auto">
                             <CardContent className="py-10 text-center space-y-2">
@@ -353,7 +461,11 @@ function NewPoolBookingRequestView() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Booking Details</CardTitle>
-                            <CardDescription>Select a venue to begin.</CardDescription>
+                            <CardDescription>
+                                {mode === 'instant'
+                                    ? 'Select a venue to see pool cars available right now — no date or time needed.'
+                                    : 'Select a venue to begin.'}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-6">
@@ -440,6 +552,7 @@ function NewPoolBookingRequestView() {
                                             </div>
                                         </div>
 
+                                        {mode === 'schedule' && (
                                         <div className="space-y-4">
                                             <h3 className="font-medium">Schedule</h3>
                                             <div className="space-y-2">
@@ -505,7 +618,9 @@ function NewPoolBookingRequestView() {
                                                 </div>
                                             </div>
                                         </div>
+                                        )}
 
+                                        {mode === 'schedule' ? (
                                         <div className="space-y-2">
                                             <Label htmlFor="fleetId" className="flex items-center gap-2">
                                                 <Car className="w-4 h-4" /> Available Pool Cart *
@@ -535,6 +650,41 @@ function NewPoolBookingRequestView() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+                                        ) : (
+                                        <div className="space-y-3">
+                                            <h3 className="font-medium flex items-center gap-2">
+                                                <Car className="w-4 h-4" /> Available Pool Cars Right Now *
+                                            </h3>
+                                            {loadingInstantCarts ? (
+                                                <div className="flex justify-center py-6">
+                                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                                                </div>
+                                            ) : instantCarts.length === 0 ? (
+                                                <p className="text-sm text-muted-foreground">No pool cars are free at this venue right now.</p>
+                                            ) : (
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                    {instantCarts.map((c) => {
+                                                        const selected = formData.fleetId === c.id;
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                key={c.id}
+                                                                onClick={() => setFormData({ ...formData, fleetId: c.id })}
+                                                                className={`rounded-xl border p-3 text-left transition ${
+                                                                    selected
+                                                                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                                                                        : 'bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100'
+                                                                }`}
+                                                            >
+                                                                <p className="font-bold">{c.carNumber}</p>
+                                                                <p className={`text-xs ${selected ? 'text-emerald-50' : 'text-emerald-700'}`}>{c.carType}</p>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                        )}
 
                                         <div className="space-y-2">
                                             <Label htmlFor="purpose">Purpose (Optional)</Label>
