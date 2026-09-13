@@ -41,10 +41,32 @@ export class DepartmentsService {
         return departments;
     }
 
-    async update(id: string, data: { name?: string; code?: string; focalPointId?: string | null }) {
+    async update(id: string, data: {
+        name?: string; code?: string; isActive?: boolean;
+        focalPointId?: string | null; focalPointName?: string | null; focalPointEmail?: string | null;
+    }) {
+        const update: Record<string, unknown> = { ...data };
+
+        // Auto-link the venue focal point to a system user once their email (or,
+        // failing that, their name) matches an existing FA account — without this,
+        // focalPointName/Email are just free-text contact info for the venue.
+        if (data.focalPointId === undefined && (data.focalPointEmail || data.focalPointName)) {
+            const matched = await prisma.user.findFirst({
+                where: {
+                    role: 'FA',
+                    OR: [
+                        ...(data.focalPointEmail ? [{ email: { equals: data.focalPointEmail } }] : []),
+                        ...(data.focalPointName ? [{ name: { equals: data.focalPointName } }] : []),
+                    ],
+                },
+                select: { id: true },
+            });
+            update.focalPointId = matched?.id ?? null;
+        }
+
         return prisma.department.update({
             where: { id },
-            data,
+            data: update,
             include: {
                 stadium: { select: { id: true, name: true, code: true } },
                 focalPoint: { select: { id: true, name: true, email: true } },

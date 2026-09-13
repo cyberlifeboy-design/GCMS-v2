@@ -18,7 +18,10 @@ const createBulkDeptSchema = z.object({
 const updateDeptSchema = z.object({
     name: z.string().min(1).optional(),
     code: z.string().optional(),
+    isActive: z.boolean().optional(),
     focalPointId: z.string().nullable().optional(),
+    focalPointName: z.string().nullable().optional(),
+    focalPointEmail: z.string().email().nullable().optional().or(z.literal('')),
 });
 
 export class DepartmentsController {

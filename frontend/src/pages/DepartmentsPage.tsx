@@ -80,9 +80,12 @@ interface Department {
     id: string;
     name: string;
     code?: string;
+    isActive?: boolean;
     stadiumId: string;
     stadium: { id: string; name: string; code: string };
     focalPointId?: string | null;
+    focalPointName?: string | null;
+    focalPointEmail?: string | null;
     focalPoint?: { id: string; name: string; email: string } | null;
     _count?: { users: number; fleet: number };
 }
@@ -93,7 +96,7 @@ interface FAUser {
     email: string;
 }
 
-type MergedDept = Department & { stadiums: Array<{ id: string; name: string; code: string }>; ids: string[] };
+type MergedDept = Department & { stadiums: Array<{ id: string; name: string; code: string }>; ids: string[]; records: Department[] };
 
 type CreateMode = 'single' | 'all' | 'select';
 
@@ -119,6 +122,47 @@ export function DepartmentsPage() {
     const [createMode, setCreateMode] = useState<CreateMode>('single');
     const [selectedStadiumIds, setSelectedStadiumIds] = useState<string[]>([]);
     const [editStadiumIds, setEditStadiumIds] = useState<string[]>([]);
+
+    // Per-venue focal point + active/inactive management — each venue's row for
+    // this department name is a distinct Department record with its own contact.
+    const [venueModal, setVenueModal] = useState<{ open: boolean; dept?: MergedDept }>({ open: false });
+    const [venueRows, setVenueRows] = useState<Array<{
+        id: string; stadiumId: string; stadiumLabel: string; isActive: boolean;
+        focalPointName: string; focalPointEmail: string;
+    }>>([]);
+    const [venueSaving, setVenueSaving] = useState(false);
+
+    const openVenueModal = (d: MergedDept) => {
+        setVenueRows(d.records.map(r => ({
+            id: r.id,
+            stadiumId: r.stadiumId,
+            stadiumLabel: `${r.stadium.code} — ${r.stadium.name}`,
+            isActive: r.isActive !== false,
+            focalPointName: r.focalPointName || r.focalPoint?.name || '',
+            focalPointEmail: r.focalPointEmail || r.focalPoint?.email || '',
+        })));
+        setVenueModal({ open: true, dept: d });
+    };
+
+    const saveVenueRows = async () => {
+        setVenueSaving(true);
+        try {
+            await Promise.all(venueRows.map(row =>
+                departmentsApi.update(row.id, {
+                    isActive: row.isActive,
+                    focalPointName: row.focalPointName || null,
+                    focalPointEmail: row.focalPointEmail || null,
+                })
+            ));
+            toast.success('Venue settings updated');
+            setVenueModal({ open: false });
+            loadDepartments(stadiumFilter === 'all' ? undefined : stadiumFilter);
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to update venues');
+        } finally {
+            setVenueSaving(false);
+        }
+    };
 
     const loadDepartments = async (stadiumId?: string) => {
         try {
@@ -172,10 +216,11 @@ export function DepartmentsPage() {
     const mergedDepartments = filtered.reduce((acc, d) => {
         const key = d.name;
         if (!acc[key]) {
-            acc[key] = { ...d, stadiums: [d.stadium], ids: [d.id] };
+            acc[key] = { ...d, stadiums: [d.stadium], ids: [d.id], records: [d] };
         } else {
             acc[key].stadiums.push(d.stadium);
             acc[key].ids.push(d.id);
+            acc[key].records.push(d);
             // Sum up counts
             if (acc[key]._count && d._count) {
                 acc[key]._count.users += d._count.users;
@@ -183,7 +228,7 @@ export function DepartmentsPage() {
             }
         }
         return acc;
-    }, {} as Record<string, Department & { stadiums: Array<{ id: string; name: string; code: string }>; ids: string[] }>);
+    }, {} as Record<string, Department & { stadiums: Array<{ id: string; name: string; code: string }>; ids: string[]; records: Department[] }>);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -393,16 +438,25 @@ export function DepartmentsPage() {
                                     <TableCell><code className="bg-muted px-1 rounded">{d.code || '—'}</code></TableCell>
                                     <TableCell>
                                         <div className="flex flex-wrap gap-1">
-                                            {d.stadiums.map(s => (
-                                                <Badge key={s.id} variant="outline" className="text-xs font-mono">{s.code}</Badge>
+                                            {d.records.map(r => (
+                                                <Badge
+                                                    key={r.stadium.id}
+                                                    variant="outline"
+                                                    className={`text-xs font-mono ${r.isActive === false ? 'opacity-40 line-through' : ''}`}
+                                                    title={r.isActive === false ? `${r.stadium.name} — inactive` : r.stadium.name}
+                                                >
+                                                    {r.stadium.code}
+                                                </Badge>
                                             ))}
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        {d.focalPoint ? (
+                                        {d.records.some(r => r.focalPointName || r.focalPointEmail || r.focalPoint) ? (
                                             <div className="flex items-center gap-1">
                                                 <User className="w-3 h-3 text-muted-foreground" />
-                                                <span className="text-sm">{d.focalPoint.name}</span>
+                                                <span className="text-sm">
+                                                    {d.records.filter(r => r.focalPointName || r.focalPointEmail || r.focalPoint).length} venue rep(s)
+                                                </span>
                                             </div>
                                         ) : (
                                             <span className="text-muted-foreground text-sm">—</span>
@@ -414,12 +468,10 @@ export function DepartmentsPage() {
                                     {canManage && (
                                         <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                                <Button variant="ghost" size="sm" title="Assign Focal Point" onClick={() => {
-                                                    setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
-                                                    setEditStadiumIds(d.stadiums.map(s => s.id));
-                                                    setModal({ open: true, mode: 'edit', department: d });
-                                                }}><UserCheck className="w-4 h-4 text-green-600" /></Button>
-                                                <Button variant="ghost" size="sm" onClick={() => {
+                                                <Button variant="ghost" size="sm" title="Manage venues, activation & focal points" onClick={() => openVenueModal(d)}>
+                                                    <UserCheck className="w-4 h-4 text-green-600" />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" title="Edit name/code" onClick={() => {
                                                     setFormData({ name: d.name, code: d.code || '', stadiumId: d.stadiumId, focalPointId: d.focalPointId || '' });
                                                     setEditStadiumIds(d.stadiums.map(s => s.id));
                                                     setModal({ open: true, mode: 'edit', department: d });
@@ -638,6 +690,63 @@ export function DepartmentsPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Per-venue activation + focal point management */}
+            <Dialog open={venueModal.open} onOpenChange={o => { if (!venueSaving) setVenueModal({ open: o }); }}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>{venueModal.dept?.name} — Venues</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground -mt-2">
+                        Each venue can have its own focal point representative and can be activated or deactivated
+                        independently. A focal point whose email/name matches an existing FA account is linked automatically.
+                    </p>
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto py-2">
+                        {venueRows.map((row, i) => (
+                            <div key={row.id} className="border rounded-lg p-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-sm">{row.stadiumLabel}</span>
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <span className={row.isActive ? 'text-green-700' : 'text-muted-foreground'}>
+                                            {row.isActive ? 'Active' : 'Inactive'}
+                                        </span>
+                                        <Checkbox
+                                            checked={row.isActive}
+                                            onCheckedChange={(v) => setVenueRows(rows => rows.map((r, j) => j === i ? { ...r, isActive: !!v } : r))}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Focal Point Name</Label>
+                                        <Input
+                                            value={row.focalPointName}
+                                            onChange={e => setVenueRows(rows => rows.map((r, j) => j === i ? { ...r, focalPointName: e.target.value } : r))}
+                                            placeholder="e.g. Jane Doe"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Focal Point Email</Label>
+                                        <Input
+                                            type="email"
+                                            value={row.focalPointEmail}
+                                            onChange={e => setVenueRows(rows => rows.map((r, j) => j === i ? { ...r, focalPointEmail: e.target.value } : r))}
+                                            placeholder="e.g. jane@dept.org"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setVenueModal({ open: false })} disabled={venueSaving}>Cancel</Button>
+                        <Button onClick={saveVenueRows} disabled={venueSaving}>
+                            {venueSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Save
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
