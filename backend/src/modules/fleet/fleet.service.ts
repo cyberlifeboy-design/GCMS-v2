@@ -288,7 +288,9 @@ export class FleetService {
         let fleetIdByCarNumber: string | undefined;
         if (filters?.carNumber && !filters.fleetId) {
             const fleet = await prisma.fleet.findFirst({
-                where: { carNumber: { equals: filters.carNumber, mode: 'insensitive' } },
+                // MySQL's default collation is already case-insensitive for `=` comparisons —
+                // `mode: 'insensitive'` is a Postgres-only Prisma option, not valid here.
+                where: { carNumber: { equals: filters.carNumber } },
                 select: { id: true },
             });
             if (fleet) {
