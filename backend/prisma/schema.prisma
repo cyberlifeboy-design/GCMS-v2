@@ -67,7 +67,7 @@ model Fleet {
 
   // Additional drivers added by FA user after handover is complete
   // JSON: [{ name, phone, accreditationNumber }]
-  additionalDrivers String?        @default("[]") @db.Text
+  additionalDrivers String?        @db.Text
 
   // Pool: cart is part of shared pool — no dedicated FA assignment needed
   isPool           Boolean          @default(false)
@@ -103,7 +103,7 @@ model User {
   exportFormat        String          @default("xlsx") // xlsx, pdf, docx
   exportPreferences   String?         @db.Text // SQLite fallback: Store as JSON string
   assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
-  grantedPages        String?         @default("[]") @db.Text // SQLite fallback: Store as JSON string
+  grantedPages        String?         @db.Text // SQLite fallback: Store as JSON string
   venueReportAccess   String          @default("assigned") // "assigned" or "all" - controls which venue reports the user can see
   stadiumId           String?
   stadium             Stadium?        @relation(fields: [stadiumId], references: [id])
@@ -167,7 +167,7 @@ model HandoverLog {
   action         String   // CheckedIn, CheckedOut, IssueReported
   timestamp      DateTime @default(now())
   conditionNotes String?  @db.Text
-  photosUrls     String?  @default("[]") @db.Text // SQLite fallback: Store as JSON string
+  photosUrls     String?  @db.Text // SQLite fallback: Store as JSON string
   createdAt      DateTime @default(now())
 
   @@index([fleetId])
@@ -184,7 +184,7 @@ model MaintenanceLog {
   reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
   issueDescription String    @db.Text
   issueType        String?   // Battery and electrical issue, Body damage, Tyre issue, Brake issue, Other
-  photosUrls       String?   @default("[]") @db.Text // SQLite fallback: Store as JSON string
+  photosUrls       String?   @db.Text // SQLite fallback: Store as JSON string
   reportedAt       DateTime  @default(now())
   status           String    @default("Open") // Open, InProgress, Resolved, PendingQuotation, PendingApproval
   resolutionNotes  String?   @db.Text
@@ -283,7 +283,7 @@ model Announcement {
   message         String
   type            String    @default("info") // info, warning, success, error
   targetType      String    @default("all") // all, fas, users, selected
-  targetUserIds   String?   @default("[]") @db.Text // SQLite fallback: Store as JSON string
+  targetUserIds   String?   @db.Text // SQLite fallback: Store as JSON string
   targetRole      String?   // For role-based targeting (FA, Admin, etc.)
   stadiumId       String?   // Optional stadium filter
   createdBy       String?   // User ID who created the announcement
@@ -555,7 +555,7 @@ model Incident {
   stadium        Stadium?  @relation(fields: [stadiumId], references: [id])
   title          String
   description    String    @db.Text
-  photosUrls     String?   @default("[]") @db.Text
+  photosUrls     String?   @db.Text
   occurredAt     DateTime
   status         String    @default("Open") // Open, UnderReview, Closed
   createdAt      DateTime  @default(now())
