@@ -134,8 +134,8 @@ export const handoverApi = {
         apiClient.post('/handover/forms', data),
     getHandoverForm: (fleetId: string) =>
         apiClient.get(`/handover/forms/${fleetId}`),
-    downloadFormPdf: (fleetId: string) =>
-        apiClient.get(`/handover/forms/${fleetId}/pdf`, { responseType: 'blob' }),
+    downloadFormPdf: (fleetId: string, variant: 'handover' | 'handback' = 'handover') =>
+        apiClient.get(`/handover/forms/${fleetId}/pdf`, { params: { type: variant }, responseType: 'blob' }),
     getPendingHandovers: () =>
         apiClient.get('/handover/forms/pending'),
     userSignHandoverForm: (data: Record<string, unknown>) =>

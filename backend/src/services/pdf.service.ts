@@ -448,10 +448,42 @@ export async function warningLetterPdf(args: { data: WarningLetterPdfData }): Pr
  * (with `fleet`, `assignedUser`, signer relations) — the caller fetches it so
  * this module stays leaf-level.
  */
+/** Filename-safe code: uppercased, non-alphanumerics stripped, falls back to a generic tag. */
+function safeCode(value: string | null | undefined, fallback: string): string {
+  const cleaned = (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return cleaned || fallback;
+}
+
+/** `{venueCode}-{deptCode}-{carNumber}handover.pdf` / `...handback.pdf`, per the requested naming convention. */
+export function handoverFilename(form: any, variant: 'handover' | 'handback'): string {
+  const fleet = form.fleet ?? {};
+  const venue = safeCode(fleet.stadium?.code, 'VEN');
+  const dept = safeCode(fleet.department?.code, 'DEPT');
+  const car = safeCode(fleet.carNumber, 'CAR');
+  return `${venue}-${dept}-${car}${variant}.pdf`;
+}
+
+function sectionBox(doc: PDFKit.PDFDocument, title: string, draw: () => void) {
+  doc.moveDown(0.5);
+  const startY = doc.y;
+  doc.rect(40, startY, doc.page.width - 80, 20).fill('#1f2937');
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(11).text(title, 46, startY + 5);
+  doc.fillColor('#000').moveDown(1.2);
+  draw();
+}
+
+/**
+ * Handover & handback (return) form as a branded PDF. Renders only the phase
+ * requested — `variant: 'handover'` covers the pre-use inspection + admin/
+ * receiver sign-off; `'handback'` covers the after-use inspection + return
+ * sign-off — so the two are downloadable (and nameable) as separate documents
+ * even though both live on one HandoverForm record.
+ */
 export async function handoverFormPdf(
   form: any,
+  variant: 'handover' | 'handback' = 'handover',
 ): Promise<{ buffer: Buffer; reference: string }> {
-  const reference = makeReference('HOF', form.id);
+  const reference = makeReference(variant === 'handback' ? 'HBK' : 'HOF', form.id);
   const fleet = form.fleet ?? {};
   const fa = fleet.assignedUser ?? {};
 
@@ -463,62 +495,71 @@ export async function handoverFormPdf(
     doc.moveDown(0.3);
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(label);
     const buf = dataUriToBuffer(uri);
+    const boxY = doc.y;
+    doc.rect(40, boxY, 200, 64).stroke('#ccc');
     if (buf) {
-      try { doc.image(buf, { fit: [160, 60] }); } catch { doc.font('Helvetica').fillColor('#000').text('[signature on file]'); }
+      try { doc.image(buf, 44, boxY + 2, { fit: [192, 60] }); } catch { doc.font('Helvetica').fillColor('#000').text('[signature on file]', 46, boxY + 25); }
     } else {
-      doc.font('Helvetica').fillColor('#000').text('[not signed]');
+      doc.font('Helvetica').fillColor('#999').text('[not signed]', 46, boxY + 25);
     }
+    doc.y = boxY + 68;
     if (at || by) doc.font('Helvetica').fontSize(8).fillColor('#666').text(`${by ?? ''}${at ? `  ·  ${new Date(at).toLocaleString()}` : ''}`);
     doc.fillColor('#000');
   };
 
   const buffer = await renderPdf(
     {
-      title: 'Golf Cart Handover & Return Form',
-      subtitle: `Cart ${fleet.carNumber ?? '—'} · ${fleet.stadium?.name ?? '—'}`,
+      title: variant === 'handback' ? 'Golf Cart Handback (Return) Form' : 'Golf Cart Handover Form',
+      subtitle: `Cart ${fleet.carNumber ?? '—'} · ${fleet.stadium?.name ?? '—'} (${fleet.stadium?.code ?? '—'}) · ${fleet.department?.name ?? '—'}`,
       reference,
     },
     (doc) => {
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('System record');
-      line(doc, 'Car number', fleet.carNumber);
-      line(doc, 'Car type', fleet.carType);
-      line(doc, 'Venue', fleet.stadium?.name);
-      line(doc, 'Department', fleet.department?.name);
-      line(doc, 'Assigned FA', fa.name);
-      line(doc, 'FA code', fa.accreditationNumber);
-      line(doc, 'FA phone', fa.phone);
-      line(doc, 'Status', form.status);
-      doc.moveDown(0.6);
+      sectionBox(doc, 'System record', () => {
+        line(doc, 'Car number', fleet.carNumber);
+        line(doc, 'Car type', fleet.carType);
+        line(doc, 'Venue', `${fleet.stadium?.name ?? '—'}${fleet.stadium?.code ? ` (${fleet.stadium.code})` : ''}`);
+        line(doc, 'Department', `${fleet.department?.name ?? '—'}${fleet.department?.code ? ` (${fleet.department.code})` : ''}`);
+        line(doc, 'Assigned FA', fa.name);
+        line(doc, 'FA code', fa.accreditationNumber);
+        line(doc, 'FA phone', fa.phone);
+        line(doc, 'Status', form.status);
+      });
 
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('Handover details');
-      line(doc, 'Handover date', form.handoverDate);
-      line(doc, 'Approved return date', form.approvedReturnDate);
-      line(doc, 'Handover location', form.handoverLocation);
-      line(doc, 'Handed over to', form.handedOverTo);
-      line(doc, 'Receiver contact', form.receiverContact);
-      line(doc, 'Receiver licence no', form.receiverLicenseNo);
-      line(doc, 'Issues / notes', form.issuesNotes);
-      doc.moveDown(0.4);
-      sig(doc, 'Admin signature (handover)', form.adminSignatureData, form.adminSignedAt, form.adminSignedByUser?.name);
-      sig(doc, 'Receiver signature (handover)', form.userSignatureData, form.userSignedAt, form.userSignedByUser?.name);
+      if (variant === 'handover') {
+        sectionBox(doc, 'Handover details', () => {
+          line(doc, 'Handover date', form.handoverDate);
+          line(doc, 'Approved return date', form.approvedReturnDate);
+          line(doc, 'Handover location', form.handoverLocation);
+          line(doc, 'Handed over to', form.handedOverTo);
+          line(doc, 'Receiver contact', form.receiverContact);
+          line(doc, 'Receiver licence no', form.receiverLicenseNo);
+          line(doc, 'Issues / notes', form.issuesNotes);
+        });
+        sectionBox(doc, 'Pre-use inspection sign-off', () => {
+          sig(doc, 'Admin signature (handover)', form.adminSignatureData, form.adminSignedAt, form.adminSignedByUser?.name);
+          sig(doc, 'Receiver signature (handover)', form.userSignatureData, form.userSignedAt, form.userSignedByUser?.name);
+        });
 
-      doc.moveDown(0.8);
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('Handback / return');
-      line(doc, 'Inspection done', form.inspectionDone);
-      line(doc, 'Return date', form.returnDate);
-      line(doc, 'Received by', form.receivedBy);
-      line(doc, 'Returned by', form.returnedBy);
-      doc.moveDown(0.4);
-      sig(doc, 'After-use signature (FA)', form.afteruseSignatureData, form.afteruseSignedAt, form.afteruseSignedByUser?.name);
-      sig(doc, 'Admin signature (return)', form.returnAdminSigData);
-      sig(doc, 'Receiver signature (return)', form.returnUserSigData);
-
-      if (form.finalSignatureData || form.finalName) {
-        doc.moveDown(0.6);
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('Terms acknowledgement');
-        line(doc, 'Name', form.finalName);
-        line(doc, 'Date', form.finalDate);
-        sig(doc, 'Final signature', form.finalSignatureData);
+        if (form.finalSignatureData || form.finalName) {
+          sectionBox(doc, 'Terms acknowledgement', () => {
+            line(doc, 'Name', form.finalName);
+            line(doc, 'Date', form.finalDate);
+            sig(doc, 'Signature', form.finalSignatureData);
+          });
+        }
+      } else {
+        sectionBox(doc, 'Handback / return details', () => {
+          line(doc, 'Inspection done', form.inspectionDone);
+          line(doc, 'Return date', form.returnDate);
+          line(doc, 'Received by', form.receivedBy);
+          line(doc, 'Returned by', form.returnedBy);
+          if (form.returnNotes) line(doc, 'Return notes', form.returnNotes);
+        });
+        sectionBox(doc, 'After-use inspection sign-off', () => {
+          sig(doc, 'After-use signature (FA)', form.afteruseSignatureData, form.afteruseSignedAt, form.afteruseSignedByUser?.name);
+          sig(doc, 'Admin signature (return)', form.returnAdminSigData);
+          sig(doc, 'Receiver signature (return)', form.returnUserSigData);
+        });
       }
     },
   );

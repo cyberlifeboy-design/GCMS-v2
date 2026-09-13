@@ -526,14 +526,29 @@ export function HandoverPage() {
                                         {(cart.handoverFormStatus === 'COMPLETE' || cart.handoverFormStatus === 'RETURNED') && (
                                             <Button variant="outline" size="sm" className="w-full text-xs" onClick={async () => {
                                                 try {
-                                                    const res = await handoverApi.downloadFormPdf(cart.id);
+                                                    const res = await handoverApi.downloadFormPdf(cart.id, 'handover');
+                                                    const serverName = /filename="?([^";]+)"?/.exec(res.headers?.['content-disposition'] || '')?.[1];
                                                     const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
                                                     const a = document.createElement('a');
-                                                    a.href = url; a.download = `handover_${cart.carNumber}.pdf`; a.click();
+                                                    a.href = url; a.download = serverName || `handover_${cart.carNumber}.pdf`; a.click();
                                                     URL.revokeObjectURL(url);
                                                 } catch { toast.error('Download failed'); }
                                             }}>
-                                                <ClipboardList className="w-3 h-3 mr-1" /> Download PDF
+                                                <ClipboardList className="w-3 h-3 mr-1" /> Download Handover
+                                            </Button>
+                                        )}
+                                        {cart.handoverFormStatus === 'RETURNED' && (
+                                            <Button variant="outline" size="sm" className="w-full text-xs" onClick={async () => {
+                                                try {
+                                                    const res = await handoverApi.downloadFormPdf(cart.id, 'handback');
+                                                    const serverName = /filename="?([^";]+)"?/.exec(res.headers?.['content-disposition'] || '')?.[1];
+                                                    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+                                                    const a = document.createElement('a');
+                                                    a.href = url; a.download = serverName || `handback_${cart.carNumber}.pdf`; a.click();
+                                                    URL.revokeObjectURL(url);
+                                                } catch { toast.error('Download failed'); }
+                                            }}>
+                                                <ClipboardList className="w-3 h-3 mr-1" /> Download Handback
                                             </Button>
                                         )}
                                         {handoverComplete && (

@@ -498,14 +498,15 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
         }
     };
 
-    const handlePrint = async () => {
+    const handlePrint = async (variant: 'handover' | 'handback' = 'handover') => {
         if (!fleetId) return;
         try {
-            const res = await handoverApi.downloadFormPdf(fleetId);
+            const res = await handoverApi.downloadFormPdf(fleetId, variant);
+            const serverName = /filename="?([^";]+)"?/.exec(res.headers?.['content-disposition'] || '')?.[1];
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a');
             a.href = url;
-            a.download = `handover_${form?.fleet?.carNumber || fleetId}.pdf`;
+            a.download = serverName || `${form?.fleet?.stadium?.code || 'VEN'}-${form?.fleet?.department?.code || 'DEPT'}-${form?.fleet?.carNumber || fleetId}${variant}.pdf`;
             a.click();
             URL.revokeObjectURL(url);
         } catch {
@@ -577,7 +578,10 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                             {form?.userSignedAt && <span className="text-xs text-zinc-400">User signed: {new Date(form.userSignedAt).toLocaleDateString()}</span>}
                             {form?.returnDate && <span className="text-xs text-zinc-400">Returned: {form.returnDate}</span>}
                         </div>
-                        {canPrint && <Button variant="secondary" size="sm" className="no-print" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Download PDF</Button>}
+                        <div className="flex gap-2 no-print">
+                            {canPrint && <Button variant="secondary" size="sm" onClick={() => handlePrint('handover')}><Printer className="w-4 h-4 mr-2" /> Download Handover</Button>}
+                            {isReturned && <Button variant="secondary" size="sm" onClick={() => handlePrint('handback')}><Printer className="w-4 h-4 mr-2" /> Download Handback</Button>}
+                        </div>
                     </div>
 
                     {loading ? (
@@ -732,8 +736,10 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                 <ConditionTable
                                     value={condition}
                                     onChange={setCondition}
+                                    // Pre-Use is only live while the handover itself is being created;
+                                    // After-Use only comes alive during the handback (afteruse/admin-return).
                                     disablePre={mode !== 'admin'}
-                                    disableAft={mode !== 'admin' && mode !== 'afteruse' && mode !== 'admin-return'}
+                                    disableAft={mode !== 'afteruse' && mode !== 'admin-return'}
                                 />
                             </div>
 
@@ -972,7 +978,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     <CheckCircle2 className="w-5 h-5 text-green-600" />
                                     <span className="font-semibold text-sm">Handover complete. Both parties have signed.</span>
                                     <div className="flex-1" />
-                                    <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Download PDF</Button>
+                                    <Button variant="outline" size="sm" onClick={() => handlePrint('handover')}><Printer className="w-4 h-4 mr-2" /> Download Handover PDF</Button>
                                 </div>
                             )}
                             {isReturned && (
@@ -980,7 +986,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                     <CheckCircle2 className="w-5 h-5 text-indigo-600" />
                                     <span className="font-semibold text-sm">Cart returned and released to pool. Return form signed.</span>
                                     <div className="flex-1" />
-                                    <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Download PDF</Button>
+                                    <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={() => handlePrint('handback')}><Printer className="w-4 h-4 mr-2" /> Download Handback PDF</Button>
                                 </div>
                             )}
                         </div>
