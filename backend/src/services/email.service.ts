@@ -119,6 +119,10 @@ class SmtpTransport implements EmailTransport {
         if (!this.cachedTransporter || configKey !== this.cachedConfigKey) {
             this.cachedTransporter = nodemailer.createTransport({
                 host, port, secure,
+                // Port 465-style implicit TLS sets `secure: true` above; anything else
+                // (e.g. port 587) must upgrade via STARTTLS — require it rather than
+                // silently falling back to plaintext if the server doesn't offer it.
+                ...(!secure ? { requireTLS: true } : {}),
                 ...(user && pass ? { auth: { user, pass } } : {}),
             });
             this.cachedConfigKey = configKey;

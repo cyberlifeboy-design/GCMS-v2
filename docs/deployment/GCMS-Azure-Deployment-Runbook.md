@@ -36,6 +36,59 @@
 > migrate` with P3019 after the MySQL switch); the schema is managed purely via `db push`
 > until a fresh MySQL-based migration baseline is created.
 
+> **2026-09-14 — Backend image now supports Azure App Service SSH (port 2222).**
+> Ahmed reported that Azure's Kudu/SCM "SSH" console reaches the backend App Service
+> but the session closes immediately when it hits the custom container — expected,
+> since the image had no SSH server at all. Fixed in `backend/Dockerfile` +
+> new `backend/sshd_config` / `backend/init.sh`, following Microsoft's own documented
+> recipe for this feature (openssh-server installed, sshd on port 2222, `root:Docker!`
+> — a password only reachable through the authenticated Kudu tunnel, never the public
+> ingress — a new `ENTRYPOINT` starts sshd then execs the app as PID 1). Also added a
+> `backend/.dockerignore` (missing until now) so a **local** `docker build` doesn't
+> copy the host's own `node_modules` over the container's Linux one — a real bug
+> (Windows-compiled native addons, e.g. `bcrypt`, crash the container with `invalid ELF
+> header`) that never surfaced before because the Azure builds go through `az acr build`
+> against the GitHub source, not this local directory.
+>
+> **Next step for Ahmed:** rebuild the backend image (`az acr build` from this branch)
+> and redeploy the backend App Service, then retry SSH — it should land in a shell on
+> port 2222 this time, ready for the pending `prisma db push` covering all the columns
+> noted above.
+>
+> **SMTP (Azure Communication Services) — values received from Ahmed, not yet applied:**
+> host `smtp.azurecomm.net`, port `587`, STARTTLS enabled, user `gcms-dev@sc.qa`, from
+> `gcms-notifications@sc.qa` ("GCMS Notification"). `email.service.ts` was updated the
+> same day to set `requireTLS: true` whenever the resolved config isn't already
+> implicit-TLS, so port 587 always negotiates STARTTLS rather than silently falling back
+> to plaintext. Once deployed, enter these (plus the password Ahmed is sending
+> separately, over a secure channel — **never commit it to this repo**) in
+> **Super Admin → Settings → Email (SMTP)**, which takes effect immediately with no
+> redeploy; or, if you'd rather manage it as infrastructure, set `SMTP_HOST` /
+> `SMTP_PORT` / `SMTP_SECURE=false` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` as App
+> Service Application Settings (`az webapp config appsettings set --name <backend-app>
+> --resource-group rg-gcms-dev-qc-001 --settings SMTP_HOST=smtp.azurecomm.net
+> SMTP_PORT=587 SMTP_SECURE=false SMTP_USER=gcms-dev@sc.qa
+> EMAIL_FROM='"GCMS Notification" <gcms-notifications@sc.qa>'`) — DB-stored settings
+> still take priority over these if both are set.
+>
+> **Microsoft Entra ID (SC corporate) login — redirect URL confirmed, feature not yet
+> built.** GCMS has no Microsoft/Entra login code today (email+password only); building
+> the actual login flow was deliberately deferred, but Ahmed needs a redirect URL now to
+> finish the App Registration, so one was reserved:
+> ```
+> https://app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net/auth/microsoft/callback
+> ```
+> **This must be a frontend URL, not the backend's.** The backend App Service
+> (`app-gcms-be-dev-qc-001-h2e5h0djhwh9cyep.qatarcentral-01.azurewebsites.net`) sits
+> behind a private endpoint with public access disabled — it cannot be an OAuth redirect
+> target at all, since Entra ID redirects the user's own browser there after login. Only
+> the frontend is internet-facing, so the SPA must own the callback route (an MSAL.js
+> authorization-code-with-PKCE flow in the browser, which then calls the backend's own
+> API — reachable from the frontend's nginx proxy the same way every other API call is —
+> to exchange the result for a GCMS session). Nothing is wired to `/auth/microsoft/callback`
+> yet; it's a reserved path, not a live route, and can still be changed before real work
+> starts since no App Registration depends on it yet at the time this was written.
+
 ---
 
 ## 0. Purpose & Scope
