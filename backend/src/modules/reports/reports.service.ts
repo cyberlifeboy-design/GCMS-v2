@@ -48,7 +48,7 @@ interface UserReport {
     name: string;
     email: string;
     role: string;
-    stadium: { id: string; name: string } | null;
+    stadium: { id: string; name: string; code: string } | null;
     department: { id: string; name: string; code: string | null } | null;
     isActive: boolean;
     assignedCarts: number;
@@ -670,7 +670,7 @@ export class ReportsService {
                 email: true,
                 role: true,
                 stadiumId: true,
-                stadium: { select: { id: true, name: true } },
+                stadium: { select: { id: true, name: true, code: true } },
                 departmentId: true,
                 department: { select: { id: true, name: true, code: true } },
                 isActive: true,

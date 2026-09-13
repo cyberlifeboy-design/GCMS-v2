@@ -649,7 +649,7 @@ export class ReportsController {
                 { header: 'Name', key: 'name', width: 25 },
                 { header: 'Email', key: 'email', width: 30 },
                 { header: 'Role', key: 'role', width: 12 },
-                { header: 'Stadium', key: 'stadium', width: 20 },
+                { header: 'Venue Code', key: 'stadium', width: 12 },
                 { header: 'Department', key: 'department', width: 20 },
                 { header: 'Dept Code', key: 'deptCode', width: 12 },
                 { header: 'Status', key: 'status', width: 10 },
@@ -665,7 +665,7 @@ export class ReportsController {
                     name: user.name,
                     email: user.email,
                     role: user.role,
-                    stadium: user.stadium?.name || '',
+                    stadium: user.stadium?.code || '',
                     department: user.department?.name || '',
                     deptCode: user.department?.code || '',
                     status: user.isActive ? 'Active' : 'Inactive',
@@ -758,7 +758,7 @@ export class ReportsController {
             doc.moveDown();
 
             // Table headers
-            const headers = ['Name', 'Role', 'Stadium', 'Dept', 'Dept Code', 'Carts', 'Check-ins', 'Check-outs', 'Issues'];
+            const headers = ['Name', 'Role', 'Venue Code', 'Dept', 'Dept Code', 'Carts', 'Check-ins', 'Check-outs', 'Issues'];
             const colWidths = [100, 50, 90, 90, 60, 40, 55, 55, 45];
             let y = doc.y;
 
@@ -777,7 +777,7 @@ export class ReportsController {
                 const rowData = [
                     user.name,
                     user.role,
-                    user.stadium?.name || '—',
+                    user.stadium?.code || '—',
                     user.department?.name || '—',
                     user.department?.code || '—',
                     user.assignedCarts.toString(),
