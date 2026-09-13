@@ -125,6 +125,21 @@ export class RequestsService {
     }
 
     /**
+     * Get a request by its human-friendly number + the requester's own email —
+     * the email check keeps requestNumber (a small sequential int) from being an
+     * open enumeration vector into other departments' requests.
+     */
+    async getByNumberAndEmail(requestNumber: number, email: string) {
+        return prisma.carRequest.findFirst({
+            where: { requestNumber, requesterEmail: { equals: email } },
+            include: {
+                stadium: { select: { id: true, name: true, code: true } },
+                department: { select: { id: true, name: true, code: true } },
+            },
+        });
+    }
+
+    /**
      * Get a request by ID
      */
     async getById(id: string) {

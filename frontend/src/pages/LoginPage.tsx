@@ -180,6 +180,13 @@ export function LoginPage() {
                                     </Button>
                                 </div>
                                 {note && <p className="text-xs text-center text-[#9aa2b5]">{note}</p>}
+                                {requestsEnabled && (
+                                    <p className="text-xs text-center">
+                                        <Link to="/request/track" className="text-[#3874ff] hover:underline font-semibold">
+                                            Track a request
+                                        </Link>
+                                    </p>
+                                )}
                             </div>
                         );
                     })()}

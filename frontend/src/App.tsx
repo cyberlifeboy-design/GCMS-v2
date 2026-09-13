@@ -20,6 +20,8 @@ const FleetManagementPage = lazy(() => import('@/pages/FleetManagementPage').the
 const RequestsManagementPage = lazy(() => import('@/pages/RequestsManagementPage').then(m => ({ default: m.RequestsManagementPage })));
 const IncidentsPage = lazy(() => import('@/pages/IncidentsPage').then(m => ({ default: m.IncidentsPage })));
 const PublicRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.PublicRequestPage })));
+const RequestConfirmationPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.RequestConfirmationPage })));
+const TrackRequestPage = lazy(() => import('@/pages/PublicRequestPage').then(m => ({ default: m.TrackRequestPage })));
 const NotificationCenterPage = lazy(() => import('@/pages/NotificationCenterPage').then(m => ({ default: m.NotificationCenterPage })));
 const UsageHistoryPage = lazy(() => import('@/pages/UsageHistoryPage').then(m => ({ default: m.UsageHistoryPage })));
 const MyReportsPage = lazy(() => import('@/pages/MyReportsPage').then(m => ({ default: m.MyReportsPage })));
@@ -55,7 +57,8 @@ function AppContent() {
             <Routes>
                 {/* Public routes (no auth) */}
                 <Route path="/request" element={<PublicRequestPage />} />
-                <Route path="/request/confirm/:token" element={<PublicRequestPage />} />
+                <Route path="/request/confirm/:token" element={<RequestConfirmationPage />} />
+                <Route path="/request/track" element={<TrackRequestPage />} />
                 <Route path="/book-pool" element={<PoolBookingRequestPage />} />
                 <Route path="/book-pool/confirm/:token" element={<PoolBookingRequestPage />} />
 

@@ -13,6 +13,9 @@ const router = Router();
 // POST /api/v1/public/requests - Submit a car request
 router.post('/public/requests', (req: Request, res: Response) => RequestsController.createPublic(req, res));
 
+// GET /api/v1/public/requests/track - Look up a request by its number + requester email
+router.get('/public/requests/track', (req: Request, res: Response) => RequestsController.trackPublic(req, res));
+
 // GET /api/v1/public/requests/:token - View request by token (confirmation page)
 router.get('/public/requests/:token', (req: Request, res: Response) => RequestsController.getByTokenPublic(req, res));
 
@@ -30,11 +33,11 @@ router.get('/public/stadiums', async (_req: Request, res: Response) => {
     }
 });
 
-// GET /api/v1/public/departments?stadiumId=xxx - List departments for public form
+// GET /api/v1/public/departments?stadiumId=xxx - List active departments for public form
 router.get('/public/departments', async (req: Request, res: Response) => {
     try {
         const { stadiumId } = req.query;
-        const where: Record<string, unknown> = {};
+        const where: Record<string, unknown> = { isActive: true };
         if (stadiumId) where.stadiumId = stadiumId as string;
         const departments = await prisma.department.findMany({
             where,

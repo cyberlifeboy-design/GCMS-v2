@@ -27,18 +27,24 @@ model Stadium {
 }
 
 model Department {
-  id           String   @id @default(cuid())
-  name         String
-  code         String?
-  stadiumId    String
-  stadium      Stadium  @relation(fields: [stadiumId], references: [id])
-  focalPointId String?
-  focalPoint   User?    @relation("DepartmentFocalPoint", fields: [focalPointId], references: [id])
-  users        User[]
-  fleet        Fleet[]
-  carRequests  CarRequest[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  code            String?
+  isActive        Boolean  @default(true)
+  stadiumId       String
+  stadium         Stadium  @relation(fields: [stadiumId], references: [id])
+  focalPointId    String?
+  focalPoint      User?    @relation("DepartmentFocalPoint", fields: [focalPointId], references: [id])
+  // Free-text focal point contact for this department AT THIS VENUE — kept even when
+  // there's no matching system user yet. When the name/email matches an existing User,
+  // focalPointId is auto-linked so the rep also shows up as the resolved system account.
+  focalPointName  String?
+  focalPointEmail String?
+  users           User[]
+  fleet           Fleet[]
+  carRequests     CarRequest[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([name, stadiumId])
   @@index([stadiumId])
@@ -321,6 +327,7 @@ model AuditLog {
 // Public car request from department leads
 model CarRequest {
   id               String    @id @default(cuid())
+  requestNumber    Int       @unique @default(autoincrement())
   requesterName    String
   requesterEmail   String
   requesterPhone   String?

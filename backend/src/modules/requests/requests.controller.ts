@@ -97,6 +97,32 @@ export class RequestsController {
     }
 
     /**
+     * Public endpoint: Track a request by its request number + the requester's own email
+     * GET /api/v1/public/requests/track?number=123&email=jane@dept.org
+     */
+    static async trackPublic(req: Request, res: Response) {
+        try {
+            const number = parseInt(String(req.query.number || ''), 10);
+            const email = String(req.query.email || '').trim();
+            if (!number || !email) {
+                res.status(400).json({ error: 'Request number and email are required' });
+                return;
+            }
+
+            const request = await requestsService.getByNumberAndEmail(number, email);
+            if (!request) {
+                res.status(404).json({ error: 'No request found matching that number and email' });
+                return;
+            }
+
+            res.status(200).json({ data: request });
+        } catch (error) {
+            console.error('Track request error:', error);
+            res.status(500).json({ error: 'Failed to fetch request' });
+        }
+    }
+
+    /**
      * Admin endpoint: Get all requests with filters
      * GET /api/v1/requests
      */

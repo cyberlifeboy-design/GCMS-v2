@@ -341,6 +341,8 @@ export const requestsApi = {
     }) => axios.post(`${API_URL}/public/requests`, data),
     getByTokenPublic: (token: string) =>
         axios.get(`${API_URL}/public/requests/${token}`),
+    trackPublic: (requestNumber: number, email: string) =>
+        axios.get(`${API_URL}/public/requests/track`, { params: { number: requestNumber, email } }),
 
     // Admin endpoints (auth required)
     getAll: (params?: Record<string, unknown>) =>
