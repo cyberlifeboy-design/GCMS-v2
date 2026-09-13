@@ -429,9 +429,9 @@ export class MaintenanceService {
         if (!log) throw new Error('Maintenance log not found');
 
         const reference = makeReference('MNT', log.id);
-        let photoCount = 0;
-        try { photoCount = (JSON.parse((log.photosUrls as string) || '[]') as unknown[]).length; }
-        catch { photoCount = 0; }
+        let photoUrls: string[] = [];
+        try { photoUrls = JSON.parse((log.photosUrls as string) || '[]') as string[]; }
+        catch { photoUrls = []; }
 
         const buffer = await maintenanceReportPdf({
             reference,
@@ -447,7 +447,9 @@ export class MaintenanceService {
                 reporterRole: log.reportedBy?.role ?? null,
                 reporterPhone: log.reportedBy?.phone ?? null,
                 fixCost: log.fixCost ?? null,
-                photoCount,
+                photoCount: photoUrls.length,
+                photoUrls,
+                issueDescription: log.issueDescription ?? null,
                 timeline: maintenanceTimeline(log as any),
             },
         });

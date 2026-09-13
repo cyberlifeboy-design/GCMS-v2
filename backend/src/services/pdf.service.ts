@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { prisma } from '../config/database';
+import { getFileBuffer } from '../config/storage';
 
 export interface PdfMeta {
   title: string;
@@ -21,6 +22,25 @@ function dataUriToBuffer(uri: string | null | undefined): Buffer | null {
   if (!m) return null;
   try {
     return Buffer.from(m[1], 'base64');
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch a stored photo (internal `/api/v1/storage/<bucket>/<file>` path or an external URL) as a Buffer for embedding. */
+async function fetchPhotoBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const internalMatch = url.match(/\/api\/v1\/storage\/([^/]+)\/(.+)$/);
+    if (internalMatch) {
+      const [, bucket, fileName] = internalMatch;
+      return await getFileBuffer(bucket, fileName);
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    }
+    return null;
   } catch {
     return null;
   }
@@ -185,6 +205,8 @@ export interface MaintenanceReportPdfData {
   reporterPhone: string | null;
   fixCost: number | null;
   photoCount: number;
+  photoUrls?: string[];
+  issueDescription?: string | null;
   timeline: PdfTimelineEvent[];
 }
 
@@ -200,9 +222,19 @@ export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfDat
     doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
   };
   const heading = (doc: PDFKit.PDFDocument, t: string) => {
-    doc.moveDown(0.6).font('Helvetica-Bold').fontSize(12).fillColor('#000').text(t).moveDown(0.2);
-    doc.font('Helvetica').fontSize(10);
+    doc.moveDown(0.6);
+    const y = doc.y;
+    doc.rect(40, y, doc.page.width - 80, 18).fill('#1f2937');
+    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(11).text(t, 46, y + 4);
+    doc.fillColor('#000').font('Helvetica').fontSize(10).moveDown(1);
   };
+
+  // Photos are fetched up front (async) so the synchronous pdfkit drawing
+  // callback below can just place already-resolved image buffers.
+  const photoUrls = data.photoUrls ?? [];
+  const photoBuffers = (
+    await Promise.all(photoUrls.map((url) => fetchPhotoBuffer(url)))
+  ).filter((b): b is Buffer => !!b);
 
   return renderPdf(
     {
@@ -225,6 +257,11 @@ export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfDat
       kv(doc, 'Role', data.reporterRole);
       kv(doc, 'Contact', data.reporterPhone);
 
+      if (data.issueDescription) {
+        heading(doc, 'Reported issue');
+        doc.font('Helvetica').fontSize(10).fillColor('#000').text(data.issueDescription);
+      }
+
       heading(doc, 'Workflow timeline');
       if (data.timeline.length === 0) {
         doc.text('No timeline events.');
@@ -236,6 +273,27 @@ export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfDat
             .text(`   ${e.at ? new Date(e.at).toLocaleString() : 'date not recorded'}${e.by ? `  ·  ${e.by}` : ''}`);
           if (e.detail) doc.font('Helvetica').fontSize(9).fillColor('#333').text(e.detail);
           doc.fillColor('#000');
+        });
+      }
+
+      if (photoBuffers.length > 0) {
+        heading(doc, 'Attached photos');
+        const gap = 10;
+        const cols = 2;
+        const cellW = (doc.page.width - 80 - gap * (cols - 1)) / cols;
+        const cellH = 150;
+        photoBuffers.forEach((buf, i) => {
+          const col = i % cols;
+          if (col === 0 && i > 0) doc.moveDown(0);
+          const x = 40 + col * (cellW + gap);
+          // Start a new page if this row won't fit in the remaining space.
+          if (doc.y + cellH > doc.page.height - 60) doc.addPage();
+          const y = doc.y;
+          try {
+            doc.rect(x, y, cellW, cellH).stroke('#ddd');
+            doc.image(buf, x + 2, y + 2, { fit: [cellW - 4, cellH - 4] });
+          } catch { /* skip an unreadable image rather than fail the whole report */ }
+          if (col === cols - 1 || i === photoBuffers.length - 1) doc.y = y + cellH + gap;
         });
       }
     },
