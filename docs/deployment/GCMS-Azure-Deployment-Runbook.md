@@ -15,6 +15,27 @@
 > `D:\Olddoccs\Documents\Work\GC project\Azure` (not checked into the repo — it contains
 > environment-specific details and a full command log).
 
+> **2026-09-13 — Schema changed again, another `prisma db push` is needed before this
+> branch goes live.** A large feature/UX pass on `feature/pool-booking-system` added
+> several new columns since the dev environment was last synced:
+> `CarRequest.requestNumber` (autoincrement) and `.justification`,
+> `Department.isActive` / `.focalPointName` / `.focalPointEmail`, and
+> `SystemSettings.smtp*` (host/port/secure/user/password/fromEmail/fromName). All are
+> additive (nullable or defaulted) except `CarRequest.requestNumber`, which is
+> `NOT NULL UNIQUE AUTO_INCREMENT` — if the target table already has rows, `prisma db
+> push` will refuse to add it outright (same failure mode as before: "Added the required
+> column... it is not possible to execute this step"). Add it by hand first, then push
+> the rest:
+> ```sql
+> ALTER TABLE CarRequest ADD COLUMN requestNumber INT NOT NULL AUTO_INCREMENT UNIQUE;
+> ```
+> then `npx prisma db push` for everything else. This still requires running from inside
+> `vnet-gcms-dev-qc-001` (see the 2026-09-12 blocker below) — nothing about that
+> constraint has changed. The old `backend/prisma/migrations/` history was also deleted
+> this session (it was generated against the `postgresql` provider and blocked `prisma
+> migrate` with P3019 after the MySQL switch); the schema is managed purely via `db push`
+> until a fresh MySQL-based migration baseline is created.
+
 ---
 
 ## 0. Purpose & Scope

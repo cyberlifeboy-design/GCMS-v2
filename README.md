@@ -31,7 +31,7 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Role-Based Access Control**: SuperAdmin, Admin, FA, Observer, Contracts, and MaintenanceTeam roles
 - **Fleet Management**: Track carts, assignments, and status across locations
 - **Handover Workflow**: Complete check-in/check-out system with auto-fill, bilingual PDF, two-party digital signing, and photo documentation
-- **Pool Booking**: Shared cart pool system — checkout/return without full handover; simple timed usage log
+- **Pool Booking**: Shared cart pool with a live-availability booking form and an admin approval workflow (extensions, reminders, booking history)
 - **Terms & Conditions**: Rich text T&C editor (TipTap) with dynamic confirmation checkboxes, bilingual EN/AR
 - **Maintenance Tracking**: Full workflow from issue report → Admin escalation → Contracts quotation request → Maintenance quotation submission (QAR) → Contracts approval/rejection → resolution; PDF report generation with embedded photos
 - **Incident Report**: Standalone bilingual HTML incident report form with system logo, vehicle inspection checklist, and print-to-PDF
@@ -76,18 +76,35 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Admin Return Flow**: Complete cart return lifecycle — FA requests handback → cart enters HandbackPending queue → Admin opens Inspect & Sign Return Form → fills After-Use condition, adds return notes, signs → cart released to Available pool
 - **Return Queue (Admin)**: HandoverPage "Releases & Returns" section shows all carts in Returned/HandbackPending status with "Inspect & Sign Return" button per row; FleetPage also provides one-click return inspection via RotateCcw button
 - **Return Signature Stored**: Admin return sign-off saved to `returnAdminSigData` field with `returnDate`; form status progresses to `RETURNED`; visible in view mode when reopening the form
+- **Separate Handover / Handback PDFs**: downloadable as two distinct documents from
+  the one form — Pre-Use inspection is only editable while creating the handover,
+  After-Use only while doing the handback. Filenames follow
+  `{venueCode}-{deptCode}-{carNumber}handover.pdf` / `...handback.pdf`.
 
 ### 🏊 Pool Booking
 
-Shared pool carts can be checked out and returned without a full handover form — designed for short-duration shared use.
+Shared pool carts are booked (not just checked out) through an approval workflow, with
+live availability — designed for short-duration shared use across departments.
 
 - **Pool Cart Marking**: Admin/SuperAdmin toggle `isPool` on any fleet cart via the Manage Pool dialog; blocked if an active booking exists
-- **Checkout**: Record driver name, phone (optional), accreditation number (optional), purpose, and expected return time; Fleet status automatically set to `Dispatched`
-- **Return**: Record return notes; Fleet status automatically set back to `Available`
-- **Pool Fleet View**: Card grid shows all pool carts — green = Available, orange = Checked Out (shows active driver info)
-- **History Tab**: Full paginated booking log with driver, timestamps, and return notes
-- **Stats**: Total pool carts, available, checked-out counts
-- **Roles**: SuperAdmin, Admin, FA, Observer can access Pool Booking page; only Admin/SuperAdmin can toggle pool status
+- **Public Booking Form** (`/book-pool`): pick a venue (active venues only) → an FA
+  assigned to that venue (active FAs only) → schedule (single day or a recurring daily
+  window across a date range) → the form then shows only the carts genuinely free for
+  that exact window and lets the requester pick one
+- **Approval Gate**: a cart only disappears from the available list for a given window
+  once an Admin/SuperAdmin *approves* a request for it — a Pending request never blocks
+  another requester from also trying for the same slot
+- **Approval Instructions**: on approval, the requester is told (by email and on the
+  tracking page) to collect the key, return the car to the charging station when done,
+  and hand the key back to the venue's logistics representative
+- **Extensions**: an FA can request more time on an Approved booking; only Admin/SuperAdmin
+  can approve the extension
+- **Reminders**: an in-process poller notifies the FA + venue Admin as a booking's return
+  time approaches, and again if it's overdue
+- **Bookings Page** (`/bookings`): Review queue, Active & Overdue, Upcoming, Available
+  cars (green = available, gray = booked — with the current FA/return time), and a
+  filterable History tab exportable to PDF/Excel
+- **Roles**: SuperAdmin, Admin, FA, Observer can access the Bookings page; only Admin/SuperAdmin review, approve, reject, or amend requests
 
 ### 🔧 Maintenance Management
 
@@ -156,6 +173,11 @@ cumulative warnings — distinct from the standalone print-form above.
   warning history and its count are preserved.
 - **Delivery**: every issued warning creates an in-app notification and emails the
   subject a PDF (the full incident report when linked, a warning letter otherwise).
+- **Issue a Ticket (top-level button)**: on the Incidents page, next to Report Incident
+  and Create Incident Report — pick any user directly and issue a level 1-3 ticket
+  without first opening a specific incident.
+- **Escalation emails the full report**: escalating an incident to Contracts/Maintenance
+  emails every user in that role the complete incident PDF (not just an in-app ping).
 
 ### 📊 Reports & Analytics
 
@@ -173,19 +195,22 @@ cumulative warnings — distinct from the standalone print-form above.
 
 ### 📝 Car Request System (Public)
 
-- **Public Request Form**: Department leads can request carts without login
+- **Public Request Form**: Department leads can request *dedicated* carts without login — themed to match the corporate MDS portal (mds.sc.qa) login look. Pool/shared carts are booked separately via the live-availability Booking page.
+- **Business Justification**: Required field explaining why the department needs the carts
 - **Request Link Generator**: SuperAdmin creates shareable links
-- **Approval Workflow**: Admin/SuperAdmin approves or rejects requests
+- **Approval Workflow**: Admin/SuperAdmin approves or rejects requests; can also email the requester directly from the request detail view to ask for more information
 - **Email Notifications**: Requesters receive approval/rejection emails
-- **Request Tracking**: Unique token for status checking
+- **Request Tracking**: Each request gets a short human-friendly request number in addition to its tracking token; `/request/track` looks a request up by number + the requester's own email
+- **Report Export**: Download the (filtered) request list as Excel, PDF, or Word — full cart types, departments, and justification
 
 ### ⚙️ System Settings (SuperAdmin)
 
 - **Tournament Branding**: Upload logo, header, and footer images
+- **Email (SMTP)**: Configure the corporate SMTP server (host/port/TLS/user/password/from) used for all system emails and notifications, with a "Send Test Email" action to verify delivery. Takes effect immediately — no redeploy needed.
 - **Notifications**: Configure maintenance alert emails
 - **Handover Settings**: Timeout thresholds, default stadium
 - **Handover T&C**: Rich text editor (TipTap) for bilingual EN/AR Terms & Conditions title and body; dynamic checkbox manager (add/edit/remove confirmation checkboxes with EN+AR labels)
-- **Feature Toggles**: Enable/disable maintenance reports, handover photos
+- **Feature Toggles**: Enable/disable maintenance reports, handover photos, and whether the "Submit a Request" button appears on the login page
 - **System Announcements**: Display time-bound announcements
 - **Export Preferences**: User-specific default export format
 
@@ -195,6 +220,7 @@ cumulative warnings — distinct from the standalone print-form above.
 - **Bulk Import**: POST /stadiums/bulk — import multiple venues at once; ships with 10-venue GC template (ABS, LUS, ECS, LMPH, KIS, AAS, ATS, AJS, JHS, QSC)
 - **Departments**: Organize by department within stadiums
 - **Bulk Creation**: Create departments across all stadiums at once (FAC25 default template available)
+- **Per-venue activation & focal point**: Each department-at-a-venue row can be independently activated/deactivated, and carries its own venue-specific focal point contact (name/email) — auto-linked to a matching FA system user by email or name when one exists
 - **FA Assignment**: Assign FAs to specific departments
 
 ### 👥 User Management
