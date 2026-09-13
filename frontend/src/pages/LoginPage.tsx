@@ -14,6 +14,7 @@ export function LoginPage() {
     const [error, setError] = useState('');
     const [branding, setBranding] = useState<{
         tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string;
+        enableCarRequests?: boolean;
         requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
     }>({});
     const { login, isLoading } = useAuthStore();
@@ -61,17 +62,19 @@ export function LoginPage() {
 
             {/* Brand lockup — top-left, mirrors the SC/LOC portal layout */}
             <div className="relative z-10 flex items-center gap-3 px-8 pt-8">
-                {branding.logoUrl ? (
-                    <img src={branding.logoUrl} alt="Logo" className="h-11 w-auto object-contain" />
-                ) : (
-                    <div className="h-11 w-11 rounded-xl bg-white/15 flex items-center justify-center ring-1 ring-white/25">
-                        <ShieldCheck className="h-6 w-6 text-white" />
-                    </div>
-                )}
-                <div className="text-white leading-tight">
-                    <div className="text-sm font-bold tracking-wide">{branding.tournamentName || 'GCMS'}</div>
-                    <div className="text-xs text-white/70">Golf Car Management System</div>
-                </div>
+                <img
+                    src={branding.logoUrl || '/branding/sc-logo.png'}
+                    alt="Logo"
+                    className="h-14 w-auto object-contain"
+                    onError={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        if (img.src !== window.location.origin + '/branding/sc-logo.png') {
+                            img.src = '/branding/sc-logo.png';
+                        } else {
+                            img.style.display = 'none';
+                        }
+                    }}
+                />
             </div>
 
             <div className="relative z-10 flex-1 flex items-center justify-center p-4">
@@ -159,18 +162,21 @@ export function LoginPage() {
                     {(() => {
                         const w = branding.requestWindow;
                         const open = w ? w.isOpen : true;
-                        const note = !open
+                        const requestsEnabled = branding.enableCarRequests !== false;
+                        const note = requestsEnabled && !open
                             ? (w?.message
                                 || (w?.opensAt ? `Requirement collection opens ${new Date(w.opensAt).toLocaleDateString()}` : 'Requests are currently closed'))
                             : null;
                         return (
                             <div className="mt-5 space-y-2">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <Button asChild={open} variant="secondary" className="w-full" disabled={!open}>
-                                        {open ? <Link to="/request">Submit a Request</Link> : <span>Submit a Request</span>}
-                                    </Button>
-                                    <Button asChild={open} variant="secondary" className="w-full" disabled={!open}>
-                                        {open ? <Link to="/book-pool">Bookings</Link> : <span>Bookings</span>}
+                                <div className={`grid grid-cols-1 gap-3 ${requestsEnabled ? 'sm:grid-cols-2' : ''}`}>
+                                    {requestsEnabled && (
+                                        <Button asChild={open} variant="secondary" className="w-full" disabled={!open}>
+                                            {open ? <Link to="/request">Submit a Request</Link> : <span>Submit a Request</span>}
+                                        </Button>
+                                    )}
+                                    <Button asChild variant="secondary" className="w-full">
+                                        <Link to="/book-pool">Bookings</Link>
                                     </Button>
                                 </div>
                                 {note && <p className="text-xs text-center text-[#9aa2b5]">{note}</p>}

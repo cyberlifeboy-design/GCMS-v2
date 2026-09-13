@@ -23,12 +23,14 @@ router.get('/public', async (_req: Request, res: Response) => {
             handoverTcArTitle: settings?.handoverTcArTitle || null,
             handoverTcArBody: settings?.handoverTcArBody || null,
             handoverTcCheckboxes: settings?.handoverTcCheckboxes || null,
+            enableCarRequests: settings?.enableCarRequests ?? true,
             requestWindow,
         });
     } catch {
         // A settings read failure must never block submissions — default to open.
         res.json({
             tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null,
+            enableCarRequests: true,
             requestWindow: { isOpen: true, opensAt: null, closesAt: null, message: null },
         });
     }

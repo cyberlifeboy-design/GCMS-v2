@@ -653,7 +653,7 @@ export function SettingsPage() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {[
                                                     { label: 'Fleet Management', val: enableFleetManagement, set: setEnableFleetManagement, icon: Wrench },
-                                                    { label: 'Car Requests', val: enableCarRequests, set: setEnableCarRequests, icon: FileText },
+                                                    { label: 'Submit a Request (Login Page)', val: enableCarRequests, set: setEnableCarRequests, icon: FileText },
                                                     { label: 'Handover Photos', val: enableHandoverPhotos, set: setEnableHandoverPhotos, icon: Image },
                                                     { label: 'Maintenance Reports', val: enableMaintenanceReports, set: setEnableMaintenanceReports, icon: Bell },
                                                     { label: 'User Import', val: enableUserImport, set: setEnableUserImport, icon: User },
