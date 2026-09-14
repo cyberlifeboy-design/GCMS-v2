@@ -67,6 +67,16 @@ export class InvitationsService {
         });
     }
 
+    async getById(id: string) {
+        return prisma.invitation.findUnique({
+            where: { id },
+            include: {
+                stadium: { select: { id: true, name: true } },
+                department: { select: { id: true, name: true } },
+            },
+        });
+    }
+
     /** Validates a token for the public access-request form; throws with a machine-readable reason. */
     async validateForSubmission(token: string) {
         const invitation = await prisma.invitation.findUnique({ where: { token } });

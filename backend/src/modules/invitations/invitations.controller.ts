@@ -25,9 +25,13 @@ export class InvitationsController {
         try {
             const data = createInvitationSchema.parse(req.body);
 
-            if (req.user?.role === 'Admin' && data.stadiumId && data.stadiumId !== req.user.stadiumId) {
-                res.status(403).json({ error: 'You can only invite users to your own venue' });
-                return;
+            // For Admins, always scope to their own stadium
+            if (req.user?.role === 'Admin') {
+                if (data.stadiumId && data.stadiumId !== req.user.stadiumId) {
+                    res.status(403).json({ error: 'You can only invite users to your own venue' });
+                    return;
+                }
+                data.stadiumId = req.user.stadiumId;
             }
 
             const invitation = await invitationsService.create({ ...data, invitedById: req.user!.userId });
@@ -78,6 +82,19 @@ export class InvitationsController {
     static async revoke(req: AuthRequest, res: Response) {
         try {
             const id = req.params.id as string;
+            const invitation = await invitationsService.getById(id);
+
+            if (!invitation) {
+                res.status(404).json({ error: 'Invitation not found' });
+                return;
+            }
+
+            // Admin can only revoke invitations in their own stadium
+            if (req.user?.role === 'Admin' && invitation.stadiumId !== req.user.stadiumId) {
+                res.status(403).json({ error: 'You can only revoke invitations for your own venue' });
+                return;
+            }
+
             await invitationsService.revoke(id);
             res.status(200).json({ message: 'Invitation revoked' });
         } catch (error) {
