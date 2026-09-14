@@ -9,32 +9,34 @@ datasource db {
 }
 
 model Stadium {
-  id          String   @id @default(cuid())
-  name        String
-  code        String   @unique
-  location    String
-  isActive    Boolean  @default(true)
-  poolBookingStartTime String?  // "HH:mm", null = no restriction
-  poolBookingEndTime   String?  // "HH:mm", null = no restriction
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  fleet       Fleet[]
-  users       User[]
-  departments Department[]
-  carRequests CarRequest[]
-  poolBookingRequests PoolBookingRequest[]
-  incidents   Incident[]
+  id                   String               @id @default(cuid())
+  name                 String
+  code                 String               @unique
+  location             String
+  isActive             Boolean              @default(true)
+  poolBookingStartTime String? // "HH:mm", null = no restriction
+  poolBookingEndTime   String? // "HH:mm", null = no restriction
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  fleet                Fleet[]
+  users                User[]
+  departments          Department[]
+  carRequests          CarRequest[]
+  accessRequests       AccessRequest[]
+  invitations          Invitation[]
+  poolBookingRequests  PoolBookingRequest[]
+  incidents            Incident[]
 }
 
 model Department {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   name            String
   code            String?
-  isActive        Boolean  @default(true)
+  isActive        Boolean         @default(true)
   stadiumId       String
-  stadium         Stadium  @relation(fields: [stadiumId], references: [id])
+  stadium         Stadium         @relation(fields: [stadiumId], references: [id])
   focalPointId    String?
-  focalPoint      User?    @relation("DepartmentFocalPoint", fields: [focalPointId], references: [id])
+  focalPoint      User?           @relation("DepartmentFocalPoint", fields: [focalPointId], references: [id])
   // Free-text focal point contact for this department AT THIS VENUE — kept even when
   // there's no matching system user yet. When the name/email matches an existing User,
   // focalPointId is auto-linked so the rep also shows up as the resolved system account.
@@ -43,8 +45,10 @@ model Department {
   users           User[]
   fleet           Fleet[]
   carRequests     CarRequest[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  accessRequests  AccessRequest[]
+  invitations     Invitation[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@unique([name, stadiumId])
   @@index([stadiumId])
@@ -54,38 +58,38 @@ model Department {
 // Cart types: Cargo, Accessibility, 6-Seater, 4-Seater
 // Cart statuses: Available, Assigned, Active, Dispatched, Returned, HandbackPending, Under Maintenance
 model Fleet {
-  id              String           @id @default(cuid())
-  carNumber       String           @unique
-  carType         String           // Cargo, Accessibility, 6-Seater, 4-Seater
-  status          String           @default("Available") 
-  requiresVAP     Boolean          @default(false)
-  stadiumId       String
-  stadium         Stadium          @relation(fields: [stadiumId], references: [id])
-  departmentId    String?
-  department      Department?      @relation(fields: [departmentId], references: [id])
-  assignedUserId  String?          // FA user assigned to this cart
-  assignedUser    User?            @relation("FleetAssignedUser", fields: [assignedUserId], references: [id])
-  
+  id             String      @id @default(cuid())
+  carNumber      String      @unique
+  carType        String // Cargo, Accessibility, 6-Seater, 4-Seater
+  status         String      @default("Available")
+  requiresVAP    Boolean     @default(false)
+  stadiumId      String
+  stadium        Stadium     @relation(fields: [stadiumId], references: [id])
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id])
+  assignedUserId String? // FA user assigned to this cart
+  assignedUser   User?       @relation("FleetAssignedUser", fields: [assignedUserId], references: [id])
+
   // Handover state
-  handoverSigned   Boolean         @default(false)
+  handoverSigned   Boolean   @default(false)
   handoverSignedAt DateTime?
-  checkedInAt      DateTime?       // set when FA check-in starts, cleared on check-out
+  checkedInAt      DateTime? // set when FA check-in starts, cleared on check-out
 
   // Additional drivers added by FA user after handover is complete
   // JSON: [{ name, phone, accreditationNumber }]
-  additionalDrivers String?        @db.Text
+  additionalDrivers String? @db.Text
 
   // Pool: cart is part of shared pool — no dedicated FA assignment needed
-  isPool           Boolean          @default(false)
+  isPool Boolean @default(false)
 
-  handoverForm     HandoverForm?
-  handoverLogs    HandoverLog[]
-  maintenanceLogs MaintenanceLog[]
-  poolBookings    PoolBooking[]
+  handoverForm        HandoverForm?
+  handoverLogs        HandoverLog[]
+  maintenanceLogs     MaintenanceLog[]
+  poolBookings        PoolBooking[]
   poolBookingRequests PoolBookingRequest[]
-  incidents       Incident[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  incidents           Incident[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([stadiumId])
   @@index([status])
@@ -95,56 +99,61 @@ model Fleet {
 
 // Roles: SuperAdmin, Admin, FA, Observer
 model User {
-  id                  String          @id @default(cuid())
-  name                String
-  email               String          @unique
-  passwordHash        String
-  role                String          // SuperAdmin, Admin, FA, Observer
-  phone               String?
-  accreditationNumber  String?        // Optional accreditation number for FA users
-  isActive            Boolean         @default(true)
-  isBlocked           Boolean         @default(false) // Block user from accessing system
-  resetPasswordToken   String?        @unique
-  resetPasswordExpires DateTime?
-  exportFormat        String          @default("xlsx") // xlsx, pdf, docx
-  exportPreferences   String?         @db.Text // SQLite fallback: Store as JSON string
-  assignAllStadiums   Boolean         @default(false) // Assign user to all stadiums
-  grantedPages        String?         @db.Text // SQLite fallback: Store as JSON string
-  venueReportAccess   String          @default("assigned") // "assigned" or "all" - controls which venue reports the user can see
-  stadiumId           String?
-  stadium             Stadium?        @relation(fields: [stadiumId], references: [id])
-  departmentId        String?
-  department          Department?     @relation(fields: [departmentId], references: [id])
-  focalPointOf        Department[]    @relation("DepartmentFocalPoint")
-  handoverLogs        HandoverLog[]
-  refreshTokens       RefreshToken[]
-  assignedCarts         Fleet[]         @relation("FleetAssignedUser")
-  adminSignedForms      HandoverForm[]  @relation("HandoverFormAdminSigner")
-  userSignedForms       HandoverForm[]  @relation("HandoverFormUserSigner")
-  afteruseSignedForms   HandoverForm[]  @relation("HandoverFormAfteruseSigner")
-  maintenanceLogs       MaintenanceLog[] @relation("MaintenanceReporter")
-  approvedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceApprover")
-  escalatedMaintenanceLogs MaintenanceLog[] @relation("MaintenanceEscalatedBy")
-  reviewedRequests    CarRequest[]   @relation("CarRequestReviewer")
-  createdPoolBookings  PoolBooking[] @relation("PoolBookingCreatedBy")
-  returnedPoolBookings PoolBooking[] @relation("PoolBookingReturnedBy")
+  id                          String               @id @default(cuid())
+  name                        String
+  email                       String               @unique
+  passwordHash                String
+  role                        String // SuperAdmin, Admin, FA, Observer
+  phone                       String?
+  accreditationNumber         String? // Optional accreditation number for FA users
+  isActive                    Boolean              @default(true)
+  isBlocked                   Boolean              @default(false) // Block user from accessing system
+  authProvider                String               @default("local") // "local" | "microsoft"
+  microsoftOid                String?              @unique
+  mustChangePassword          Boolean              @default(false)
+  resetPasswordToken          String?              @unique
+  resetPasswordExpires        DateTime?
+  exportFormat                String               @default("xlsx") // xlsx, pdf, docx
+  exportPreferences           String?              @db.Text // SQLite fallback: Store as JSON string
+  assignAllStadiums           Boolean              @default(false) // Assign user to all stadiums
+  grantedPages                String?              @db.Text // SQLite fallback: Store as JSON string
+  venueReportAccess           String               @default("assigned") // "assigned" or "all" - controls which venue reports the user can see
+  stadiumId                   String?
+  stadium                     Stadium?             @relation(fields: [stadiumId], references: [id])
+  departmentId                String?
+  department                  Department?          @relation(fields: [departmentId], references: [id])
+  focalPointOf                Department[]         @relation("DepartmentFocalPoint")
+  handoverLogs                HandoverLog[]
+  refreshTokens               RefreshToken[]
+  assignedCarts               Fleet[]              @relation("FleetAssignedUser")
+  adminSignedForms            HandoverForm[]       @relation("HandoverFormAdminSigner")
+  userSignedForms             HandoverForm[]       @relation("HandoverFormUserSigner")
+  afteruseSignedForms         HandoverForm[]       @relation("HandoverFormAfteruseSigner")
+  maintenanceLogs             MaintenanceLog[]     @relation("MaintenanceReporter")
+  approvedMaintenanceLogs     MaintenanceLog[]     @relation("MaintenanceApprover")
+  escalatedMaintenanceLogs    MaintenanceLog[]     @relation("MaintenanceEscalatedBy")
+  reviewedRequests            CarRequest[]         @relation("CarRequestReviewer")
+  reviewedAccessRequests      AccessRequest[]      @relation("AccessRequestReviewer")
+  sentInvitations             Invitation[]         @relation("InvitationInvitedBy")
+  createdPoolBookings         PoolBooking[]        @relation("PoolBookingCreatedBy")
+  returnedPoolBookings        PoolBooking[]        @relation("PoolBookingReturnedBy")
   faPoolBookingRequests       PoolBookingRequest[] @relation("PoolBookingRequestFA")
   reviewedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReviewer")
   createdPoolBookingRequests  PoolBookingRequest[] @relation("PoolBookingRequestCreatedBy")
   returnedPoolBookingRequests PoolBookingRequest[] @relation("PoolBookingRequestReturnedBy")
-  blockedAt           DateTime?
-  blockedReason       String?
-  blockedById         String?
-  blockedBy           User?           @relation("UserBlockedBy", fields: [blockedById], references: [id])
-  blockedUsers        User[]          @relation("UserBlockedBy")
-  incidentsAbout      Incident[]      @relation("IncidentSubject")
-  incidentsReported   Incident[]      @relation("IncidentReporter")
-  incidentFormsSigned Incident[]      @relation("IncidentFormSigner")
-  warnings            Warning[]       @relation("WarningUser")
-  warningsIssued      Warning[]       @relation("WarningIssuer")
-  warningsRevoked     Warning[]       @relation("WarningRevoker")
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  blockedAt                   DateTime?
+  blockedReason               String?
+  blockedById                 String?
+  blockedBy                   User?                @relation("UserBlockedBy", fields: [blockedById], references: [id])
+  blockedUsers                User[]               @relation("UserBlockedBy")
+  incidentsAbout              Incident[]           @relation("IncidentSubject")
+  incidentsReported           Incident[]           @relation("IncidentReporter")
+  incidentFormsSigned         Incident[]           @relation("IncidentFormSigner")
+  warnings                    Warning[]            @relation("WarningUser")
+  warningsIssued              Warning[]            @relation("WarningIssuer")
+  warningsRevoked             Warning[]            @relation("WarningRevoker")
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
 
   @@index([stadiumId])
   @@index([role])
@@ -170,7 +179,7 @@ model HandoverLog {
   fleet          Fleet    @relation(fields: [fleetId], references: [id], onDelete: Cascade)
   userId         String
   user           User     @relation(fields: [userId], references: [id])
-  action         String   // CheckedIn, CheckedOut, IssueReported
+  action         String // CheckedIn, CheckedOut, IssueReported
   timestamp      DateTime @default(now())
   conditionNotes String?  @db.Text
   photosUrls     String?  @db.Text // SQLite fallback: Store as JSON string
@@ -189,7 +198,7 @@ model MaintenanceLog {
   reportedById     String
   reportedBy       User      @relation("MaintenanceReporter", fields: [reportedById], references: [id])
   issueDescription String    @db.Text
-  issueType        String?   // Battery and electrical issue, Body damage, Tyre issue, Brake issue, Other
+  issueType        String? // Battery and electrical issue, Body damage, Tyre issue, Brake issue, Other
   photosUrls       String?   @db.Text // SQLite fallback: Store as JSON string
   reportedAt       DateTime  @default(now())
   status           String    @default("Open") // Open, InProgress, Resolved, PendingQuotation, PendingApproval
@@ -197,12 +206,12 @@ model MaintenanceLog {
   resolvedAt       DateTime?
 
   // New fields for workflow
-  quotationStatus  String?   // Requested, Submitted, Approved, Rejected
-  fixCost          Float?    // The submitted cost for the fix
+  quotationStatus String? // Requested, Submitted, Approved, Rejected
+  fixCost         Float? // The submitted cost for the fix
 
   // Quotation details (submitted by Maintenance Team)
-  quotationDescription String?   @db.Text // Description of work to be done
-  quotationTimeline    String?   // Estimated timeline (e.g. "3 days")
+  quotationDescription String? @db.Text // Description of work to be done
+  quotationTimeline    String? // Estimated timeline (e.g. "3 days")
 
   // Auditing timestamps
   quotationRequestedAt DateTime?
@@ -210,20 +219,20 @@ model MaintenanceLog {
   costApprovedAt       DateTime?
 
   // Admin → Contracts escalation
-  contractsEscalatedAt     DateTime?
-  contractsEscalatedById   String?
-  contractsEscalatedBy     User?     @relation("MaintenanceEscalatedBy", fields: [contractsEscalatedById], references: [id])
+  contractsEscalatedAt   DateTime?
+  contractsEscalatedById String?
+  contractsEscalatedBy   User?     @relation("MaintenanceEscalatedBy", fields: [contractsEscalatedById], references: [id])
 
   // Rejection
-  rejectionReason      String?   @db.Text
-  rejectedAt           DateTime?
+  rejectionReason String?   @db.Text
+  rejectedAt      DateTime?
 
   // Relations
-  approvedById         String?
-  approvedBy           User?     @relation("MaintenanceApprover", fields: [approvedById], references: [id])
+  approvedById String?
+  approvedBy   User?   @relation("MaintenanceApprover", fields: [approvedById], references: [id])
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([fleetId])
   @@index([status])
@@ -238,10 +247,10 @@ model SystemSettings {
   footerUrl                     String?
   footerText                    String?
   // Notification settings
-  maintenanceNotificationEmails  String?   // Comma-separated emails for maintenance alerts
+  maintenanceNotificationEmails String? // Comma-separated emails for maintenance alerts
   // Handover settings
   handoverTimeoutMinutes        Int       @default(120) // Timeout for handover status
-  defaultStadiumId              String?   // Default stadium for new users
+  defaultStadiumId              String? // Default stadium for new users
   // Feature toggles
   enableMaintenanceReports      Boolean   @default(true)
   enableHandoverPhotos          Boolean   @default(true)
@@ -259,58 +268,58 @@ model SystemSettings {
   // System announcements (deprecated - use Announcement model)
   systemAnnouncement            String?   @db.Text // Optional system-wide announcement text
   announcementExpiry            DateTime? // When announcement expires
-  
+
   // Handover Duration Settings
-  handoverDefaultDurationDays   Int       @default(1) // Default max handover duration in days
-  handoverEventStartDate        DateTime? // Start date for event/tournament handover period
-  handoverEventEndDate          DateTime? // End date for event/tournament handover period
-  enableHandoverReminder        Boolean   @default(true) // Send reminder before timeout
-  handoverReminderHoursBefore   Int       @default(1) // Hours before timeout to send reminder
-  
+  handoverDefaultDurationDays Int       @default(1) // Default max handover duration in days
+  handoverEventStartDate      DateTime? // Start date for event/tournament handover period
+  handoverEventEndDate        DateTime? // End date for event/tournament handover period
+  enableHandoverReminder      Boolean   @default(true) // Send reminder before timeout
+  handoverReminderHoursBefore Int       @default(1) // Hours before timeout to send reminder
+
   // Timezone Settings
-  timezone                      String?   @default("UTC") // System timezone (IANA format, e.g., "America/New_York")
+  timezone String? @default("UTC") // System timezone (IANA format, e.g., "America/New_York")
 
   // Handover Form — Terms & Conditions (editable by SuperAdmin only)
-  handoverTcEnTitle             String?   // English T&C section title
-  handoverTcEnBody              String?   @db.Text // English T&C body HTML (TipTap output)
-  handoverTcArTitle             String?   // Arabic T&C section title
-  handoverTcArBody              String?   @db.Text // Arabic T&C body HTML (TipTap output)
+  handoverTcEnTitle    String? // English T&C section title
+  handoverTcEnBody     String? @db.Text // English T&C body HTML (TipTap output)
+  handoverTcArTitle    String? // Arabic T&C section title
+  handoverTcArBody     String? @db.Text // Arabic T&C body HTML (TipTap output)
   // JSON: [{id:string, en:string, ar:string}] — confirmation checkboxes shown on form
-  handoverTcCheckboxes          String?   @db.Text
+  handoverTcCheckboxes String? @db.Text
 
   // Corporate SMTP configuration — lets the system send emails/notifications
   // through the org's own mail server instead of only the SMTP_* env vars.
   // smtpPassword is never returned to the frontend (settings.controller.ts
   // redacts it to a smtpPasswordSet boolean on GET).
-  smtpHost                      String?
-  smtpPort                      Int?
-  smtpSecure                    Boolean   @default(false)
-  smtpUser                      String?
-  smtpPassword                  String?   @db.Text
-  smtpFromEmail                 String?
-  smtpFromName                  String?
+  smtpHost      String?
+  smtpPort      Int?
+  smtpSecure    Boolean @default(false)
+  smtpUser      String?
+  smtpPassword  String? @db.Text
+  smtpFromEmail String?
+  smtpFromName  String?
 
-  updatedAt                     DateTime  @updatedAt
-  updatedById                   String?
+  updatedAt   DateTime @updatedAt
+  updatedById String?
 }
 
 // Scheduled/push announcements to users
 model Announcement {
-  id              String    @id @default(cuid())
-  title           String
-  message         String
-  type            String    @default("info") // info, warning, success, error
-  targetType      String    @default("all") // all, fas, users, selected
-  targetUserIds   String?   @db.Text // SQLite fallback: Store as JSON string
-  targetRole      String?   // For role-based targeting (FA, Admin, etc.)
-  stadiumId       String?   // Optional stadium filter
-  createdBy       String?   // User ID who created the announcement
-  scheduledAt     DateTime? // For scheduled announcements
-  sentAt          DateTime? // When actually sent
-  expiresAt       DateTime? // When announcement expires
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  title         String
+  message       String
+  type          String    @default("info") // info, warning, success, error
+  targetType    String    @default("all") // all, fas, users, selected
+  targetUserIds String?   @db.Text // SQLite fallback: Store as JSON string
+  targetRole    String? // For role-based targeting (FA, Admin, etc.)
+  stadiumId     String? // Optional stadium filter
+  createdBy     String? // User ID who created the announcement
+  scheduledAt   DateTime? // For scheduled announcements
+  sentAt        DateTime? // When actually sent
+  expiresAt     DateTime? // When announcement expires
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([type])
   @@index([targetType])
@@ -323,7 +332,7 @@ model AuditLog {
   id         String   @id @default(cuid())
   userId     String
   action     String
-  entityType String   // Fleet, User, Handover, etc.
+  entityType String // Fleet, User, Handover, etc.
   entityId   String
   oldValue   String?  @db.Text // SQLite fallback: Store as JSON string
   newValue   String?  @db.Text // SQLite fallback: Store as JSON string
@@ -338,31 +347,31 @@ model AuditLog {
 
 // Public car request from department leads
 model CarRequest {
-  id               String    @id @default(cuid())
-  requestNumber    Int       @unique @default(autoincrement())
-  requesterName    String
-  requesterEmail   String
-  requesterPhone   String?
+  id                  String     @id @default(cuid())
+  requestNumber       Int        @unique @default(autoincrement())
+  requesterName       String
+  requesterEmail      String
+  requesterPhone      String?
   accreditationNumber String? // Optional accreditation/badge number
-  requestType      String    @default("pool-shared") // dedicated | pool-shared
-  departmentId     String
-  department       Department @relation(fields: [departmentId], references: [id])
-  stadiumId        String
-  stadium          Stadium    @relation(fields: [stadiumId], references: [id])
-  cargoCount       Int       @default(0)
-  fourSeaterCount  Int       @default(0)
-  sixSeaterCount   Int       @default(0)
-  accessibilityCount Int     @default(0)
-  justification    String?   @db.Text // Why the department needs these carts
-  notes            String?   @db.Text
-  requestToken     String    @unique  // Unique token for the public link
-  status           String    @default("Pending") // Pending, Approved, Rejected
-  reviewedById     String?
-  reviewedBy       User?     @relation("CarRequestReviewer", fields: [reviewedById], references: [id])
-  reviewedAt       DateTime?
-  reviewNotes      String?   @db.Text
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  requestType         String     @default("pool-shared") // dedicated | pool-shared
+  departmentId        String
+  department          Department @relation(fields: [departmentId], references: [id])
+  stadiumId           String
+  stadium             Stadium    @relation(fields: [stadiumId], references: [id])
+  cargoCount          Int        @default(0)
+  fourSeaterCount     Int        @default(0)
+  sixSeaterCount      Int        @default(0)
+  accessibilityCount  Int        @default(0)
+  justification       String?    @db.Text // Why the department needs these carts
+  notes               String?    @db.Text
+  requestToken        String     @unique // Unique token for the public link
+  status              String     @default("Pending") // Pending, Approved, Rejected
+  reviewedById        String?
+  reviewedBy          User?      @relation("CarRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  reviewNotes         String?    @db.Text
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   @@index([status])
   @@index([stadiumId])
@@ -370,39 +379,98 @@ model CarRequest {
   @@index([requestToken])
 }
 
+// Source: "sso" (self-service, email verified via Microsoft) | "invite" (email locked from an Invitation)
+// Status: Pending, Approved, Rejected
+model AccessRequest {
+  id            String @id @default(cuid())
+  requestNumber Int    @unique @default(autoincrement())
+
+  name  String
+  email String
+  phone String?
+
+  stadiumId    String
+  stadium      Stadium    @relation(fields: [stadiumId], references: [id])
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  source       String // "sso" | "invite"
+  invitationId String?
+  invitation   Invitation? @relation(fields: [invitationId], references: [id])
+
+  requestToken String    @unique
+  status       String    @default("Pending") // Pending, Approved, Rejected
+  reviewedById String?
+  reviewedBy   User?     @relation("AccessRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNotes  String?   @db.Text
+
+  createdUserId String? // set once approval creates the User
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([stadiumId])
+  @@index([departmentId])
+  @@index([requestToken])
+  @@index([email])
+}
+
+// Status: Pending, Used, Revoked, Expired (Expired is computed at read time from expiresAt, not written)
+model Invitation {
+  id             String          @id @default(cuid())
+  email          String
+  stadiumId      String?
+  stadium        Stadium?        @relation(fields: [stadiumId], references: [id])
+  departmentId   String?
+  department     Department?     @relation(fields: [departmentId], references: [id])
+  invitedById    String
+  invitedBy      User            @relation("InvitationInvitedBy", fields: [invitedById], references: [id])
+  token          String          @unique
+  status         String          @default("Pending") // Pending, Used, Revoked
+  expiresAt      DateTime
+  accessRequests AccessRequest[]
+  createdAt      DateTime        @default(now())
+
+  @@index([status])
+  @@index([email])
+  @@index([token])
+}
+
 // Handover Form — stores the full bilingual handover & return form data + signatures
 // Status: PENDING → ADMIN_SIGNED → COMPLETE (both signed → fleet goes Active)
 model HandoverForm {
-  id            String    @id @default(cuid())
-  fleetId       String    @unique
-  fleet         Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  fleetId String @unique
+  fleet   Fleet  @relation(fields: [fleetId], references: [id], onDelete: Cascade)
 
   // ── Section 1: Handover Details ──
-  serialNumber          String?
-  faCode                String?
-  handoverDate          String?
-  approvedReturnDate    String?
-  handoverLocation      String?
-  receiverLicenseNo     String?
-  handoverBy            String?
-  handedOverTo          String?
-  handoverByContact     String?
-  receiverContact       String?
+  serialNumber       String?
+  faCode             String?
+  handoverDate       String?
+  approvedReturnDate String?
+  handoverLocation   String?
+  receiverLicenseNo  String?
+  handoverBy         String?
+  handedOverTo       String?
+  handoverByContact  String?
+  receiverContact    String?
 
   // ── Section 2: Cart Info (JSON) ──
   // { cargo, fourSeat, sixSeat, access, over18, licenseType, entity }
-  cartTypeData          String?  @db.Text
+  cartTypeData String? @db.Text
 
   // ── Section 3: Condition Inspection (JSON) ──
   // { pre: { body, lights, ... }, aft: { ... } }
-  conditionData         String?  @db.Text
+  conditionData String? @db.Text
 
   // ── Section 4: Additional Drivers (JSON) ──
   // [{ name, contact, entity, licenseNo }]
-  additionalDrivers     String?  @db.Text
+  additionalDrivers String? @db.Text
 
   // ── Section 5: Issues ──
-  issuesNotes           String?  @db.Text
+  issuesNotes String? @db.Text
 
   // ── Section 6: Return Details ──
   inspectionDone        String?
@@ -411,42 +479,42 @@ model HandoverForm {
   returnedBy            String?
   returnReceiverContact String?
   returnedByContact     String?
-  returnAdminSigData    String?  @db.LongText
-  returnUserSigData     String?  @db.LongText
+  returnAdminSigData    String? @db.LongText
+  returnUserSigData     String? @db.LongText
 
   // ── Section 7: Terms ──
-  tc1                   Boolean  @default(false)
-  tc2                   Boolean  @default(false)
-  tc3                   Boolean  @default(false)
+  tc1                Boolean @default(false)
+  tc2                Boolean @default(false)
+  tc3                Boolean @default(false)
   // JSON: {[checkboxId]: boolean} — dynamic checkbox checked state
-  tcData                String?  @db.Text
-  finalName             String?
-  finalDate             String?
-  finalSignatureData    String?  @db.LongText
+  tcData             String? @db.Text
+  finalName          String?
+  finalDate          String?
+  finalSignatureData String? @db.LongText
 
   // ── Admin Signature (Venue Logistics Rep — s1) ──
-  adminSignatureData    String?  @db.LongText
-  adminSignedAt         DateTime?
-  adminSignedById       String?
-  adminSignedByUser     User?    @relation("HandoverFormAdminSigner", fields: [adminSignedById], references: [id])
+  adminSignatureData String?   @db.LongText
+  adminSignedAt      DateTime?
+  adminSignedById    String?
+  adminSignedByUser  User?     @relation("HandoverFormAdminSigner", fields: [adminSignedById], references: [id])
 
   // ── User Signature (Receiver — s2) ──
-  userSignatureData     String?  @db.LongText
-  userSignedAt          DateTime?
-  userSignedById        String?
-  userSignedByUser      User?    @relation("HandoverFormUserSigner", fields: [userSignedById], references: [id])
+  userSignatureData String?   @db.LongText
+  userSignedAt      DateTime?
+  userSignedById    String?
+  userSignedByUser  User?     @relation("HandoverFormUserSigner", fields: [userSignedById], references: [id])
 
   // ── After-Use Signature (FA signs off after usage — handback) ──
-  afteruseSignatureData String?  @db.LongText
+  afteruseSignatureData String?   @db.LongText
   afteruseSignedAt      DateTime?
   afteruseSignedById    String?
-  afteruseSignedByUser  User?    @relation("HandoverFormAfteruseSigner", fields: [afteruseSignedById], references: [id])
+  afteruseSignedByUser  User?     @relation("HandoverFormAfteruseSigner", fields: [afteruseSignedById], references: [id])
 
   // PENDING | ADMIN_SIGNED | COMPLETE | HANDBACK_PENDING
-  status                String   @default("PENDING")
+  status String @default("PENDING")
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([fleetId])
   @@index([status])
@@ -455,29 +523,29 @@ model HandoverForm {
 // Pool Booking — short-term checkout of shared pool carts (no handover form needed)
 // Status: Active | Returned
 model PoolBooking {
-  id                  String    @id @default(cuid())
-  fleetId             String
-  fleet               Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  fleetId String
+  fleet   Fleet  @relation(fields: [fleetId], references: [id], onDelete: Cascade)
 
   driverName          String
   driverPhone         String?
   accreditationNumber String?
   purpose             String?
 
-  checkoutAt          DateTime  @default(now())
-  expectedReturnAt    DateTime?
-  returnedAt          DateTime?
+  checkoutAt       DateTime  @default(now())
+  expectedReturnAt DateTime?
+  returnedAt       DateTime?
 
-  status              String    @default("Active") // Active, Returned
-  returnNotes         String?   @db.Text
+  status      String  @default("Active") // Active, Returned
+  returnNotes String? @db.Text
 
-  createdById         String
-  createdBy           User      @relation("PoolBookingCreatedBy", fields: [createdById], references: [id])
-  returnedById        String?
-  returnedBy          User?     @relation("PoolBookingReturnedBy", fields: [returnedById], references: [id])
+  createdById  String
+  createdBy    User    @relation("PoolBookingCreatedBy", fields: [createdById], references: [id])
+  returnedById String?
+  returnedBy   User?   @relation("PoolBookingReturnedBy", fields: [returnedById], references: [id])
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([fleetId])
   @@index([status])
@@ -485,17 +553,17 @@ model PoolBooking {
   @@index([checkoutAt])
 }
 
-// Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
+// Notification types: IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected, AccessRequest, AccessRequestApproved, AccessRequestRejected
 model Notification {
-  id           String    @id @default(cuid())
-  type         String    // IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected
-  title        String
-  message      String
-  entityType   String?   // Fleet, MaintenanceLog, CarRequest, User
-  entityId     String?   // ID of the related entity
-  isRead       Boolean   @default(false)
-  userId       String?   // null for broadcast notifications (all users)
-  createdAt    DateTime  @default(now())
+  id         String   @id @default(cuid())
+  type       String // IssueReported, CheckIn, CheckOut, CarRequest, AssignmentChange, RequestApproved, RequestRejected, AccessRequest, AccessRequestApproved, AccessRequestRejected
+  title      String
+  message    String
+  entityType String? // Fleet, MaintenanceLog, CarRequest, User
+  entityId   String? // ID of the related entity
+  isRead     Boolean  @default(false)
+  userId     String? // null for broadcast notifications (all users)
+  createdAt  DateTime @default(now())
 
   @@index([userId])
   @@index([isRead])
@@ -507,60 +575,60 @@ model Notification {
 // Every request requires explicit Admin/SuperAdmin approval; no auto-approval path.
 // Status: Pending | Approved | Rejected | Cancelled
 model PoolBookingRequest {
-  id            String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  stadiumId     String
-  stadium       Stadium  @relation(fields: [stadiumId], references: [id])
-  fleetId       String
-  fleet         Fleet    @relation(fields: [fleetId], references: [id])
+  stadiumId String
+  stadium   Stadium @relation(fields: [stadiumId], references: [id])
+  fleetId   String
+  fleet     Fleet   @relation(fields: [fleetId], references: [id])
 
   requesterName  String
   requesterEmail String
   requesterPhone String
 
-  faUserId       String
-  faUser         User     @relation("PoolBookingRequestFA", fields: [faUserId], references: [id])
+  faUserId String
+  faUser   User   @relation("PoolBookingRequestFA", fields: [faUserId], references: [id])
 
-  bookingType    String   // "Single" | "Recurring"
-  startDate      String   // "YYYY-MM-DD"; equals startDate for Single
-  endDate        String   // "YYYY-MM-DD"
-  startTime      String   // "HH:mm", daily window start
-  endTime        String   // "HH:mm", daily window end
-  purpose        String?
+  bookingType String // "Single" | "Recurring"
+  startDate   String // "YYYY-MM-DD"; equals startDate for Single
+  endDate     String // "YYYY-MM-DD"
+  startTime   String // "HH:mm", daily window start
+  endTime     String // "HH:mm", daily window end
+  purpose     String?
 
-  status         String    @default("Pending") // Pending, Approved, Rejected, Cancelled, Completed
-  reviewedById   String?
-  reviewedBy     User?     @relation("PoolBookingRequestReviewer", fields: [reviewedById], references: [id])
-  reviewedAt     DateTime?
-  reviewComment  String?
+  status        String    @default("Pending") // Pending, Approved, Rejected, Cancelled, Completed
+  reviewedById  String?
+  reviewedBy    User?     @relation("PoolBookingRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt    DateTime?
+  reviewComment String?
 
-  returnedAt     DateTime?
-  returnedById   String?
-  returnedBy     User?     @relation("PoolBookingRequestReturnedBy", fields: [returnedById], references: [id])
+  returnedAt   DateTime?
+  returnedById String?
+  returnedBy   User?     @relation("PoolBookingRequestReturnedBy", fields: [returnedById], references: [id])
 
   // Time-limit reminders — sent once each so the in-process poller doesn't spam
-  reminderSentAt     DateTime?
-  overdueNotifiedAt  DateTime?
+  reminderSentAt    DateTime?
+  overdueNotifiedAt DateTime?
 
   // Instant booking (bookingType "Instant") — no date/time chosen up front; the
   // requester must collect the key within 10 minutes of Admin approval or the
   // booking is auto-cancelled by the in-process poller and the car returns to the pool.
-  keyCollectedAt     DateTime?
-  autoCancelledAt    DateTime?
+  keyCollectedAt  DateTime?
+  autoCancelledAt DateTime?
 
   // Extension request — the FA asks for more time; only Admin/SuperAdmin can approve
   extensionRequestedEndDate String?
   extensionRequestedEndTime String?
   extensionRequestedAt      DateTime?
-  extensionStatus           String?   // Pending, Approved, Rejected
+  extensionStatus           String? // Pending, Approved, Rejected
 
-  requestToken   String    @unique
+  requestToken String @unique
 
-  createdById    String?
-  createdByUser  User?     @relation("PoolBookingRequestCreatedBy", fields: [createdById], references: [id])
+  createdById   String?
+  createdByUser User?   @relation("PoolBookingRequestCreatedBy", fields: [createdById], references: [id])
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([stadiumId])
   @@index([fleetId])
@@ -569,33 +637,33 @@ model PoolBookingRequest {
 }
 
 model Incident {
-  id             String    @id @default(cuid())
-  reference      String    @unique
-  subjectUserId  String
-  subjectUser    User      @relation("IncidentSubject", fields: [subjectUserId], references: [id])
-  reportedById   String
-  reportedBy     User      @relation("IncidentReporter", fields: [reportedById], references: [id])
-  fleetId        String?
-  fleet          Fleet?    @relation(fields: [fleetId], references: [id])
-  stadiumId      String?
-  stadium        Stadium?  @relation(fields: [stadiumId], references: [id])
-  title          String
-  description    String    @db.Text
-  photosUrls     String?   @db.Text
-  occurredAt     DateTime
-  status         String    @default("Open") // Open, UnderReview, Closed
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  warnings       Warning[]
+  id            String    @id @default(cuid())
+  reference     String    @unique
+  subjectUserId String
+  subjectUser   User      @relation("IncidentSubject", fields: [subjectUserId], references: [id])
+  reportedById  String
+  reportedBy    User      @relation("IncidentReporter", fields: [reportedById], references: [id])
+  fleetId       String?
+  fleet         Fleet?    @relation(fields: [fleetId], references: [id])
+  stadiumId     String?
+  stadium       Stadium?  @relation(fields: [stadiumId], references: [id])
+  title         String
+  description   String    @db.Text
+  photosUrls    String?   @db.Text
+  occurredAt    DateTime
+  status        String    @default("Open") // Open, UnderReview, Closed
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  warnings      Warning[]
 
   // Full Golf Cart/UTV Incident Report Form — matches the official LOC template.
   // JSON: incident type checkboxes, user/witness info, injury & treatment details,
   // reported-to/completed-by fields, and the vehicle investigation checklist.
-  formData              String?   @db.Text
-  formSignatureData     String?   @db.LongText
-  formSignedAt          DateTime?
-  formSignedById        String?
-  formSignedByUser      User?     @relation("IncidentFormSigner", fields: [formSignedById], references: [id])
+  formData          String?   @db.Text
+  formSignatureData String?   @db.LongText
+  formSignedAt      DateTime?
+  formSignedById    String?
+  formSignedByUser  User?     @relation("IncidentFormSigner", fields: [formSignedById], references: [id])
 
   // Escalation to Contracts / Maintenance teams for follow-up on the car involved
   escalatedToContracts   Boolean   @default(false)
@@ -613,7 +681,7 @@ model Warning {
   user           User      @relation("WarningUser", fields: [userId], references: [id])
   incidentId     String?
   incident       Incident? @relation(fields: [incidentId], references: [id])
-  level          Int       // 1 soft, 2, 3 ban + block
+  level          Int // 1 soft, 2, 3 ban + block
   reason         String    @db.Text
   issuedById     String
   issuedBy       User      @relation("WarningIssuer", fields: [issuedById], references: [id])
