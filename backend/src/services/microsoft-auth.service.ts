@@ -47,6 +47,7 @@ export async function verifyMicrosoftToken(idToken: string): Promise<MicrosoftId
             idToken,
             getKey,
             {
+                algorithms: ['RS256'],
                 audience: clientId,
                 issuer: [
                     `https://login.microsoftonline.com/${tenantId}/v2.0`,
