@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { authConfig } from '../../config/auth';
 import crypto from 'crypto';
 import { emailService } from '../../services/email.service';
+import { verifyMicrosoftToken } from '../../services/microsoft-auth.service';
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
 
@@ -84,6 +85,10 @@ export class AuthService {
             throw new Error('ACCOUNT_BLOCKED');
         }
 
+        if (user.authProvider !== 'local') {
+            throw new Error('This account signs in with your SC/LOC Microsoft account — use "Sign in with your SC/LOC account" instead.');
+        }
+
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
         if (!isPasswordValid) {
             throw new Error('Invalid email or password');
@@ -131,6 +136,79 @@ export class AuthService {
                 exportFormat: user.exportFormat,
                 stadiumId: user.stadiumId,
                 stadium: user.stadium,
+                authProvider: user.authProvider,
+                mustChangePassword: user.mustChangePassword,
+            },
+        };
+    }
+
+    /**
+     * Signs in via a verified Microsoft ID token. Matches an existing User by
+     * microsoftOid first, then by email (backfilling microsoftOid on match, and
+     * linking a local-password account to SSO going forward). Throws NOT_REGISTERED
+     * (with .email/.name attached) when no matching account exists, so the caller
+     * can route the browser to the access-request form.
+     */
+    static async loginWithMicrosoft(idToken: string) {
+        const identity = await verifyMicrosoftToken(idToken);
+
+        let user = await prisma.user.findUnique({ where: { microsoftOid: identity.oid }, include: { stadium: true } });
+        if (!user) {
+            user = await prisma.user.findUnique({ where: { email: identity.email }, include: { stadium: true } });
+        }
+
+        if (!user) {
+            const err: any = new Error('NOT_REGISTERED');
+            err.email = identity.email;
+            err.name = identity.name;
+            throw err;
+        }
+
+        if (!user.isActive) {
+            throw new Error('Account is deactivated. Please contact your administrator.');
+        }
+        if (user.isBlocked) {
+            throw new Error('ACCOUNT_BLOCKED');
+        }
+
+        if (user.authProvider !== 'microsoft' || user.microsoftOid !== identity.oid) {
+            user = await prisma.user.update({
+                where: { id: user.id },
+                data: { authProvider: 'microsoft', microsoftOid: identity.oid },
+                include: { stadium: true },
+            });
+        }
+
+        const tokenPayload: TokenPayload = {
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            stadiumId: user.stadiumId || undefined,
+            departmentId: user.departmentId || undefined,
+        };
+
+        const accessToken = jwt.sign(tokenPayload, authConfig.jwt.accessTokenSecret, { expiresIn: '15m' } as any);
+        const refreshToken = jwt.sign({ userId: user.id }, authConfig.jwt.refreshTokenSecret, { expiresIn: '7d' } as any);
+
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+        await prisma.refreshToken.create({ data: { token: refreshToken, userId: user.id, expiresAt } });
+
+        return {
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                phone: user.phone,
+                isActive: user.isActive,
+                exportFormat: user.exportFormat,
+                stadiumId: user.stadiumId,
+                stadium: user.stadium,
+                authProvider: user.authProvider,
+                mustChangePassword: user.mustChangePassword,
             },
         };
     }
@@ -259,6 +337,8 @@ export class AuthService {
             stadiumId: user.stadiumId,
             departmentId: user.departmentId,
             stadium: user.stadium,
+            authProvider: user.authProvider,
+            mustChangePassword: user.mustChangePassword,
         };
     }
 
@@ -272,7 +352,7 @@ export class AuthService {
         const passwordHash = await bcrypt.hash(newPassword, 10);
         await prisma.user.update({
             where: { id: userId },
-            data: { passwordHash },
+            data: { passwordHash, mustChangePassword: false },
         });
     }
 }

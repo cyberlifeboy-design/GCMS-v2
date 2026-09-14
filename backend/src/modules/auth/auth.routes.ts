@@ -21,6 +21,13 @@ router.post('/register', authenticate, requireRole('Admin'), AuthController.regi
 router.post('/login', authLimiter, AuthController.login);
 
 /**
+ * @route   POST /api/v1/auth/microsoft
+ * @desc    Sign in with a verified Microsoft Entra ID (SC/LOC) token
+ * @access  Public
+ */
+router.post('/microsoft', authLimiter, AuthController.microsoftLogin);
+
+/**
  * @route   POST /api/v1/auth/refresh
  * @desc    Refresh access token using refresh token
  * @access  Public

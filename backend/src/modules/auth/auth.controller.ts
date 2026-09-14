@@ -34,6 +34,10 @@ const changePasswordSchema = z.object({
     newPassword: z.string().min(8).max(100),
 });
 
+const microsoftLoginSchema = z.object({
+    idToken: z.string().min(1, 'idToken is required'),
+});
+
 export class AuthController {
     static async register(req: Request, res: Response): Promise<void> {
         try {
@@ -65,6 +69,28 @@ export class AuthController {
                 res.status(401).json({ error: error.message });
             } else {
                 res.status(500).json({ error: 'Login failed' });
+            }
+        }
+    }
+
+    static async microsoftLogin(req: Request, res: Response): Promise<void> {
+        try {
+            const { idToken } = microsoftLoginSchema.parse(req.body);
+            const result = await AuthService.loginWithMicrosoft(idToken);
+            res.status(200).json({ message: 'Login successful', ...result });
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error?.message === 'MICROSOFT_SSO_NOT_CONFIGURED') {
+                res.status(503).json({ error: 'Microsoft sign-in is not configured yet. Please use your email and password, or contact your administrator.' });
+            } else if (error?.message === 'NOT_REGISTERED') {
+                res.status(404).json({ error: 'NOT_REGISTERED', email: error.email, name: error.name });
+            } else if (error?.message === 'ACCOUNT_BLOCKED') {
+                res.status(403).json({ error: 'Your account has been blocked. Contact the administrator.' });
+            } else if (error instanceof Error) {
+                res.status(401).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: 'Microsoft sign-in failed' });
             }
         }
     }

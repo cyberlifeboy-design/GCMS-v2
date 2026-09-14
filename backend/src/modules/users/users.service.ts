@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { emailService } from '../../services/email.service';
 
 export interface PaginationParams {
     page?: number;
@@ -144,9 +145,8 @@ export class UsersService {
         const exists = await prisma.user.findUnique({ where: { email: data.email } });
         if (exists) throw new Error('User with this email already exists');
 
-        // Use provided password or generate a secure random one
-        const password = data.password || generateSecurePassword();
-        const passwordHash = await bcrypt.hash(password, 10);
+        const generatedPassword = data.password || generateSecurePassword();
+        const passwordHash = await bcrypt.hash(generatedPassword, 10);
         const user = await prisma.user.create({
             data: {
                 name: data.name,
@@ -158,6 +158,8 @@ export class UsersService {
                 stadiumId: data.stadiumId,
                 departmentId: data.departmentId,
                 assignAllStadiums: data.assignAllStadiums || false,
+                authProvider: 'local',
+                mustChangePassword: true,
                 exportPreferences: JSON.stringify({}),
                 grantedPages: JSON.stringify([]),
             },
@@ -178,6 +180,18 @@ export class UsersService {
                 createdAt: true,
             },
         });
+
+        const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        try {
+            await emailService.send({
+                to: data.email,
+                subject: 'Your GCMS account has been created',
+                text: `Hello ${data.name},\n\nAn account has been created for you on GCMS.\n\nEmail: ${data.email}\nTemporary password: ${generatedPassword}\n\nSign in at ${loginUrl} — you'll be asked to set a new password on first login.\n\nThank you,\nGCMS`,
+                html: `<h2>Your GCMS account has been created</h2><p><strong>Email:</strong> ${data.email}</p><p><strong>Temporary password:</strong> ${generatedPassword}</p><p>Sign in at <a href="${loginUrl}">${loginUrl}</a> — you'll be asked to set a new password on first login.</p>`,
+            });
+        } catch (e) {
+            console.error('Welcome email failed:', e);
+        }
 
         return user;
     }
