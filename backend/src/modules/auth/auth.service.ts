@@ -172,11 +172,25 @@ export class AuthService {
         }
 
         if (user.authProvider !== 'microsoft' || user.microsoftOid !== identity.oid) {
+            const wasAlreadyLinked = user.authProvider === 'microsoft';
+
             user = await prisma.user.update({
                 where: { id: user.id },
                 data: { authProvider: 'microsoft', microsoftOid: identity.oid },
                 include: { stadium: true },
             });
+
+            if (!wasAlreadyLinked) {
+                try {
+                    await emailService.send({
+                        to: user.email,
+                        subject: 'Your GCMS account is now linked to your SC/LOC Microsoft account',
+                        text: `Hello ${user.name},\n\nYour GCMS account (${user.email}) has just been linked to sign in with your SC/LOC Microsoft account. If this wasn't you, please contact your administrator immediately.\n\nThank you,\nGCMS`,
+                    });
+                } catch (e) {
+                    console.error('SSO account-link notification email failed:', e);
+                }
+            }
         }
 
         const tokenPayload: TokenPayload = {
