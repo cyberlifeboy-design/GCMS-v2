@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { publicSettingsApi } from '@/lib/api';
+import { msalEnabled, ensureMsalInitialized, msalInstance, MICROSOFT_LOGIN_SCOPES } from '@/lib/msal';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ShieldCheck, Mail, Lock, Eye, EyeOff } from 'lucide-react';
@@ -37,9 +38,24 @@ export function LoginPage() {
         setError('');
         try {
             await login(email, password);
-            navigate('/');
+            const current = useAuthStore.getState().user;
+            navigate(current?.mustChangePassword ? '/force-change-password' : '/');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Login failed');
+        }
+    };
+
+    const handleMicrosoftSignIn = async () => {
+        if (!msalEnabled) {
+            toast.info('Microsoft sign-in is being configured — please use your email and password for now.');
+            return;
+        }
+        try {
+            await ensureMsalInitialized();
+            await msalInstance.loginRedirect({ scopes: MICROSOFT_LOGIN_SCOPES });
+        } catch (err) {
+            console.error('Microsoft sign-in failed to start', err);
+            toast.error('Could not start Microsoft sign-in. Please try again.');
         }
     };
 
@@ -92,7 +108,7 @@ export function LoginPage() {
 
                     <button
                         type="button"
-                        onClick={() => toast.info('Coming soon — sign in with your SC/LOC Microsoft account.')}
+                        onClick={handleMicrosoftSignIn}
                         className="w-full mb-4 flex items-center justify-center gap-2 rounded-md border border-[#e3e6ed] bg-[#f5f7fa] hover:bg-[#eef0f5] transition-colors py-2.5 px-4 text-sm font-bold text-[#31374a]"
                     >
                         <span className="h-5 w-5 rounded bg-[#14a3ac] flex items-center justify-center shrink-0">
