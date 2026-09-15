@@ -13,6 +13,8 @@ import stadiumRoutes from './modules/stadiums/stadiums.routes';
 import settingsRoutes from './modules/settings/settings.routes';
 import departmentRoutes from './modules/departments/departments.routes';
 import requestRoutes from './modules/requests/requests.routes';
+import accessRequestRoutes from './modules/access-requests/access-requests.routes';
+import invitationRoutes from './modules/invitations/invitations.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import announcementRoutes from './modules/announcements/announcements.routes';
 import poolBookingsRoutes from './modules/pool-bookings/pool-bookings.routes';
@@ -169,6 +171,8 @@ app.use('/api/v1/departments', departmentRoutes);
 // `router.use(authenticate)` catch-all for paths it doesn't itself match —
 // see the comment in pool-booking-requests.routes.ts for details.
 app.use('/api/v1', poolBookingRequestsRoutes);
+app.use('/api/v1', accessRequestRoutes);
+app.use('/api/v1', invitationRoutes);
 app.use('/api/v1', requestRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/announcements', announcementRoutes);
