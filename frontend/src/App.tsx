@@ -9,6 +9,7 @@ const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage').then(
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 const MicrosoftCallbackPage = lazy(() => import('@/pages/MicrosoftCallbackPage').then(m => ({ default: m.MicrosoftCallbackPage })));
 const AccessRequestPage = lazy(() => import('@/pages/AccessRequestPage').then(m => ({ default: m.AccessRequestPage })));
+const ForceChangePasswordPage = lazy(() => import('@/pages/ForceChangePasswordPage').then(m => ({ default: m.ForceChangePasswordPage })));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const FleetPage = lazy(() => import('@/pages/FleetPage').then(m => ({ default: m.FleetPage })));
 const HandoverPage = lazy(() => import('@/pages/HandoverPage').then(m => ({ default: m.HandoverPage })));
@@ -76,6 +77,7 @@ function AppContent() {
                             <MainLayout>
                                 <Routes>
                                     <Route path="/" element={<HomeRedirect />} />
+                                    <Route path="/force-change-password" element={<ForceChangePasswordPage />} />
                                     <Route path="/fleet" element={<PageGuard pageKey="fleet"><FleetPage /></PageGuard>} />
                                     <Route path="/handover" element={<PageGuard pageKey="handover"><HandoverPage /></PageGuard>} />
                                     <Route path="/maintenance" element={<PageGuard pageKey="maintenance"><MaintenancePage /></PageGuard>} />

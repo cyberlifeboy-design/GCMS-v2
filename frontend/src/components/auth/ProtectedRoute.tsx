@@ -46,7 +46,15 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
         );
     }
 
-    return verified ? <>{children}</> : <Navigate to="/login" replace />;
+    if (!verified) {
+        return <Navigate to="/login" replace />;
+    }
+
+    if (user?.mustChangePassword && window.location.pathname !== '/force-change-password') {
+        return <Navigate to="/force-change-password" replace />;
+    }
+
+    return <>{children}</>;
 }
 
 /**
