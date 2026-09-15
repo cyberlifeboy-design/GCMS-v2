@@ -8,6 +8,7 @@ const LoginPage = lazy(() => import('@/pages/LoginPage').then(m => ({ default: m
 const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 const MicrosoftCallbackPage = lazy(() => import('@/pages/MicrosoftCallbackPage').then(m => ({ default: m.MicrosoftCallbackPage })));
+const AccessRequestPage = lazy(() => import('@/pages/AccessRequestPage').then(m => ({ default: m.AccessRequestPage })));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const FleetPage = lazy(() => import('@/pages/FleetPage').then(m => ({ default: m.FleetPage })));
 const HandoverPage = lazy(() => import('@/pages/HandoverPage').then(m => ({ default: m.HandoverPage })));
@@ -67,6 +68,7 @@ function AppContent() {
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/auth/microsoft/callback" element={<MicrosoftCallbackPage />} />
+                <Route path="/access-request" element={<AccessRequestPage />} />
                 <Route
                     path="/*"
                     element={
