@@ -1,0 +1,15 @@
+# Azure App Service custom-container SSH config.
+# Azure's Kudu/SCM "Web SSH" console tunnels into the container and connects to
+# this sshd on port 2222 — it is not exposed on the App Service's public ingress,
+# only reachable through the authenticated SCM site, so PasswordAuthentication
+# here is scoped to that private tunnel, not the public internet.
+Port 2222
+ListenAddress 0.0.0.0
+LoginGraceTime 180
+X11Forwarding no
+StrictModes yes
+SyslogFacility DAEMON
+PasswordAuthentication yes
+PermitEmptyPasswords no
+PermitRootLogin yes
+Subsystem sftp internal-sftp
