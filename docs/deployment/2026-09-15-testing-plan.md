@@ -2,6 +2,19 @@
 
 **Target:** `https://app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net`
 
+> **Results — 2026-09-15 (evening), first pass via browser automation:** Infrastructure,
+> DB connectivity, and every new SSO/Access-Control page that doesn't require an
+> authenticated session are confirmed live and working (§1's non-login items, §2's public
+> pages). The SSO button invokes a genuine MSAL request with the correct real Tenant/Client
+> ID, but this session could not confirm the actual redirect to
+> `login.microsoftonline.com` fires (see full report) — and a real login round-trip needs
+> a human with MFA regardless. Two minor bugs found (misleading "No authentication token
+> provided" error on bad email/password login; `/invite/<bad-token>` redirects silently
+> with no error message). Full detail: **`GCMS testing report.pdf`** in
+> `D:\Olddoccs\Documents\Work\GC project\Azure\`. Everything under §1 that needs an
+> authenticated session, and all of §2's Fleet/Bookings/Maintenance/etc. regression items,
+> remain **not yet tested** — blocked on a human completing the SSO login once.
+
 The Azure dev migration (App Service ×2 + MySQL, Entra ID SSO) is code-complete and
 deployed — see `GCMS-Azure-Deployment-Runbook.md`'s status banner for the full deployment
 history. This doc is the checklist for the next phase: functional/UAT testing of what's
