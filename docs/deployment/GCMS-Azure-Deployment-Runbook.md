@@ -178,6 +178,64 @@
 >    once Ahmed's Entra ID values exist, and rebuild the frontend with
 >    `VITE_MSAL_TENANT_ID` / `VITE_MSAL_CLIENT_ID` set.
 
+> **2026-09-15 (later same day) — Manual redeploy checklist executed; backend image
+> live.** The account `a.elobaid@sc.qa` activated its eligible PIM Contributor role on
+> `rg-gcms-dev-qc-001`, then ran the checklist above from Azure Cloud Shell:
+> - **ACR build:** `az acr build --registry acrgcmsdevqc001 --image gcms-backend:<sha>
+>   --image gcms-backend:latest .` — run ID `na4`, **Succeeded** (visible under the
+>   registry's Tasks → Runs blade; prior runs `na1`-`na3` from earlier same-day attempts
+>   also succeeded).
+> - **Container cutover:** `az acr update -n acrgcmsdevqc001 --admin-enabled true` was
+>   required first (registry admin access was off, so the App Service couldn't retrieve
+>   pull credentials — `az webapp config container set` fails with "No credential was
+>   provided to access Azure Container Registry" otherwise). After that, `az webapp
+>   config container set` (using the current, non-deprecated `--container-image-name` /
+>   `--container-registry-url` flags — the older `--docker-custom-image-name` /
+>   `--docker-registry-server-url` flags still work but print a deprecation warning) and
+>   `az webapp restart` both succeeded.
+> - **Verified in Portal (read-only):** `app-gcms-be-dev-qc-001` → Overview shows
+>   **Container Image:** `acrgcmsdevqc001-e7f6e0accuadfkh3.azurecr.io/gcms-backend:latest`
+>   and **Runtime status: Healthy**. The new image (SSH support + STARTTLS fix, see
+>   2026-09-14 addendum above and `backend/src/services/email.service.ts:123-125`) is
+>   live.
+> - **Frontend hostname confirmed** (`az webapp show --name app-gcms-fe-dev-qc-001
+>   --resource-group rg-gcms-dev-qc-001 --query defaultHostName -o tsv`):
+>   `app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net` — so the
+>   Entra ID redirect/callback URL for the App Registration is:
+>   `https://app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net/auth/microsoft/callback`
+>
+> **Still blocked: SSH retest, and everything downstream of it.** Opening the SSH panel
+> (App Service → Development Tools → SSH → Go) returns **403 Forbidden — "The web app
+> you have attempted to reach has blocked your access."** This is a Networking →
+> Access Restrictions setting, not a container/sshd problem: Public network access is
+> "Enabled from select virtual networks and IP addresses" with **no allow-rules
+> configured** and unmatched-rule action **Deny**, applied to both the main site and
+> the "Advanced tool site" (SCM/Kudu, which the browser SSH console goes through). Per
+> the Portal's own banner, this denies all traffic except from `vnet-gcms-dev-qc-001`
+> private endpoints. A normal browser session — from anyone, on any machine, outside
+> that VNet — cannot reach SSH here. To unblock, one of:
+> 1. Connect via a VPN/ExpressRoute that lands inside `vnet-gcms-dev-qc-001`, then open
+>    the SSH panel from that network.
+> 2. Use an existing jumpbox already inside that VNet, if one exists, and reach the
+>    Kudu SSH URL (`https://app-gcms-be-dev-qc-001-<hash>.scm.qatarcentral-01.azurewebsites.net/webssh/host`)
+>    from there.
+> 3. Temporarily add an allow-rule for a specific public IP under Networking → Access
+>    Restrictions → Advanced tool site (or Main site, since "Use main site rules" is
+>    checked) → Add, then revert it after use.
+>
+> **Remaining work, blocked on the above:**
+> 1. Retest SSH.
+> 2. `npx prisma db push` from `/app` (apply the manual `ALTER TABLE CarRequest ADD
+>    COLUMN requestNumber INT NOT NULL AUTO_INCREMENT UNIQUE;` first if not already
+>    applied — see 2026-09-13 addendum above).
+> 3. `curl localhost:3005/api/v1/health` from inside that SSH shell.
+> 4. Smoke-test `/api/v1/public/access-requests` and
+>    `/api/v1/public/invitations/<token>`.
+> 5. Once Ahmed supplies the Entra ID Tenant ID / Client ID (redirect URL now given to
+>    him above), set `MSAL_TENANT_ID` / `MSAL_CLIENT_ID` / `FRONTEND_URL` as App Service
+>    settings on the backend and rebuild the frontend with `VITE_MSAL_TENANT_ID` /
+>    `VITE_MSAL_CLIENT_ID` set, per Task 7 of the onboarding plan.
+
 ---
 
 ## 0. Purpose & Scope
