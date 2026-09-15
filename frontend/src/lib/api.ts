@@ -25,7 +25,7 @@ apiClient.interceptors.response.use(
         const originalRequest = error.config;
 
         // Skip auth redirect for public endpoints
-        const publicEndpoints = ['/auth/login', '/auth/forgot-password', '/auth/reset-password', '/public/'];
+        const publicEndpoints = ['/auth/login', '/auth/microsoft', '/auth/forgot-password', '/auth/reset-password', '/public/'];
         const isPublicEndpoint = publicEndpoints.some(ep => originalRequest.url?.includes(ep));
 
         // Don't redirect if already on login page
@@ -68,6 +68,8 @@ export const authApi = {
         apiClient.post('/auth/reset-password', data),
     changePassword: (currentPassword: string, newPassword: string) =>
         apiClient.post('/auth/change-password', { currentPassword, newPassword }),
+    microsoftLogin: (idToken: string) =>
+        apiClient.post('/auth/microsoft', { idToken }),
 };
 
 // Fleet  (carNumber, requiresVAP, assignedUserId, statuses: Available/Dispatched/Under Maintenance/Retired)
@@ -368,6 +370,48 @@ export const requestsApi = {
         apiClient.post(`/requests/${id}/email-requester`, { message }),
     export: (format: 'xlsx' | 'pdf' | 'docx', params?: Record<string, unknown>) =>
         apiClient.get('/requests/export', { params: { ...params, format }, responseType: 'blob' }),
+};
+
+// Account access requests (SSO self-service + invitation-originated)
+export const accessRequestsApi = {
+    // Public endpoints (no auth)
+    getPublicStadiums: () => axios.get(`${API_URL}/public/stadiums`),
+    getPublicDepartments: (stadiumId: string) =>
+        axios.get(`${API_URL}/public/departments`, { params: { stadiumId } }),
+    createPublic: (data: {
+        name: string;
+        email: string;
+        phone?: string;
+        stadiumId: string;
+        departmentId: string;
+        invitationToken?: string;
+    }) => axios.post(`${API_URL}/public/access-requests`, data),
+    getByTokenPublic: (token: string) =>
+        axios.get(`${API_URL}/public/access-requests/${token}`),
+    getInvitationPublic: (token: string) =>
+        axios.get(`${API_URL}/public/invitations/${token}`),
+
+    // Admin endpoints (auth required)
+    getAll: (params?: Record<string, unknown>) =>
+        apiClient.get('/access-requests', { params }),
+    getById: (id: string) =>
+        apiClient.get(`/access-requests/${id}`),
+    approve: (id: string, reviewNotes?: string) =>
+        apiClient.post(`/access-requests/${id}/approve`, { reviewNotes }),
+    reject: (id: string, reviewNotes?: string) =>
+        apiClient.post(`/access-requests/${id}/reject`, { reviewNotes }),
+    delete: (id: string) =>
+        apiClient.delete(`/access-requests/${id}`),
+};
+
+// Invitations (Admin/SuperAdmin invite a user by email)
+export const invitationsApi = {
+    create: (data: { email: string; stadiumId?: string; departmentId?: string }) =>
+        apiClient.post('/invitations', data),
+    getAll: (params?: Record<string, unknown>) =>
+        apiClient.get('/invitations', { params }),
+    revoke: (id: string) =>
+        apiClient.post(`/invitations/${id}/revoke`),
 };
 
 // Notifications

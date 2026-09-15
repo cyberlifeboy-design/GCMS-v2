@@ -81,6 +81,8 @@ export interface AuthUser {
     exportPreferences?: ExportPreferences;
     grantedPages?: string[];
     venueReportAccess?: string;
+    authProvider?: 'local' | 'microsoft';
+    mustChangePassword?: boolean;
 }
 
 interface AuthState {
@@ -88,6 +90,7 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
+    loginWithMicrosoft: (idToken: string) => Promise<{ registered: true } | { registered: false; email: string; name: string }>;
     logout: () => void;
     updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => void;
     updateExportPreferences: (preferences: ExportPreferences) => void;
@@ -109,6 +112,23 @@ export const useAuthStore = create<AuthState>()(
                     set({ user, isAuthenticated: true, isLoading: false });
                 } catch (error) {
                     set({ isLoading: false });
+                    throw error;
+                }
+            },
+            loginWithMicrosoft: async (idToken: string) => {
+                set({ isLoading: true });
+                try {
+                    const response = await authApi.microsoftLogin(idToken);
+                    const { user, accessToken, refreshToken } = response.data;
+                    localStorage.setItem('accessToken', accessToken);
+                    localStorage.setItem('refreshToken', refreshToken);
+                    set({ user, isAuthenticated: true, isLoading: false });
+                    return { registered: true };
+                } catch (error: any) {
+                    set({ isLoading: false });
+                    if (error.response?.status === 404 && error.response?.data?.error === 'NOT_REGISTERED') {
+                        return { registered: false, email: error.response.data.email, name: error.response.data.name };
+                    }
                     throw error;
                 }
             },
