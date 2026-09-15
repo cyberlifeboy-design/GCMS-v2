@@ -5,6 +5,15 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 ENV VITE_API_URL=/api/v1
+
+# Microsoft Entra ID (Azure AD) SSO — Vite bakes these into the JS bundle at build
+# time, so (unlike the backend's runtime env vars) a new value requires a rebuild.
+# Values are the public Client ID/Tenant ID of a SPA app registration — not secrets.
+ARG VITE_MSAL_TENANT_ID=""
+ARG VITE_MSAL_CLIENT_ID=""
+ENV VITE_MSAL_TENANT_ID=$VITE_MSAL_TENANT_ID
+ENV VITE_MSAL_CLIENT_ID=$VITE_MSAL_CLIENT_ID
+
 RUN npx vite build
 
 # Production stage with nginx

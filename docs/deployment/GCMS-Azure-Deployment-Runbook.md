@@ -236,6 +236,58 @@
 >    settings on the backend and rebuild the frontend with `VITE_MSAL_TENANT_ID` /
 >    `VITE_MSAL_CLIENT_ID` set, per Task 7 of the onboarding plan.
 
+> **2026-09-15 (evening) — Ahmed confirmed SSH fixed, DB push + seed done; Entra ID App
+> Registration supplied; backend env vars set; frontend rebuild still outstanding.**
+> Ahmed emailed that the Access Restrictions block above is resolved, SSH works, and he
+> ran `npx prisma db push` + `npx prisma db seed` himself against the dev MySQL server —
+> so the `AccessRequest`/`Invitation`/`User.authProvider` etc. schema from the
+> 2026-09-14 addendum is now applied. He also supplied the Entra ID App Registration
+> (SPA/MSAL, no client secret):
+> - Tenant ID: `993ca615-6bd5-4d1c-8a7b-a1a99efc64b7`
+> - Client ID: `a073e36b-4a7c-4ac1-a005-6a20c3cd173b`
+>
+> Confirmed via Portal this session (PIM role reactivated, 4h window):
+> - Both App Services **Running**; backend **Container Image** tag is `65746a1`
+>   (rebuilt earlier today per the previous addendum) — **Runtime status: Healthy**.
+> - `MSAL_TENANT_ID` and `MSAL_CLIENT_ID` set as **backend** (`app-gcms-be-dev-qc-001`)
+>   app settings with the values above (applied, app restarted). `FRONTEND_URL` was
+>   already set from the 2026-09-14 session.
+> - `frontend/Dockerfile` updated (this commit) to accept `VITE_MSAL_TENANT_ID` /
+>   `VITE_MSAL_CLIENT_ID` as build args (Vite bakes these in at build time — an App
+>   Service setting alone does nothing for the frontend, unlike the backend).
+> - **gcms-frontend ACR repo is still tagged 9/12 — pre-Instant-Booking, pre-SSO.**
+>   Loading the live frontend and clicking "Sign in with your SC/LOC account" still
+>   shows the old "Coming soon" placeholder (verified in-browser this session), confirming
+>   the real MSAL login button/callback/Access-Request/Invitation UI (commits
+>   `fe49fe2`..`94d6ee0`) has never been deployed.
+> - Tried to close this gap directly this session and hit the same class of hard block
+>   as the PIM activation above: reading the ACR's admin-user access keys (needed to
+>   `docker login`/`docker push` a locally-built image, since Docker Desktop has no `az`
+>   CLI path here either) was refused by the sandbox's own safety classifier
+>   ("Credential Materialization"), and the registry's Tasks blade (Basic SKU) still has
+>   no portal button to start a new build — only `az acr build`/API can, same limitation
+>   as every prior addendum. **Not something to retry from this environment.**
+>
+> **Next step for Ahmed — one command, same pattern as the backend rebuild he already
+> did (`na4` run):**
+> ```bash
+> az login
+> cd frontend   # feature/pool-booking-system, frontend/ as build context
+> az acr build --registry acrgcmsdevqc001 \
+>   --image gcms-frontend:$(git rev-parse --short HEAD) \
+>   --image gcms-frontend:latest \
+>   --build-arg VITE_MSAL_TENANT_ID=993ca615-6bd5-4d1c-8a7b-a1a99efc64b7 \
+>   --build-arg VITE_MSAL_CLIENT_ID=a073e36b-4a7c-4ac1-a005-6a20c3cd173b \
+>   .
+> az webapp restart --name app-gcms-fe-dev-qc-001 --resource-group rg-gcms-dev-qc-001
+> ```
+> Frontend App Service is already wired to `gcms-frontend:latest` (deployed 9/12), so no
+> `az webapp config container set` step is needed — pushing the new `latest` digest and
+> restarting is sufficient. **After that, testing can start**: login page should show a
+> live Microsoft SSO redirect instead of "Coming soon", `/access-request` and
+> `/invite/<token>` should render, and the Account Access admin page should list
+> pending requests seeded/created since the DB push.
+
 ---
 
 ## 0. Purpose & Scope
