@@ -39,7 +39,7 @@ RUN echo 'server { \
     set $backend ${BACKEND_ORIGIN}; \
     \
     location /api/v1 { \
-        proxy_pass $backend/api/v1; \
+        proxy_pass $backend; \
         proxy_ssl_server_name on; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
