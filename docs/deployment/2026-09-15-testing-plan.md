@@ -2,18 +2,33 @@
 
 **Target:** `https://app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net`
 
-> **Results — 2026-09-15 (evening), first pass via browser automation:** Infrastructure,
-> DB connectivity, and every new SSO/Access-Control page that doesn't require an
-> authenticated session are confirmed live and working (§1's non-login items, §2's public
-> pages). The SSO button invokes a genuine MSAL request with the correct real Tenant/Client
-> ID, but this session could not confirm the actual redirect to
-> `login.microsoftonline.com` fires (see full report) — and a real login round-trip needs
-> a human with MFA regardless. Two minor bugs found (misleading "No authentication token
-> provided" error on bad email/password login; `/invite/<bad-token>` redirects silently
-> with no error message). Full detail: **`GCMS testing report.pdf`** in
-> `D:\Olddoccs\Documents\Work\GC project\Azure\`. Everything under §1 that needs an
-> authenticated session, and all of §2's Fleet/Bookings/Maintenance/etc. regression items,
-> remain **not yet tested** — blocked on a human completing the SSO login once.
+> **Results — 2026-09-15 (evening), updated after live debugging:** The first automated
+> pass looked mostly clean, but was largely a false positive. The user then tried a real
+> SSO login (completed Microsoft verification) and it still failed, and SuperAdmin
+> password login also failed — investigating that live turned up **two real, severe bugs**
+> that were silently breaking nearly every API call:
+> 1. **nginx `proxy_pass` swallowed the real request path** (fixed, commit `4a4fc17`) —
+>    `frontend/Dockerfile`'s nginx config used a variable in `proxy_pass` with an explicit
+>    URI suffix, a documented nginx gotcha that collapses every `/api/v1/*` request to
+>    literally `/api/v1` regardless of the real path. GET requests happened to 200 against
+>    the generic API-index route (which is why the original pass wrongly marked things
+>    PASS), POST requests (login, SSO token exchange) matched nothing and fell through to
+>    an unrelated auth guard, returning a misleading 401 "No authentication token
+>    provided" — this is what blocked the user's real SSO+password logins.
+> 2. **Blanket `authenticate` middleware in two routers swallowed unrelated public
+>    routes** (fixed, commit `288b1fa`) — `access-requests.routes.ts` and
+>    `invitations.routes.ts` both had a path-less `router.use(authenticate)`, and since
+>    both are mounted at the bare `/api/v1` prefix ahead of `requests.routes.ts` (same
+>    mount style), any request not matched by their own patterns — including
+>    `/api/v1/public/stadiums`/`/public/departments` — got swallowed and 401'd before
+>    reaching its real handler. This was hidden until bug 1 was fixed.
+>
+> Both fixes are built, deployed, and verified live (real stadium data now returns, real
+> "Invalid email or password" now shows for bad credentials). **Password and SSO login
+> should now both work — please retry.** Full corrected report: **`GCMS testing
+> report.pdf`** in `D:\Olddoccs\Documents\Work\GC project\Azure\`. Everything requiring an
+> authenticated session (Account Access admin page, Fleet, Bookings, Maintenance, Reports,
+> Settings, Notifications) is **still not tested** — now unblocked, ready for a real pass.
 
 The Azure dev migration (App Service ×2 + MySQL, Entra ID SSO) is code-complete and
 deployed — see `GCMS-Azure-Deployment-Runbook.md`'s status banner for the full deployment
