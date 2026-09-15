@@ -10,6 +10,7 @@ const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage').then(m 
 const MicrosoftCallbackPage = lazy(() => import('@/pages/MicrosoftCallbackPage').then(m => ({ default: m.MicrosoftCallbackPage })));
 const AccessRequestPage = lazy(() => import('@/pages/AccessRequestPage').then(m => ({ default: m.AccessRequestPage })));
 const ForceChangePasswordPage = lazy(() => import('@/pages/ForceChangePasswordPage').then(m => ({ default: m.ForceChangePasswordPage })));
+const AccessRequestsManagementPage = lazy(() => import('@/pages/AccessRequestsManagementPage').then(m => ({ default: m.AccessRequestsManagementPage })));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const FleetPage = lazy(() => import('@/pages/FleetPage').then(m => ({ default: m.FleetPage })));
 const HandoverPage = lazy(() => import('@/pages/HandoverPage').then(m => ({ default: m.HandoverPage })));
@@ -89,6 +90,7 @@ function AppContent() {
                                     <Route path="/notifications" element={<PageGuard pageKey="notifications"><NotificationCenterPage /></PageGuard>} />
                                     <Route path="/settings" element={<PageGuard pageKey="settings"><SettingsPage /></PageGuard>} />
                                     <Route path="/requests" element={<PageGuard pageKey="requests"><RequestsManagementPage /></PageGuard>} />
+                                    <Route path="/access-requests" element={<PageGuard pageKey="access-requests"><AccessRequestsManagementPage /></PageGuard>} />
                                     <Route path="/incidents" element={<PageGuard pageKey="incidents"><IncidentsPage /></PageGuard>} />
                                     <Route path="/bookings" element={<PageGuard pageKey="bookings"><BookingsPage /></PageGuard>} />
                                     <Route path="/usage-history" element={<UsageHistoryPage />} />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { usersApi, stadiumsApi, departmentsApi, requestsApi, warningsApi } from '@/lib/api';
+import { usersApi, stadiumsApi, departmentsApi, requestsApi, warningsApi, invitationsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +90,11 @@ export function UsersPage() {
     const [editWarnings, setEditWarnings] = useState<any[]>([]);
     const [bulkOpen, setBulkOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
+    const [inviteOpen, setInviteOpen] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteStadiumId, setInviteStadiumId] = useState('');
+    const [inviteDepartmentId, setInviteDepartmentId] = useState('');
+    const [inviteSubmitting, setInviteSubmitting] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
     const [editData, setEditData] = useState({ name: '', email: '', phone: '', role: '', accreditationNumber: '', stadiumId: '', departmentId: '', assignAllStadiums: false, newPassword: '' });
@@ -220,6 +225,30 @@ export function UsersPage() {
             toast.error(err.response?.data?.error || 'Failed to create user');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleInvite = async () => {
+        if (!inviteEmail) {
+            toast.error('Email is required');
+            return;
+        }
+        setInviteSubmitting(true);
+        try {
+            await invitationsApi.create({
+                email: inviteEmail,
+                stadiumId: inviteStadiumId || undefined,
+                departmentId: inviteDepartmentId || undefined,
+            });
+            toast.success('Invitation sent');
+            setInviteOpen(false);
+            setInviteEmail('');
+            setInviteStadiumId('');
+            setInviteDepartmentId('');
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to send invitation');
+        } finally {
+            setInviteSubmitting(false);
         }
     };
 
@@ -535,6 +564,9 @@ export function UsersPage() {
                             <Button onClick={() => { setFormData(EMPTY_FORM); setCreateOpen(true); }} className="h-9 bg-primary hover:bg-primary/90 shadow-sm">
                                 <Plus className="w-4 h-4 mr-2" /> Add User
                             </Button>
+                            <Button variant="outline" onClick={() => setInviteOpen(true)} className="h-9">
+                                <UserPlus className="w-4 h-4 mr-2" /> Invite User
+                            </Button>
                         </>
                     )}
                 </div>
@@ -731,6 +763,38 @@ export function UsersPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+                <DialogContent className="max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Invite a user</DialogTitle>
+                        <DialogDescription>
+                            Sends a link to their email. They'll fill in the same access-request form you'd see from the Microsoft sign-in flow.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="inviteEmail">Email</Label>
+                            <Input id="inviteEmail" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Venue (optional pre-fill)</Label>
+                            <Select value={inviteStadiumId} onValueChange={setInviteStadiumId}>
+                                <SelectTrigger><SelectValue placeholder="Let the user choose" /></SelectTrigger>
+                                <SelectContent>
+                                    {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                        <Button onClick={handleInvite} disabled={inviteSubmitting}>
+                            {inviteSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Invite'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
