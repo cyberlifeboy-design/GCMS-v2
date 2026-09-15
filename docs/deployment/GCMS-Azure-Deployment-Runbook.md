@@ -89,6 +89,50 @@
 > yet; it's a reserved path, not a live route, and can still be changed before real work
 > starts since no App Registration depends on it yet at the time this was written.
 
+> **2026-09-14/15 — User Onboarding & Access Control feature complete (code + tests),
+> not yet deployed.** Implements the flow the redirect URL above was reserved for: real
+> MSAL login button + `/auth/microsoft/callback`, a public `/access-request` page (SSO
+> self-service and invitation-token entry), an admin `/access-requests` review page,
+> "Invite User" on the Users page, and a forced password-change screen for admin-created
+> and first-SSO-login accounts. Backend gained `access-requests` and `invitations`
+> modules plus Microsoft ID-token verification (JWKS, RS256-only). Verified via
+> `npx tsc --noEmit` (backend + frontend, both clean) and the backend suite — now
+> **69/69** passing (60 prior + 9 new: `microsoft-auth` token verification and
+> `invitation-validity`).
+>
+> **Gap — Step 3's end-to-end manual pass was not run.** This work was done in a
+> sandboxed session with no Docker Desktop and no browser available, so the actual
+> invitation → access-request → approval → login round trip, the forced-password-change
+> redirect, and `/access-request` rendering standalone (no invite/SSO state) are
+> unverified beyond code review + typecheck + unit tests. Run Task 12 Step 3 of
+> `docs/superpowers/plans/2026-09-14-user-onboarding-access-control.md` on the local
+> Docker Desktop stack before relying on this in production.
+>
+> New Prisma migration needed on the dev MySQL server (same VNet-access blocker as prior
+> addenda — needs `prisma db push` run from a machine inside `vnet-gcms-dev-qc-001`):
+> - `User`: `authProvider` (String, default "local"), `microsoftOid` (String?, unique),
+>   `mustChangePassword` (Boolean, default false).
+> - New tables: `AccessRequest`, `Invitation`.
+>
+> New app settings needed once Ahmed's Entra ID App Registration is ready (backend
+> `app-gcms-be-dev-qc-001` and frontend `app-gcms-fe-dev-qc-001` — frontend ones are
+> build-time `VITE_` vars, so they need a rebuild, not just an app-setting change):
+> - Backend: `MSAL_TENANT_ID`, `MSAL_CLIENT_ID`, `FRONTEND_URL` (already resolvable — the
+>   frontend hostname documented above).
+> - Frontend build: `VITE_MSAL_TENANT_ID`, `VITE_MSAL_CLIENT_ID`.
+>
+> Redirect URI is unchanged from what was already sent to Ahmed (see above):
+> `https://app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net/auth/microsoft/callback`.
+>
+> This code is committed on `feature/pool-booking-system`, joining the existing
+> not-yet-deployed batch (Instant Booking, SSH/SMTP fixes) — same image rebuild +
+> `prisma db push` gap documented in the addenda above. **Not yet pushed to `origin`** —
+> the session's `git push` was blocked by an auto-mode credential-leak classifier
+> (almost certainly triggered by the literal `root:Docker!` string in the SSH-fix commit,
+> which is Microsoft's own documented fixed value for this feature, not a real secret —
+> see the 2026-09-14 SSH addendum above). Push manually or adjust the permission rule
+> before this reaches Azure.
+
 ---
 
 ## 0. Purpose & Scope
@@ -114,7 +158,7 @@ point DNS at it — until then, the old deployment is your safety net.
 |---|---|
 | Application code | Feature-complete for this milestone: fleet (with Focal-Point→Department auto-sync), Pool status, handover (reordered workflow, deduplicated form, system-fetched serial/FA-code), maintenance, pool booking (with due-time reminders + FA extension-request/Admin-approval workflow), a full template-matched Incident Report form (fillable, PDF, Contracts/Maintenance escalation), a catalog-driven 3-level Warning Ticket system, reports, settings, and a restyled login page |
 | Database | **PostgreSQL** in `prisma/schema.prisma`. Two migrations added 2026-09-12: `20260912173213_incident_form_and_ticket_fields` (Incident report-form fields + escalation flags) and `20260912173805_pool_booking_reminders_and_extensions` (reminder/overdue flags + extension-request fields on `PoolBookingRequest`) — both additive, no destructive changes, applied automatically by `prisma migrate deploy` in Step 5.5 |
-| Backend build | `tsc --noEmit` clean (backend and frontend), 60/60 unit tests passing |
+| Backend build | `tsc --noEmit` clean (backend and frontend), 69/69 unit tests passing |
 | Frontend build | `tsc --noEmit` clean, production build succeeds, `eslint` reports 0 errors (24 reviewed low-risk warnings remain) |
 | Docker image | Written (`Dockerfile`, root of repo) — multi-stage build producing one image that serves both the API and the built React app |
 | Storage driver | Abstracted — supports local disk, MinIO, or **Azure Blob Storage** behind one interface, selected via `STORAGE_DRIVER` env var |
