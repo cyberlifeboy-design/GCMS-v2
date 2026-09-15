@@ -279,13 +279,13 @@ Admin/SuperAdmin retain the full Pending Handovers / Real-time Stream / Global A
 - Node.js 20 LTS
 - Docker & Docker Compose (for production infra)
 
-### Local Development (PostgreSQL)
+### Local Development (MySQL)
 
-> As of the Azure production-hardening pass, `prisma/schema.prisma` targets
-> **PostgreSQL** — SQLite is no longer supported for local dev. Bring up a local
-> Postgres with the `postgres` service already defined in the root `docker-compose.yml`
-> (dev port exposed via `docker-compose.dev.yml`), or point `DATABASE_URL` at any
-> reachable Postgres 16 instance.
+> As of the Azure dev environment's DB engine switch (2026-09-12), `prisma/schema.prisma`
+> targets **MySQL** — the earlier PostgreSQL setup and SQLite are no longer used anywhere
+> in this project (local or Azure). Bring up the full local stack (MySQL, MinIO, backend,
+> frontend, all with live-reload) via the `mysql`/`backend-dev`/`frontend-dev` services
+> across `docker-compose.yml` + `docker-compose.dev.yml` + `docker-compose.dev-live.yml`.
 
 1. **Clone the repository**
 ```bash
@@ -304,17 +304,22 @@ cd ../frontend
 npm install
 ```
 
-3. **Start a local Postgres**
+3. **Start the full local dev stack** (MySQL, MinIO, backend, frontend — live-reload,
+   source bind-mounted, no rebuild needed after edits)
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-live.yml \
+  up -d mysql minio backend-dev frontend-dev
 ```
+App: **http://localhost:3000** · API: **http://localhost:3005** · MySQL: `localhost:5431`
+· MinIO console: `localhost:9001`.
 
-4. **Configure environment**
+4. **Configure environment** (only needed if running the backend/frontend outside Docker —
+   the `*-dev` containers above already have working defaults baked into the compose files)
 
 Backend `.env` (see `backend/.env.example` for the full list — security, storage, and
 email vars all have working dev defaults):
 ```env
-DATABASE_URL="postgresql://gcms_user:gcms_password_2024@localhost:5431/gcms?schema=public"
+DATABASE_URL="mysql://gcms_user:gcms_password_2024@localhost:5431/gcms"
 JWT_ACCESS_SECRET="your-jwt-secret"
 JWT_REFRESH_SECRET="your-refresh-secret"
 CORS_ORIGIN="http://localhost:3000"
@@ -325,11 +330,12 @@ Frontend `.env`:
 VITE_API_URL=http://localhost:3005/api/v1
 ```
 
-5. **Initialize database**
+5. **Initialize database** (no migration history is kept — schema changes are applied
+   with `prisma db push`, both locally and on Azure)
 ```bash
 cd backend
-npx prisma migrate deploy
-npx tsx prisma/seed.ts
+npx prisma db push
+npx prisma db seed
 ```
 
 6. **Run development servers**
@@ -350,12 +356,19 @@ Access the application at **http://localhost:3000**. Health checks: `GET /api/v1
 > running process holds a `.dll.node` file lock (EPERM rename error). Kill it, migrate,
 > then restart.
 
-### Production Deployment (Azure Container Apps)
+### Production Deployment (Azure App Service, containers)
 
-The app ships as a single multi-stage `Dockerfile` (repo root) — Express serves both the
-API and the built frontend. See **[docs/deployment/azure-container-apps.md](docs/deployment/azure-container-apps.md)**
-for the full walkthrough: provisioning, secrets, build & push, first deploy, and
-day-2 operations (logs, scaling, rollback, backup/restore).
+The Azure dev/production deployment uses **two Linux App Services** (`backend/Dockerfile`,
+`frontend/Dockerfile`) + **Azure Database for MySQL Flexible Server** (VNet-private) +
+Storage/Blob, built and pushed to an Azure Container Registry. See
+**[docs/deployment/GCMS-Azure-Deployment-Runbook.md](docs/deployment/GCMS-Azure-Deployment-Runbook.md)**
+for the full, current, step-by-step process and change history — architecture, provisioning,
+app settings, the `az acr build` rebuild command for each service (note: the **frontend**
+needs `VITE_MSAL_TENANT_ID`/`VITE_MSAL_CLIENT_ID` as **build args**, since Vite bakes them
+into the JS bundle — an App Service setting alone does nothing there), and day-2 operations.
+`docs/deployment/azure-container-apps.md` describes an earlier Container Apps + PostgreSQL
+design that was **not** what got built — it's kept only for historical reference and is
+marked superseded at the top of that file.
 
 ### Default Users (after seed)
 
