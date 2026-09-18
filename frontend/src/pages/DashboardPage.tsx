@@ -6,7 +6,7 @@ import { Loader2, Car, Wrench, Shield, Download, BarChart3, TrendingUp, Clock, M
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuthStore } from '@/stores/authStore';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
 import { VenueMap } from '@/components/dashboard/VenueMap';
@@ -272,6 +272,15 @@ interface DashboardStats {
 }
 
 const COLORS = ['#1E88E5', '#43A047', '#FDD835', '#E53935', '#8E24AA'];
+
+// Matches the per-type colors used on the stadium fleet-breakdown cards below.
+const CAR_TYPE_COLORS: Record<string, string> = {
+    '4-Seater': '#3b82f6',
+    '6-Seater': '#22c55e',
+    'Cargo': '#f97316',
+    'Accessibility': '#a855f7',
+};
+const DEFAULT_TYPE_COLOR = '#64748b';
 
 export function DashboardPage() {
     const { user } = useAuthStore();
@@ -712,9 +721,14 @@ export function DashboardPage() {
                             <BarChart data={stats?.fleetByType}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="type" />
-                                <YAxis />
+                                <YAxis allowDecimals={false} />
                                 <Tooltip />
-                                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                                    <LabelList dataKey="count" position="top" className="fill-foreground text-xs font-semibold" />
+                                    {stats?.fleetByType.map((entry) => (
+                                        <Cell key={entry.type} fill={CAR_TYPE_COLORS[entry.type] || DEFAULT_TYPE_COLOR} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
