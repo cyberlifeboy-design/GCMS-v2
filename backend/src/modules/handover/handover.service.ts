@@ -139,8 +139,10 @@ export class HandoverService {
     }
 
     /**
-     * Stop using the car
-     * Changes status from 'Dispatched' to 'Returned'
+     * Stop using the car for now — pauses the usage timer only. The FA can check
+     * back in any number of times per day; the assignment/handover stays open
+     * until they explicitly request a handback (see requestHandback below).
+     * Changes status from 'Dispatched' back to 'Active' (or 'Under Maintenance' if an issue was reported).
      */
     async checkOut(data: {
         fleetId: string;
@@ -170,7 +172,7 @@ export class HandoverService {
                 },
             });
 
-            const nextStatus = data.hasIssue ? 'Under Maintenance' : 'Returned';
+            const nextStatus = data.hasIssue ? 'Under Maintenance' : 'Active';
             await tx.fleet.update({
                 where: { id: data.fleetId },
                 data: {
@@ -195,7 +197,7 @@ export class HandoverService {
         }).then(async (log) => {
             const checkoutPush = await notificationTemplatesService.renderPush('handover_checkout', {
                 carNumber: vehicle.carNumber,
-                status: data.hasIssue ? 'Maintenance' : 'Returned',
+                status: data.hasIssue ? 'Maintenance' : 'Parked',
             });
             if (checkoutPush) {
                 await notificationService.createForRoles(
@@ -215,8 +217,9 @@ export class HandoverService {
     }
 
     /**
-     * FA User hands back the car to the Admin
-     * Changes status from 'Returned' to 'HandbackPending'
+     * FA User is completely done with the car and hands it back to the Admin —
+     * a separate, explicit step from check-out (which only pauses usage).
+     * Changes status from 'Active' to 'HandbackPending'
      */
     async requestHandback(data: { fleetId: string; userId: string }) {
         const vehicle = await prisma.fleet.findUnique({
@@ -225,7 +228,7 @@ export class HandoverService {
 
         if (!vehicle) throw new Error('Vehicle not found');
         if (vehicle.assignedUserId !== data.userId) throw new Error('Vehicle is not assigned to you');
-        if (vehicle.status !== 'Returned') throw new Error('Vehicle must be Checked Out (Returned) before handback');
+        if (vehicle.status !== 'Active') throw new Error('Vehicle must be checked out (not currently in use) before handback');
 
         return prisma.$transaction(async (tx) => {
             const log = await tx.handoverLog.create({
@@ -247,7 +250,9 @@ export class HandoverService {
 
     /**
      * Admin accepts the handback
-     * Changes status from 'HandbackPending' (or 'Returned') to 'Available' and clears assignment
+     * Changes status from 'HandbackPending' (or 'Active', if the admin force-releases
+     * a checked-out cart without the FA requesting handback first) to 'Available'
+     * and clears assignment
      */
     async acceptHandback(data: { fleetId: string; adminId: string }) {
         const vehicle = await prisma.fleet.findUnique({
@@ -255,7 +260,7 @@ export class HandoverService {
         });
 
         if (!vehicle) throw new Error('Vehicle not found');
-        if (!['Returned', 'HandbackPending'].includes(vehicle.status)) {
+        if (!['Active', 'HandbackPending'].includes(vehicle.status)) {
             throw new Error(`Vehicle cannot be released (Current status: ${vehicle.status})`);
         }
 
@@ -806,7 +811,7 @@ export class HandoverService {
     }) {
         const vehicle = await prisma.fleet.findUnique({ where: { id: fleetId } });
         if (!vehicle) throw new Error('Vehicle not found');
-        if (!['Returned', 'HandbackPending'].includes(vehicle.status)) {
+        if (!['Active', 'HandbackPending'].includes(vehicle.status)) {
             throw new Error(`Vehicle cannot be returned (Current status: ${vehicle.status})`);
         }
 

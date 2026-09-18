@@ -209,11 +209,8 @@ export function HandoverPage() {
         if (!isAdmin) return;
         setHandbackLoading(true);
         try {
-            const [r, h] = await Promise.all([
-                fleetApi.getAll({ status: 'Returned', limit: 100 }),
-                fleetApi.getAll({ status: 'HandbackPending', limit: 100 }),
-            ]);
-            setHandbackCarts([...(r.data.data || []), ...(h.data.data || [])]);
+            const h = await fleetApi.getAll({ status: 'HandbackPending', limit: 100 });
+            setHandbackCarts(h.data.data || []);
         } catch {
             // silently fail
         } finally {
@@ -487,8 +484,8 @@ export function HandoverPage() {
                                             </div>
                                         )}
 
-                                        {/* Hand Back - after check-out */}
-                                        {handoverComplete && cart.status === 'Returned' && (
+                                        {/* Hand Back - available whenever the cart isn't currently checked out */}
+                                        {handoverComplete && cart.status === 'Active' && (
                                             <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 rounded-xl font-bold" onClick={() => {
                                                 handoverApi.requestHandback(cart.id).then(() => {
                                                     toast.success('Hand back request sent to admin.');
@@ -870,8 +867,7 @@ export function HandoverPage() {
                                             </TableCell>
                                             <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium?.code}</Badge></TableCell>
                                             <TableCell>
-                                                {cart.status === 'Returned' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px]">Checked Out</Badge>}
-                                                {cart.status === 'HandbackPending' && <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Handback Pending</Badge>}
+                                                <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Handback Pending</Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"

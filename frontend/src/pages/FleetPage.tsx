@@ -640,7 +640,7 @@ export function FleetPage() {
                                         <div className="flex justify-end gap-1">
                                             {isAdmin && (
                                                 <>
-                                                    {(cart.status === 'Returned' || cart.status === 'HandbackPending') && (
+                                                    {cart.status === 'HandbackPending' && (
                                                         <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" onClick={() => setReturnModal({ open: true, fleetId: cart.id })} title="Inspect & Sign Return Form">
                                                             <RotateCcw className="w-4 h-4" />
                                                         </Button>
