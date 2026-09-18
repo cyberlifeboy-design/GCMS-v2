@@ -281,6 +281,9 @@ export function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const isAdmin = user?.role === 'Admin';
+    // Mirrors the backend's own requireRole() list on GET /reports/utilization —
+    // FA/MaintenanceTeam aren't allowed that report, so don't ask for it at all.
+    const canViewUtilization = user?.role === 'SuperAdmin' || user?.role === 'Admin' || user?.role === 'Observer' || user?.role === 'Contracts';
     // Admin is always scoped to their venue — no filter control
     const [stadiumFilter, setStadiumFilter] = useState<string>(
         isAdmin && user?.stadiumId ? user.stadiumId : ''
@@ -292,7 +295,7 @@ export function DashboardPage() {
             const params: Record<string, string> = {};
             if (stadiumId) params.stadiumId = stadiumId;
             const [statsRes, notifRes] = await Promise.all([
-                reportsApi.getUtilization(params),
+                canViewUtilization ? reportsApi.getUtilization(params) : Promise.resolve({ data: null }),
                 notificationsApi.getStats()
             ]);
             setStats(statsRes.data);
