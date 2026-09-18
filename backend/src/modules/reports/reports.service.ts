@@ -75,7 +75,7 @@ interface ActiveCarUsage {
     faContact: string | null;
     faDepartment: string | null;
     stadium: { id: string; name: string };
-    checkOutTime: Date;
+    checkedInAt: Date;
 }
 
 export interface PoolReport {
@@ -889,28 +889,6 @@ export class ReportsService {
             orderBy: { carNumber: 'asc' },
         });
 
-        // Get the most recent check-out log for each cart to find checkOutTime
-        const cartIds = dispatchedCarts.map(c => c.id);
-        const recentCheckOuts = await this.prisma.handoverLog.findMany({
-            where: {
-                fleetId: { in: cartIds },
-                action: 'CheckedOut',
-            },
-            orderBy: [{ fleetId: 'asc' }, { timestamp: 'desc' }],
-            select: {
-                fleetId: true,
-                timestamp: true,
-            },
-        });
-
-        // Map to get latest check-out time per cart
-        const latestCheckOutMap = new Map<string, Date>();
-        for (const log of recentCheckOuts) {
-            if (!latestCheckOutMap.has(log.fleetId)) {
-                latestCheckOutMap.set(log.fleetId, log.timestamp);
-            }
-        }
-
         const activeCars: ActiveCarUsage[] = dispatchedCarts
             .filter(cart => {
                 // Apply search filter after fetching
@@ -931,7 +909,7 @@ export class ReportsService {
                 faContact: cart.assignedUser?.phone || null,
                 faDepartment: cart.assignedUser?.department?.name || null,
                 stadium: cart.stadium,
-                checkOutTime: latestCheckOutMap.get(cart.id) || cart.updatedAt,
+                checkedInAt: cart.checkedInAt || cart.updatedAt,
             }));
 
         return activeCars;

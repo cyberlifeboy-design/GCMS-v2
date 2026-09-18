@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { reportsApi, stadiumsApi, departmentsApi } from '@/lib/api';
 import { Loader2, Car, Search } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { formatDateTime } from '@/lib/dateUtils';
 
 interface ActiveCar {
     id: string;
@@ -16,7 +17,7 @@ interface ActiveCar {
     faContact: string | null;
     faDepartment: string | null;
     stadium: { id: string; name: string };
-    checkOutTime: string;
+    checkedInAt: string;
 }
 
 interface ActiveCarsSectionProps {
@@ -75,11 +76,11 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
         loadActiveCars();
     }, [refreshKey, filterStadium, filterDepartment, filterCarType, searchTerm]);
 
-    // Format time since checkout
-    const formatDuration = (checkOutTime: string) => {
-        const checkout = new Date(checkOutTime);
+    // Format time since check-in
+    const formatDuration = (checkedInAt: string) => {
+        const checkedIn = new Date(checkedInAt);
         const now = new Date();
-        const diffMs = now.getTime() - checkout.getTime();
+        const diffMs = now.getTime() - checkedIn.getTime();
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMins / 60);
         const diffDays = Math.floor(diffHours / 24);
@@ -178,6 +179,7 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
                                     <th className="text-left py-2 px-3 font-medium text-sm">Contact</th>
                                     <th className="text-left py-2 px-3 font-medium text-sm">Department</th>
                                     <th className="text-left py-2 px-3 font-medium text-sm">Stadium</th>
+                                    <th className="text-left py-2 px-3 font-medium text-sm">Checked In</th>
                                     <th className="text-left py-2 px-3 font-medium text-sm">Duration</th>
                                 </tr>
                             </thead>
@@ -198,9 +200,12 @@ export function ActiveCarsSection({ refreshKey }: ActiveCarsSectionProps) {
                                             {car.faDepartment || '—'}
                                         </td>
                                         <td className="py-2 px-3 text-sm">{car.stadium.name}</td>
+                                        <td className="py-2 px-3 text-sm text-muted-foreground">
+                                            {formatDateTime(car.checkedInAt)}
+                                        </td>
                                         <td className="py-2 px-3">
                                             <Badge variant="secondary" className="font-mono">
-                                                {formatDuration(car.checkOutTime)}
+                                                {formatDuration(car.checkedInAt)}
                                             </Badge>
                                         </td>
                                     </tr>
