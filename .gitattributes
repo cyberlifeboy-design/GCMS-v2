@@ -1,0 +1,5 @@
+# Files baked verbatim into Linux containers must never be checked out with
+# CRLF on Windows — a CRLF shebang breaks `exec` entirely (see backend/init.sh).
+*.sh text eol=lf
+Dockerfile text eol=lf
+sshd_config text eol=lf
