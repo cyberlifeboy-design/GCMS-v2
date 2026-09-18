@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { poolBookingRequestsApi, poolBookingsApi, stadiumsApi } from '@/lib/api';
+import { poolBookingRequestsApi, poolBookingsApi, stadiumsApi, accessRequestsApi } from '@/lib/api';
+import type { AuthUser } from '@/stores/authStore';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight, ShieldAlert, Car } from 'lucide-react';
 import { ReportIncidentModal } from '@/components/incidents/ReportIncidentModal';
 import {
     Dialog,
@@ -356,7 +357,139 @@ function AvailableCarsPanel({ stadiumId }: { stadiumId?: string }) {
     );
 }
 
-function HistoryPanel({ stadiumId, departmentId, canExport = true }: { stadiumId?: string; departmentId?: string; canExport?: boolean }) {
+/** FA-only: instant pool booking with the requester's own identity locked to their
+ * account — venue/name/email/department can't be changed, just pick a cart. Goes
+ * through the same public instant-booking endpoint the standalone /book-pool page
+ * uses (optionalAuth records createdById when a session is present). */
+function FAInstantBookingModal({ open, onOpenChange, user, onBooked }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    user: AuthUser;
+    onBooked: () => void;
+}) {
+    const [departmentName, setDepartmentName] = useState('');
+    const [carts, setCarts] = useState<{ id: string; carNumber: string; carType: string }[]>([]);
+    const [loadingCarts, setLoadingCarts] = useState(false);
+    const [fleetId, setFleetId] = useState('');
+    const [purpose, setPurpose] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!open || !user.stadiumId) return;
+        setFleetId('');
+        setPurpose('');
+        accessRequestsApi.getPublicDepartments(user.stadiumId)
+            .then(res => setDepartmentName((res.data?.data || []).find((d: { id: string; name: string }) => d.id === user.departmentId)?.name || ''))
+            .catch(() => {});
+        setLoadingCarts(true);
+        poolBookingRequestsApi.getInstantAvailableCarts(user.stadiumId)
+            .then(res => setCarts(res.data?.data || []))
+            .catch(() => setCarts([]))
+            .finally(() => setLoadingCarts(false));
+    }, [open, user.stadiumId, user.departmentId]);
+
+    const handleSubmit = async () => {
+        if (!fleetId || !user.stadiumId || !user.departmentId) return;
+        setSubmitting(true);
+        try {
+            await poolBookingRequestsApi.createInstantPublic({
+                stadiumId: user.stadiumId,
+                fleetId,
+                requesterName: user.name,
+                requesterEmail: user.email,
+                requesterPhone: user.phone || '',
+                departmentId: user.departmentId,
+                purpose: purpose || undefined,
+            });
+            toast.success('Booking request submitted — waiting on your venue Admin to approve it.');
+            onOpenChange(false);
+            onBooked();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to submit booking');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Book a Pool Car</DialogTitle>
+                    <DialogDescription>Pick an available car — your request goes to your venue's Admin to approve or reject.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-sm bg-muted/30 rounded-lg p-3">
+                        <div><Label className="text-xs">Venue</Label><p className="font-medium">{user.stadium?.name ?? '—'}</p></div>
+                        <div><Label className="text-xs">Department</Label><p className="font-medium">{departmentName || '—'}</p></div>
+                        <div><Label className="text-xs">Name</Label><p className="font-medium">{user.name}</p></div>
+                        <div><Label className="text-xs">Email</Label><p className="font-medium truncate">{user.email}</p></div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Available cars right now</Label>
+                        {loadingCarts ? (
+                            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                        ) : carts.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-2">No pool cars are free at your venue right now.</p>
+                        ) : (
+                            <Select value={fleetId} onValueChange={setFleetId}>
+                                <SelectTrigger><SelectValue placeholder="Select a car" /></SelectTrigger>
+                                <SelectContent>
+                                    {carts.map(c => <SelectItem key={c.id} value={c.id}>{c.carNumber} — {c.carType}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Purpose (optional)</Label>
+                        <Textarea value={purpose} onChange={e => setPurpose(e.target.value)} rows={2} />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button onClick={handleSubmit} disabled={!fleetId || submitting}>
+                        {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Submit Booking
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+/** FA's whole Bookings page — a read-only history of their own department's
+ * bookings at their venue, plus the ability to make a new instant pool booking.
+ * No review queue, no approve/reject, no Operating Hours — that's the Admin/
+ * SuperAdmin/Observer console rendered by BookingsPage itself. */
+function FABookingsView({ user }: { user: AuthUser }) {
+    const [bookOpen, setBookOpen] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold">Bookings</h1>
+                    <p className="text-muted-foreground mt-1">Your department's booking history at {user.stadium?.name ?? 'your venue'}</p>
+                </div>
+                <Button size="sm" onClick={() => setBookOpen(true)}>
+                    <Car className="w-4 h-4 mr-2" /> Booking Pool
+                </Button>
+            </div>
+            <FAInstantBookingModal
+                open={bookOpen}
+                onOpenChange={setBookOpen}
+                user={user}
+                onBooked={() => setRefreshKey(k => k + 1)}
+            />
+            <Card><CardContent className="pt-6">
+                <HistoryPanel stadiumId={user.stadiumId} departmentId={user.departmentId} canExport={false} refreshKey={refreshKey} />
+            </CardContent></Card>
+        </div>
+    );
+}
+
+function HistoryPanel({ stadiumId, departmentId, canExport = true, refreshKey }: { stadiumId?: string; departmentId?: string; canExport?: boolean; refreshKey?: number }) {
     const [rows, setRows] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<string | null>(null);
@@ -377,7 +510,7 @@ function HistoryPanel({ stadiumId, departmentId, canExport = true }: { stadiumId
             setLoading(false);
         }
     }, [stadiumId, departmentId, filters]);
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { load(); }, [load, refreshKey]);
 
     const download = async (format: 'pdf' | 'xlsx') => {
         try {
@@ -723,23 +856,7 @@ export function BookingsPage() {
     // not the Admin/SuperAdmin/Observer review console (queue, live/upcoming, available
     // cars, operating hours). They can't approve or reject either way.
     if (user?.role === 'FA') {
-        return (
-            <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold">Bookings</h1>
-                        <p className="text-muted-foreground mt-1">Your department's booking history at {user?.stadium?.name ?? 'your venue'}</p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setReportIncidentOpen(true)}>
-                        <ShieldAlert className="w-4 h-4 mr-2" /> Report incident
-                    </Button>
-                </div>
-                <ReportIncidentModal open={reportIncidentOpen} onOpenChange={setReportIncidentOpen} />
-                <Card><CardContent className="pt-6">
-                    <HistoryPanel stadiumId={user?.stadiumId ?? undefined} departmentId={user?.departmentId ?? undefined} canExport={false} />
-                </CardContent></Card>
-            </div>
-        );
+        return <FABookingsView user={user} />;
     }
 
     return (
