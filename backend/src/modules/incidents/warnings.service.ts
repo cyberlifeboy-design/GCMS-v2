@@ -4,6 +4,7 @@ import { activeWarningCount, shouldBlock } from './warning-rules';
 import { makeReference, warningLetterPdf } from '../../services/pdf.service';
 import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { incidentsService } from './incidents.service';
 
 const WARNING_INCLUDE = {
@@ -63,14 +64,17 @@ export class WarningsService {
       });
     }
 
-    await notificationService.create({
-      type: 'warning',
-      title: `Warning issued — Level ${data.level}`,
-      message: data.reason,
-      entityType: 'Warning',
-      entityId: warning.id,
-      userId: user.id,
-    });
+    const warningPush = await notificationTemplatesService.renderPush('warning_notice', { level: String(data.level), reason: data.reason });
+    if (warningPush) {
+      await notificationService.create({
+        type: 'warning',
+        title: warningPush.title,
+        message: warningPush.message,
+        entityType: 'Warning',
+        entityId: warning.id,
+        userId: user.id,
+      });
+    }
 
     try {
       let attachment: { filename: string; content: Buffer; contentType: string };
@@ -95,12 +99,15 @@ export class WarningsService {
         });
         attachment = { filename: `${reference}.pdf`, content: buf, contentType: 'application/pdf' };
       }
-      await emailService.send({
-        to: user.email,
-        subject: `Warning notice ${reference} — Level ${data.level}`,
-        text: `A level ${data.level} warning (${reference}) has been issued to you.\n\nReason: ${data.reason}\n${blocked ? '\nYour account has been blocked. Contact the administrator.\n' : ''}\n— GCMS`,
-        attachments: [attachment],
+      const rendered = await notificationTemplatesService.renderEmail('warning_notice', {
+        reference,
+        level: String(data.level),
+        reason: data.reason,
+        blockedLine: blocked ? '\nYour account has been blocked. Contact the administrator.\n' : '',
       });
+      if (rendered) {
+        await emailService.send({ to: user.email, subject: rendered.subject, text: rendered.body, attachments: [attachment] });
+      }
     } catch (err) {
       console.error('Warning email failed (non-fatal):', err);
     }

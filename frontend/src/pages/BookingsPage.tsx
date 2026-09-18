@@ -76,7 +76,7 @@ function BookerDetail({ b }: { b: Booking }) {
             <div>{b.requesterPhone} · {b.requesterEmail}</div>
             <div>
                 Type: <b>{b.bookingType}</b>
-                {b.bookingType === 'Recurring' && ' — daily window repeats across the date range'}
+                {b.bookingType === 'Recurring' && ' — one date within a multi-date recurring booking (same cart)'}
                 {b.bookingType === 'Instant' && ' — no schedule chosen, key must be collected within 10 min of approval'}
             </div>
             {b.bookingType !== 'Instant' && <div>Window: {b.startDate} {b.startTime} → {b.endDate} {b.endTime}</div>}

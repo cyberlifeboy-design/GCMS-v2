@@ -104,13 +104,18 @@ const updatePreferencesSchema = z.object({
 export class UsersController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
-            const { role, isActive, page, limit } = req.query as any;
+            const { role, isActive, page, limit, stadiumId } = req.query as any;
 
             let filterStadiumId: string | undefined;
 
-            // Admin only sees users at their own venue
+            // Admin only sees users at their own venue — a client-supplied stadiumId is
+            // never honored for Admin, so they can't widen the query past their own scope.
+            // SuperAdmin has no such ceiling, so their own stadiumId filter (e.g. narrowing
+            // an incident/ticket "Subject" picker to one venue) is honored as given.
             if (req.user?.role === 'Admin') {
                 filterStadiumId = req.user.stadiumId;
+            } else if (typeof stadiumId === 'string' && stadiumId) {
+                filterStadiumId = stadiumId;
             }
 
             const users = await usersService.getAll({

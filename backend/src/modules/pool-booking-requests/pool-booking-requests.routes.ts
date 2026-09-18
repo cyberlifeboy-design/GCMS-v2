@@ -18,11 +18,17 @@ router.post('/public/pool-booking-requests', optionalAuth, (req: Request, res: R
 router.post('/public/pool-booking-requests/instant', optionalAuth, (req: Request, res: Response) =>
     PoolBookingRequestsController.createInstantPublic(req as any, res),
 );
+router.post('/public/pool-booking-requests/recurring', optionalAuth, (req: Request, res: Response) =>
+    PoolBookingRequestsController.createRecurringPublic(req as any, res),
+);
 router.get('/public/pool-booking-requests/venues/:stadiumId/fas', (req: Request, res: Response) =>
     PoolBookingRequestsController.getFAsPublic(req, res),
 );
 router.get('/public/pool-booking-requests/venues/:stadiumId/available-carts', (req: Request, res: Response) =>
     PoolBookingRequestsController.getAvailableCartsPublic(req, res),
+);
+router.post('/public/pool-booking-requests/venues/:stadiumId/available-carts-multi', (req: Request, res: Response) =>
+    PoolBookingRequestsController.getAvailableCartsMultiPublic(req, res),
 );
 router.get('/public/pool-booking-requests/venues/:stadiumId/instant-available-carts', (req: Request, res: Response) =>
     PoolBookingRequestsController.getInstantAvailableCartsPublic(req, res),

@@ -14,8 +14,8 @@ const createSchema = z.object({
     requesterName: z.string().min(1),
     requesterEmail: z.string().email(),
     requesterPhone: z.string().min(1),
-    faUserId: z.string().min(1),
-    bookingType: z.enum(['Single', 'Recurring']),
+    departmentId: z.string().min(1),
+    bookingType: z.literal('Single'),
     startDate: z.string().min(1),
     endDate: z.string().min(1),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'startTime must be HH:mm'),
@@ -29,8 +29,25 @@ const createInstantSchema = z.object({
     requesterName: z.string().min(1),
     requesterEmail: z.string().email(),
     requesterPhone: z.string().min(1),
-    faUserId: z.string().min(1),
+    departmentId: z.string().min(1),
     purpose: z.string().optional(),
+});
+
+const bookingSlotSchema = z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/, 'startTime must be HH:mm'),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/, 'endTime must be HH:mm'),
+});
+
+const createRecurringSchema = z.object({
+    stadiumId: z.string().min(1),
+    fleetId: z.string().min(1),
+    requesterName: z.string().min(1),
+    requesterEmail: z.string().email(),
+    requesterPhone: z.string().min(1),
+    departmentId: z.string().min(1),
+    purpose: z.string().optional(),
+    slots: z.array(bookingSlotSchema).min(2, 'Add at least two dates for a recurring booking'),
 });
 
 const approveSchema = z.object({
@@ -78,14 +95,25 @@ export class PoolBookingRequestsController {
         return null;
     }
 
+    /** Shared by every public pool-booking creation endpoint (Single, Instant, Recurring). */
+    private static async assertBookingsOpen(res: Response): Promise<boolean> {
+        const settings = await settingsService.get();
+        if (settings.enableBookings === false) {
+            res.status(403).json({ error: 'Bookings are currently disabled.' });
+            return false;
+        }
+        const windowState = await settingsService.getBookingWindowState();
+        if (!windowState.isOpen) {
+            res.status(403).json({ error: windowState.message || 'The booking window is currently closed.' });
+            return false;
+        }
+        return true;
+    }
+
     /** POST /api/v1/public/pool-booking-requests */
     static async createPublic(req: AuthRequest, res: Response) {
         try {
-            const windowState = await settingsService.getRequestWindowState();
-            if (!windowState.isOpen) {
-                res.status(403).json({ error: windowState.message || 'The request window is currently closed.' });
-                return;
-            }
+            if (!(await PoolBookingRequestsController.assertBookingsOpen(res))) return;
 
             const data = createSchema.parse(req.body);
             if (data.endDate < data.startDate) {
@@ -108,9 +136,11 @@ export class PoolBookingRequestsController {
             const booking = await poolBookingRequestsService.create({ ...data, createdById: req.user?.userId });
             res.status(201).json({ message: 'Booking request submitted', data: booking });
         } catch (error) {
-            const err = error as Error & { code?: string };
+            const err = error as Error & { code?: string; status?: number; conflict?: unknown };
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (err.status === 409) {
+                res.status(409).json({ error: err.message, conflict: err.conflict });
             } else if (err.code === 'P2003') {
                 console.error('Create pool booking request error:', error);
                 res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
@@ -135,19 +165,17 @@ export class PoolBookingRequestsController {
      */
     static async createInstantPublic(req: AuthRequest, res: Response) {
         try {
-            const windowState = await settingsService.getRequestWindowState();
-            if (!windowState.isOpen) {
-                res.status(403).json({ error: windowState.message || 'The request window is currently closed.' });
-                return;
-            }
+            if (!(await PoolBookingRequestsController.assertBookingsOpen(res))) return;
 
             const data = createInstantSchema.parse(req.body);
             const booking = await poolBookingRequestsService.createInstant({ ...data, createdById: req.user?.userId });
             res.status(201).json({ message: 'Instant booking request submitted', data: booking });
         } catch (error) {
-            const err = error as Error & { code?: string };
+            const err = error as Error & { code?: string; status?: number };
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (err.status === 409) {
+                res.status(409).json({ error: err.message });
             } else if (err.code === 'P2003') {
                 console.error('Create instant booking request error:', error);
                 res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
@@ -158,6 +186,66 @@ export class PoolBookingRequestsController {
                 console.error('Create instant booking request error:', error);
                 res.status(500).json({ error: 'Failed to submit instant booking request' });
             }
+        }
+    }
+
+    /**
+     * POST /api/v1/public/pool-booking-requests/recurring — one cart, several
+     * independent date/time slots. See PoolBookingRequestsService.createRecurring.
+     */
+    static async createRecurringPublic(req: AuthRequest, res: Response) {
+        try {
+            if (!(await PoolBookingRequestsController.assertBookingsOpen(res))) return;
+
+            const data = createRecurringSchema.parse(req.body);
+            for (const s of data.slots) {
+                const hoursError = await PoolBookingRequestsController.operatingHoursError(data.stadiumId, s.startTime, s.endTime);
+                if (hoursError) {
+                    res.status(400).json({ error: `${s.date}: ${hoursError}` });
+                    return;
+                }
+            }
+            const result = await poolBookingRequestsService.createRecurring({ ...data, createdById: req.user?.userId });
+            res.status(201).json({ message: 'Recurring booking request submitted', data: result });
+        } catch (error) {
+            const err = error as Error & { code?: string; status?: number; conflict?: unknown };
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (err.status === 409) {
+                res.status(409).json({ error: err.message, conflict: err.conflict });
+            } else if (err.code === 'P2003') {
+                console.error('Create recurring booking request error:', error);
+                res.status(400).json({ error: 'One or more selected values (cart, FA, or venue) do not exist. Please review your selections and try again.' });
+            } else if (!err.code && err.message) {
+                console.error('Create recurring booking request error:', error);
+                res.status(400).json({ error: err.message });
+            } else {
+                console.error('Create recurring booking request error:', error);
+                res.status(500).json({ error: 'Failed to submit recurring booking request' });
+            }
+        }
+    }
+
+    /**
+     * POST /api/v1/public/pool-booking-requests/venues/:stadiumId/available-carts-multi
+     * Body: { slots: [{ date, startTime, endTime }] } — carts free for EVERY slot (one shared cart).
+     */
+    static async getAvailableCartsMultiPublic(req: Request, res: Response) {
+        try {
+            const slots = z
+                .array(bookingSlotSchema)
+                .min(1)
+                .parse(req.body?.slots)
+                .map((s) => ({ startDate: s.date, endDate: s.date, startTime: s.startTime, endTime: s.endTime }));
+            const carts = await poolBookingRequestsService.getAvailableCartsForSlots(req.params.stadiumId as string, slots);
+            res.json({ data: carts });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+                return;
+            }
+            console.error('Get available carts (multi) error:', error);
+            res.status(500).json({ error: 'Failed to fetch available carts' });
         }
     }
 

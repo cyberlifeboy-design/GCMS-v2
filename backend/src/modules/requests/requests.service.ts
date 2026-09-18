@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import crypto from 'crypto';
 import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 
 export interface CreateCarRequestData {
     requesterName: string;
@@ -146,15 +147,13 @@ export class RequestsService {
         const request = await prisma.carRequest.findUnique({ where: { id } });
         if (!request) throw new Error('Request not found');
 
-        await emailService.send({
-            to: request.requesterEmail,
-            subject: `More information needed on your car request`,
-            text:
-                `Hello ${request.requesterName},\n\n` +
-                `The Logistics team needs more information about your car request:\n\n` +
-                `${message}\n\n` +
-                `Please reply to this email with the details.\n\nThank you,\nGCMS`,
+        const rendered = await notificationTemplatesService.renderEmail('car_request_more_info', {
+            requesterName: request.requesterName,
+            message,
         });
+        if (rendered) {
+            await emailService.send({ to: request.requesterEmail, subject: rendered.subject, text: rendered.body });
+        }
 
         return request;
     }

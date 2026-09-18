@@ -89,3 +89,82 @@
   pointer-events: none;
   height: 0;
 }
+
+/* Venue map (Dashboard) — Leaflet chrome restyled to match the app's brand gradient
+   instead of the library's default blue-and-white look. */
+.venue-map .leaflet-container {
+  background: #eef1f8;
+  font-family: inherit;
+}
+.venue-map .leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 2px 10px rgba(30, 27, 75, 0.14) !important;
+}
+.venue-map .leaflet-control-zoom a {
+  background: #fff !important;
+  color: #3b2f7a !important;
+  border-color: rgba(59, 47, 122, 0.1) !important;
+}
+.venue-map .leaflet-control-zoom a:hover {
+  background: #f4f2fb !important;
+}
+.venue-map .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(2px);
+  font-size: 10px !important;
+}
+
+.venue-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: #fff;
+  font-weight: 800;
+  border: 2.5px solid #fff;
+  box-shadow: 0 3px 10px rgba(20, 20, 60, 0.35);
+  transition: transform 0.15s ease;
+  cursor: pointer;
+}
+.venue-bubble:hover {
+  transform: scale(1.08);
+}
+.venue-bubble-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid #14a3ac;
+  opacity: 0.55;
+  animation: venue-pulse 2.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .venue-bubble-ring { animation: none; display: none; }
+}
+@keyframes venue-pulse {
+  0%   { transform: scale(0.85); opacity: 0.55; }
+  75%  { transform: scale(1.7); opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+.venue-map .leaflet-popup-content-wrapper {
+  padding: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(30, 27, 75, 0.24);
+}
+.venue-map .leaflet-popup-content {
+  margin: 0;
+  width: 240px !important;
+}
+.venue-map .leaflet-popup-tip {
+  box-shadow: 0 4px 10px rgba(30, 27, 75, 0.15);
+}
+.venue-map .leaflet-popup-close-button {
+  color: rgba(255, 255, 255, 0.85) !important;
+  top: 10px !important;
+  right: 10px !important;
+  font-size: 18px !important;
+}
+.venue-map .leaflet-popup-close-button:hover {
+  color: #fff !important;
+}

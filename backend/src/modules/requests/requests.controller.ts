@@ -2,8 +2,9 @@ import { Response, Request } from 'express';
 import { requestsService } from './requests.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
-import { emailService } from '../../services/email.service';
+import { emailService, textToSimpleHtml } from '../../services/email.service';
 import { settingsService } from '../settings/settings.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import * as ExcelJS from 'exceljs';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
 import { renderPdf } from '../../services/pdf.service';
@@ -46,6 +47,11 @@ export class RequestsController {
      */
     static async createPublic(req: Request, res: Response) {
         try {
+            const settings = await settingsService.get();
+            if (settings.enableCarRequests === false) {
+                res.status(403).json({ error: 'Submitting requests is currently disabled.' });
+                return;
+            }
             const windowState = await settingsService.getRequestWindowState();
             if (!windowState.isOpen) {
                 res.status(403).json({ error: windowState.message || 'The request window is currently closed.' });
@@ -359,24 +365,23 @@ export class RequestsController {
 
             // Send approval email
             try {
-                await emailService.send({
-                    to: existing.requesterEmail,
-                    subject: 'Car Request Approved',
-                    text: `Your car request has been approved.\n\nRequest Details:\n- Stadium: ${existing.stadium.name}\n- Department: ${existing.department.name}\n- Carts Requested: ${existing.cargoCount} Cargo, ${existing.fourSeaterCount} 4-Seater, ${existing.sixSeaterCount} 6-Seater, ${existing.accessibilityCount} Accessibility\n${validatedData.reviewNotes ? `\nNotes: ${validatedData.reviewNotes}` : ''}`,
-                    html: `
-                        <h2>Your car request has been approved</h2>
-                        <p><strong>Stadium:</strong> ${existing.stadium.name}</p>
-                        <p><strong>Department:</strong> ${existing.department.name}</p>
-                        <p><strong>Carts Requested:</strong></p>
-                        <ul>
-                            <li>Cargo: ${existing.cargoCount}</li>
-                            <li>4-Seater: ${existing.fourSeaterCount}</li>
-                            <li>6-Seater: ${existing.sixSeaterCount}</li>
-                            <li>Accessibility: ${existing.accessibilityCount}</li>
-                        </ul>
-                        ${validatedData.reviewNotes ? `<p><strong>Notes:</strong> ${validatedData.reviewNotes}</p>` : ''}
-                    `,
+                const rendered = await notificationTemplatesService.renderEmail('car_request_approved', {
+                    stadiumName: existing.stadium.name,
+                    departmentName: existing.department.name,
+                    cargoCount: String(existing.cargoCount),
+                    fourSeaterCount: String(existing.fourSeaterCount),
+                    sixSeaterCount: String(existing.sixSeaterCount),
+                    accessibilityCount: String(existing.accessibilityCount),
+                    reviewNotesLine: validatedData.reviewNotes ? `\nNotes: ${validatedData.reviewNotes}` : '',
                 });
+                if (rendered) {
+                    await emailService.send({
+                        to: existing.requesterEmail,
+                        subject: rendered.subject,
+                        text: rendered.body,
+                        html: textToSimpleHtml(rendered.body),
+                    });
+                }
             } catch (emailError) {
                 console.error('Failed to send approval email:', emailError);
                 // Don't fail the request if email fails
@@ -431,17 +436,19 @@ export class RequestsController {
 
             // Send rejection email
             try {
-                await emailService.send({
-                    to: existing.requesterEmail,
-                    subject: 'Car Request Rejected',
-                    text: `Your car request has been rejected.\n\nRequest Details:\n- Stadium: ${existing.stadium.name}\n- Department: ${existing.department.name}\n${validatedData.reviewNotes ? `\nReason: ${validatedData.reviewNotes}` : ''}`,
-                    html: `
-                        <h2>Your car request has been rejected</h2>
-                        <p><strong>Stadium:</strong> ${existing.stadium.name}</p>
-                        <p><strong>Department:</strong> ${existing.department.name}</p>
-                        ${validatedData.reviewNotes ? `<p><strong>Reason:</strong> ${validatedData.reviewNotes}</p>` : ''}
-                    `,
+                const rendered = await notificationTemplatesService.renderEmail('car_request_rejected', {
+                    stadiumName: existing.stadium.name,
+                    departmentName: existing.department.name,
+                    reviewNotesLine: validatedData.reviewNotes ? `\nReason: ${validatedData.reviewNotes}` : '',
                 });
+                if (rendered) {
+                    await emailService.send({
+                        to: existing.requesterEmail,
+                        subject: rendered.subject,
+                        text: rendered.body,
+                        html: textToSimpleHtml(rendered.body),
+                    });
+                }
             } catch (emailError) {
                 console.error('Failed to send rejection email:', emailError);
                 // Don't fail the request if email fails

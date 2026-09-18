@@ -21,6 +21,7 @@ import poolBookingsRoutes from './modules/pool-bookings/pool-bookings.routes';
 import poolBookingRequestsRoutes from './modules/pool-booking-requests/pool-booking-requests.routes';
 import incidentsRoutes from './modules/incidents/incidents.routes';
 import warningsRoutes from './modules/incidents/warnings.routes';
+import notificationTemplatesRoutes from './modules/notification-templates/notification-templates.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import { apiLimiter } from './middleware/rateLimit.middleware';
@@ -165,6 +166,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/stadiums', stadiumRoutes);
 app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/notification-templates', notificationTemplatesRoutes);
 app.use('/api/v1/departments', departmentRoutes);
 // poolBookingRequestsRoutes is mounted before requestRoutes (both bare '/api/v1')
 // so its public routes aren't swallowed by requestRoutes' internal

@@ -5,6 +5,7 @@ import { authConfig } from '../../config/auth';
 import crypto from 'crypto';
 import { emailService } from '../../services/email.service';
 import { verifyMicrosoftToken } from '../../services/microsoft-auth.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
 
@@ -182,11 +183,13 @@ export class AuthService {
 
             if (!wasAlreadyLinked) {
                 try {
-                    await emailService.send({
-                        to: user.email,
-                        subject: 'Your GCMS account is now linked to your SC/LOC Microsoft account',
-                        text: `Hello ${user.name},\n\nYour GCMS account (${user.email}) has just been linked to sign in with your SC/LOC Microsoft account. If this wasn't you, please contact your administrator immediately.\n\nThank you,\nGCMS`,
+                    const rendered = await notificationTemplatesService.renderEmail('account_linked_microsoft', {
+                        name: user.name,
+                        email: user.email,
                     });
+                    if (rendered) {
+                        await emailService.send({ to: user.email, subject: rendered.subject, text: rendered.body });
+                    }
                 } catch (e) {
                     console.error('SSO account-link notification email failed:', e);
                 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { incidentsApi, usersApi, warningsApi } from '@/lib/api';
+import { incidentsApi, usersApi, warningsApi, stadiumsApi } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,7 @@ function recommendLevel(warnings: Array<{ level: number; revoked: boolean }>): n
 }
 
 export function IncidentsPage() {
+    const { user } = useAuthStore();
     const [incidents, setIncidents] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState('');
@@ -48,26 +50,56 @@ export function IncidentsPage() {
     const [escalating, setEscalating] = useState(false);
 
     // standalone "Issue a Ticket" dialog (top-level — not tied to an existing incident)
+    // Tickets only ever target an FA (the operator on the ground) — never a
+    // SuperAdmin/Admin/Observer/Contracts/MaintenanceTeam account — and are scoped to
+    // one venue, same rule as the incident "Subject" picker.
     const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
-    const [ticketUsers, setTicketUsers] = useState<Array<{ id: string; name: string; email: string; role: string }>>([]);
+    const [ticketStadiums, setTicketStadiums] = useState<Array<{ id: string; name: string }>>([]);
+    const [ticketVenueId, setTicketVenueId] = useState('');
+    const [ticketUsers, setTicketUsers] = useState<Array<{ id: string; name: string; email: string; accreditationNumber?: string | null }>>([]);
     const [ticketUserId, setTicketUserId] = useState('');
     const [ticketLevel, setTicketLevel] = useState<1 | 2 | 3>(1);
     const [ticketViolation, setTicketViolation] = useState<TicketViolation | null>(null);
     const [ticketReason, setTicketReason] = useState('');
     const [ticketIssuing, setTicketIssuing] = useState(false);
 
-    const openTicketDialog = async () => {
-        setTicketDialogOpen(true);
-        setTicketUserId(''); setTicketLevel(1); setTicketViolation(null); setTicketReason('');
+    const needsTicketVenuePicker = !user?.stadiumId;
+
+    const loadTicketUsers = async (venue: string) => {
         try {
-            const res = await usersApi.getAll({ isActive: true });
+            const res = await usersApi.getAll({ role: 'FA', stadiumId: venue, isActive: true });
             setTicketUsers(res.data.data || []);
         } catch {
             toast.error('Failed to load users');
         }
     };
 
+    const openTicketDialog = async () => {
+        setTicketDialogOpen(true);
+        setTicketUserId(''); setTicketLevel(1); setTicketViolation(null); setTicketReason('');
+        setTicketUsers([]);
+        const initialVenue = user?.stadiumId || '';
+        setTicketVenueId(initialVenue);
+        if (initialVenue) {
+            loadTicketUsers(initialVenue);
+        } else {
+            try {
+                const res = await stadiumsApi.getAll();
+                setTicketStadiums(res.data.data ?? res.data ?? []);
+            } catch {
+                setTicketStadiums([]);
+            }
+        }
+    };
+
+    const selectTicketVenue = (venue: string) => {
+        setTicketVenueId(venue);
+        setTicketUserId('');
+        if (venue) loadTicketUsers(venue); else setTicketUsers([]);
+    };
+
     const submitStandaloneTicket = async () => {
+        if (needsTicketVenuePicker && !ticketVenueId) { toast.error('Select a venue'); return; }
         if (!ticketUserId) { toast.error('Select a user'); return; }
         const reason = [ticketViolation?.text, ticketReason.trim()].filter(Boolean).join(' — ');
         if (!reason) { toast.error('Pick a violation or enter a reason'); return; }
@@ -394,13 +426,28 @@ export function IncidentsPage() {
                         <DialogTitle className="flex items-center gap-2"><Ticket className="w-5 h-5" /> Issue a Ticket</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
+                        {needsTicketVenuePicker && (
+                            <div className="space-y-1">
+                                <Label>Venue</Label>
+                                <Select value={ticketVenueId} onValueChange={selectTicketVenue}>
+                                    <SelectTrigger><SelectValue placeholder="Select a venue" /></SelectTrigger>
+                                    <SelectContent>
+                                        {ticketStadiums.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                         <div className="space-y-1">
                             <Label>User</Label>
-                            <Select value={ticketUserId} onValueChange={setTicketUserId}>
-                                <SelectTrigger><SelectValue placeholder="Select a user" /></SelectTrigger>
+                            <Select value={ticketUserId} onValueChange={setTicketUserId} disabled={!ticketVenueId}>
+                                <SelectTrigger><SelectValue placeholder={ticketVenueId ? 'Select an FA' : 'Select a venue first'} /></SelectTrigger>
                                 <SelectContent>
                                     {ticketUsers.map(u => (
-                                        <SelectItem key={u.id} value={u.id}>{u.name} ({u.role}) — {u.email}</SelectItem>
+                                        <SelectItem key={u.id} value={u.id}>
+                                            {u.name}{u.accreditationNumber ? ` — FA ${u.accreditationNumber}` : ''} — {u.email}
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import crypto from 'crypto';
-import { emailService } from '../../services/email.service';
+import { emailService, textToSimpleHtml } from '../../services/email.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { checkInvitationValidity } from './invitation-validity';
 
 export interface CreateInvitationData {
@@ -29,12 +30,10 @@ export class InvitationsService {
 
         const link = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/access-request?invite=${token}`;
         try {
-            await emailService.send({
-                to: data.email,
-                subject: "You're invited to GCMS",
-                text: `Hello,\n\nYou've been invited to request access to GCMS. Click the link below to get started:\n\n${link}\n\nThis link expires in 7 days.\n\nThank you,\nGCMS`,
-                html: `<h2>You've been invited to GCMS</h2><p><a href="${link}">${link}</a></p><p>This link expires in 7 days.</p>`,
-            });
+            const rendered = await notificationTemplatesService.renderEmail('invitation_sent', { inviteLink: link });
+            if (rendered) {
+                await emailService.send({ to: data.email, subject: rendered.subject, text: rendered.body, html: textToSimpleHtml(rendered.body) });
+            }
         } catch (e) {
             console.error('Invitation email failed:', e);
         }

@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Printer, CheckCircle2, PenLine, X } from 'lucide-react';
-import { incidentsApi, usersApi, publicSettingsApi } from '@/lib/api';
+import { incidentsApi, usersApi, publicSettingsApi, stadiumsApi } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
+import { CameraCaptureButton } from '@/components/shared/CameraCaptureButton';
 import { toast } from 'sonner';
 import {
     INCIDENT_TYPES, DESIGNATIONS, TREATMENTS_RECEIVED, TREATMENT_PROVIDERS,
@@ -128,19 +130,27 @@ const EMPTY_INJURY = { prefix: '', firstName: '', lastName: '', dob: '', contact
 const EMPTY_CHECKLIST: Record<string, string> = {};
 
 export function IncidentReportFormModal({ open, onClose, incidentId, subjectUserId, fleetId, stadiumId, onSaved }: Props) {
+    const { user } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [logoUrl, setLogoUrl] = useState<string | undefined>();
     const [id, setId] = useState<string | null>(incidentId ?? null);
+    const [stadiums, setStadiums] = useState<Array<{ id: string; name: string }>>([]);
+    const [venueId, setVenueId] = useState('');
     const [users, setUsers] = useState<Array<{ id: string; name: string; accreditationNumber?: string | null }>>([]);
     const [status, setStatus] = useState('Open');
+
+    // Subject is always an FA of the chosen venue — never a SuperAdmin/Admin/Contracts/MaintenanceTeam
+    // account. When the caller doesn't already pin a venue (stadiumId prop) and the current user
+    // isn't scoped to one, an explicit venue picker gates the subject list.
+    const needsVenuePicker = !stadiumId && !user?.stadiumId;
 
     // Basic incident fields
     const [subject, setSubject] = useState(subjectUserId ?? '');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
-    const [photos, setPhotos] = useState<FileList | null>(null);
+    const [photos, setPhotos] = useState<File[]>([]);
 
     // Template fields
     const [incidentTypes, setIncidentTypes] = useState<string[]>([]);
@@ -170,9 +180,10 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
     const reset = useCallback(() => {
         setId(incidentId ?? null);
         setSubject(subjectUserId ?? '');
+        setVenueId('');
         setTitle(''); setDescription('');
         setOccurredAt(new Date().toISOString().slice(0, 16));
-        setPhotos(null);
+        setPhotos([]);
         setIncidentTypes([]); setVenueLocationAddress('');
         setUserFullNameFunction(''); setUserContact('');
         setWitnessFullNameFunction(''); setWitnessContact('');
@@ -193,6 +204,7 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
             setTitle(d.title); setDescription(d.description);
             setOccurredAt(new Date(d.occurredAt).toISOString().slice(0, 16));
             setSubject(d.subjectUserId);
+            setVenueId(d.stadiumId ?? '');
             setStatus(d.status);
             setEscalContracts(!!d.escalatedToContracts);
             setEscalMaintenance(!!d.escalatedToMaintenance);
@@ -229,12 +241,30 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
         if (!open) return;
         reset();
         publicSettingsApi.getBranding().then(res => { if (res.data?.logoUrl) setLogoUrl(res.data.logoUrl); }).catch(() => {});
-        usersApi.getAll({ limit: 500 })
-            .then(res => setUsers((res.data.data ?? res.data ?? []).map((u: any) => ({ id: u.id, name: u.name, accreditationNumber: u.accreditationNumber }))))
-            .catch(() => setUsers([]));
-        if (incidentId) loadExisting(incidentId);
+        if (incidentId) {
+            loadExisting(incidentId);
+        } else {
+            const initialVenue = stadiumId || user?.stadiumId || '';
+            setVenueId(initialVenue);
+            if (!initialVenue) {
+                stadiumsApi.getAll()
+                    .then(res => setStadiums(res.data.data ?? res.data ?? []))
+                    .catch(() => setStadiums([]));
+            }
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, incidentId]);
+
+    // Subject list tracks the chosen venue — refetches on venue change, and once more after
+    // loadExisting resolves an existing incident's own stadiumId. A pre-migration incident with
+    // no stored stadiumId falls back to an unscoped FA lookup so its (locked) subject still resolves.
+    useEffect(() => {
+        if (!open) return;
+        if (!venueId && !incidentId) { setUsers([]); return; }
+        usersApi.getAll({ role: 'FA', ...(venueId ? { stadiumId: venueId } : {}), isActive: true, limit: 500 })
+            .then(res => setUsers((res.data.data ?? res.data ?? []).map((u: any) => ({ id: u.id, name: u.name, accreditationNumber: u.accreditationNumber }))))
+            .catch(() => setUsers([]));
+    }, [open, venueId, incidentId]);
 
     const buildFormData = () => ({
         incidentTypes, venueLocationAddress, userFullNameFunction, userContact,
@@ -245,8 +275,8 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
     });
 
     const handleSave = async (thenSign: boolean) => {
-        if (!subject || !title.trim() || !description.trim()) {
-            toast.error('Subject, title and description are required');
+        if ((!id && !venueId) || !subject || !title.trim() || !description.trim()) {
+            toast.error(id ? 'Subject, title and description are required' : 'Venue, subject, title and description are required');
             return;
         }
         setSaving(true);
@@ -259,8 +289,8 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
                 fd.append('description', description.trim());
                 fd.append('occurredAt', new Date(occurredAt).toISOString());
                 if (fleetId) fd.append('fleetId', fleetId);
-                if (stadiumId) fd.append('stadiumId', stadiumId);
-                if (photos) Array.from(photos).slice(0, 5).forEach(p => fd.append('photos', p));
+                fd.append('stadiumId', venueId);
+                photos.slice(0, 5).forEach(p => fd.append('photos', p));
                 const res = await incidentsApi.report(fd);
                 currentId = res.data.data.id;
                 setId(currentId);
@@ -358,10 +388,23 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
                         </Section>
 
                         <Section title="Description of the Incident">
+                            {needsVenuePicker && (
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold uppercase text-muted-foreground">Venue (for FA subject list)</label>
+                                    <Select value={venueId} onValueChange={setVenueId} disabled={!!subjectUserId || !!id}>
+                                        <SelectTrigger><SelectValue placeholder="Select a venue" /></SelectTrigger>
+                                        <SelectContent>
+                                            {stadiums.map(s => (
+                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold uppercase text-muted-foreground">Subject (person the incident is about)</label>
-                                <Select value={subject} onValueChange={setSubject} disabled={!!subjectUserId || !!id}>
-                                    <SelectTrigger><SelectValue placeholder="Select a user" /></SelectTrigger>
+                                <Select value={subject} onValueChange={setSubject} disabled={!!subjectUserId || !!id || !venueId}>
+                                    <SelectTrigger><SelectValue placeholder={venueId ? 'Select an FA' : 'Select a venue first'} /></SelectTrigger>
                                     <SelectContent>
                                         {users.map(u => (
                                             <SelectItem key={u.id} value={u.id}>{u.name}{u.accreditationNumber ? ` — FA ${u.accreditationNumber}` : ''}</SelectItem>
@@ -380,8 +423,18 @@ export function IncidentReportFormModal({ open, onClose, incidentId, subjectUser
                             {!id && (
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-muted-foreground">Photos (optional, up to 5)</label>
-                                    <input type="file" accept="image/*" multiple onChange={e => setPhotos(e.target.files)}
-                                        className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1.5" />
+                                    <div className="flex items-center gap-2">
+                                        <input type="file" accept="image/*" multiple
+                                            onChange={e => setPhotos(Array.from(e.target.files || []).slice(0, 5))}
+                                            className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1.5" />
+                                        <CameraCaptureButton
+                                            disabled={photos.length >= 5}
+                                            onCapture={file => setPhotos(prev => [...prev, file].slice(0, 5))}
+                                        />
+                                    </div>
+                                    {photos.length > 0 && (
+                                        <p className="text-xs text-muted-foreground">{photos.length} photo(s) selected</p>
+                                    )}
                                 </div>
                             )}
                         </Section>

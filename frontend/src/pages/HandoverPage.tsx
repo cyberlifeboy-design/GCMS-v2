@@ -19,6 +19,7 @@ import { publicSettingsApi } from '@/lib/api';
 import { Separator } from '@/components/ui/separator';
 import { Pagination } from '@/components/shared/Pagination';
 import { HandoverFormModal } from '@/components/handover/HandoverFormModal';
+import { CameraCaptureButton } from '@/components/shared/CameraCaptureButton';
 
 function useElapsedTime(startIso: string | null): string {
     const [elapsed, setElapsed] = useState('');
@@ -1005,13 +1006,19 @@ export function HandoverPage() {
                         </div>
                         <div>
                             <Label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Photos (optional)</Label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="text-sm w-full border rounded-lg px-3 py-2 cursor-pointer"
-                                onChange={e => setIssueForm(p => ({ ...p, photos: Array.from(e.target.files || []) }))}
-                            />
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    className="text-sm w-full border rounded-lg px-3 py-2 cursor-pointer"
+                                    onChange={e => setIssueForm(p => ({ ...p, photos: Array.from(e.target.files || []).slice(0, 5) }))}
+                                />
+                                <CameraCaptureButton
+                                    disabled={issueForm.photos.length >= 5}
+                                    onCapture={file => setIssueForm(p => ({ ...p, photos: [...p.photos, file].slice(0, 5) }))}
+                                />
+                            </div>
                             {issueForm.photos.length > 0 && (
                                 <p className="text-xs text-green-600 mt-1 font-medium">{issueForm.photos.length} photo(s) selected</p>
                             )}
@@ -1110,10 +1117,19 @@ export function HandoverPage() {
                                         placeholder="Describe the issue in detail..."
                                         required
                                     />
-                                    <Input type="file" multiple accept="image/*" onChange={e => {
-                                        const files = Array.from(e.target.files || []);
-                                        setCheckoutForm(f => ({ ...f, photos: files.slice(0,5) }));
-                                    }} className="rounded-xl h-12" />
+                                    <div className="flex items-center gap-2">
+                                        <Input type="file" multiple accept="image/*" onChange={e => {
+                                            const files = Array.from(e.target.files || []);
+                                            setCheckoutForm(f => ({ ...f, photos: files.slice(0, 5) }));
+                                        }} className="rounded-xl h-12" />
+                                        <CameraCaptureButton
+                                            disabled={checkoutForm.photos.length >= 5}
+                                            onCapture={file => setCheckoutForm(f => ({ ...f, photos: [...f.photos, file].slice(0, 5) }))}
+                                        />
+                                    </div>
+                                    {checkoutForm.photos.length > 0 && (
+                                        <p className="text-xs text-amber-700 font-medium">{checkoutForm.photos.length} photo(s) selected</p>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -1,5 +1,6 @@
 import { PrismaClient, Stadium } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { resolveMapsLinkCoords } from '../../services/geocode.service';
 
 export interface PaginationParams {
     page?: number;
@@ -113,6 +114,8 @@ export class StadiumsService {
         name: string;
         code: string;
         location: string;
+        latitude?: number | null;
+        longitude?: number | null;
     }) {
         // Check if code already exists
         const existing = await this.prisma.stadium.findUnique({
@@ -123,8 +126,16 @@ export class StadiumsService {
             throw new Error('Stadium with this code already exists');
         }
 
+        // The venue's location is entered as a pasted Google Maps share link — derive the
+        // marker coordinate from it unless the caller already pinned one explicitly.
+        let { latitude, longitude } = data;
+        if (latitude == null && longitude == null) {
+            const resolved = await resolveMapsLinkCoords(data.location);
+            if (resolved) ({ latitude, longitude } = resolved);
+        }
+
         return this.prisma.stadium.create({
-            data,
+            data: { ...data, latitude, longitude },
         });
     }
 
@@ -133,10 +144,17 @@ export class StadiumsService {
         code: string;
         location: string;
         isActive: boolean;
+        latitude: number | null;
+        longitude: number | null;
     }>) {
+        const patch = { ...data };
+        if (patch.location && patch.latitude === undefined && patch.longitude === undefined) {
+            const resolved = await resolveMapsLinkCoords(patch.location);
+            if (resolved) { patch.latitude = resolved.latitude; patch.longitude = resolved.longitude; }
+        }
         return this.prisma.stadium.update({
             where: { id },
-            data,
+            data: patch,
         });
     }
 
@@ -174,7 +192,8 @@ export class StadiumsService {
                 details.push({ name: venue.name, code: venue.code, status: 'skipped' });
                 continue;
             }
-            await this.prisma.stadium.create({ data: venue });
+            const resolved = await resolveMapsLinkCoords(venue.location);
+            await this.prisma.stadium.create({ data: { ...venue, ...resolved } });
             details.push({ name: venue.name, code: venue.code, status: 'created' });
             created++;
         }

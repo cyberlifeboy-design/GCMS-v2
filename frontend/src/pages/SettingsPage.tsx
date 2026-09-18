@@ -12,6 +12,7 @@ import {
     Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send
 } from 'lucide-react';
 import { RichEditor } from '@/components/ui/rich-editor';
+import { NotificationTemplatesPanel } from '@/components/settings/NotificationTemplatesPanel';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -53,6 +54,11 @@ interface Settings {
     requestWindowStart?: string | null;
     requestWindowEnd?: string | null;
     requestWindowClosedMessage?: string | null;
+    enableBookings?: boolean;
+    bookingWindowMode?: string;
+    bookingWindowStart?: string | null;
+    bookingWindowEnd?: string | null;
+    bookingWindowClosedMessage?: string | null;
     handoverTcEnTitle?: string;
     handoverTcEnBody?: string;
     handoverTcArTitle?: string;
@@ -175,6 +181,11 @@ export function SettingsPage() {
     const [rwEnd, setRwEnd] = useState('');
     const [rwClosedMessage, setRwClosedMessage] = useState('');
     const [announcingWindow, setAnnouncingWindow] = useState(false);
+    const [enableBookings, setEnableBookings] = useState(true);
+    const [bwMode, setBwMode] = useState<'open' | 'closed' | 'scheduled'>('open');
+    const [bwStart, setBwStart] = useState('');
+    const [bwEnd, setBwEnd] = useState('');
+    const [bwClosedMessage, setBwClosedMessage] = useState('');
     const [tcEnTitle, setTcEnTitle] = useState('');
     const [tcEnBody, setTcEnBody] = useState('');
     const [tcArTitle, setTcArTitle] = useState('');
@@ -248,6 +259,11 @@ export function SettingsPage() {
                 setRwStart(d.requestWindowStart ? d.requestWindowStart.slice(0, 16) : '');
                 setRwEnd(d.requestWindowEnd ? d.requestWindowEnd.slice(0, 16) : '');
                 setRwClosedMessage(d.requestWindowClosedMessage || '');
+                setEnableBookings(d.enableBookings ?? true);
+                setBwMode((d.bookingWindowMode as 'open' | 'closed' | 'scheduled') || 'open');
+                setBwStart(d.bookingWindowStart ? d.bookingWindowStart.slice(0, 16) : '');
+                setBwEnd(d.bookingWindowEnd ? d.bookingWindowEnd.slice(0, 16) : '');
+                setBwClosedMessage(d.bookingWindowClosedMessage || '');
                 setTcEnTitle(d.handoverTcEnTitle || '');
                 setTcEnBody(d.handoverTcEnBody || '');
                 setTcArTitle(d.handoverTcArTitle || '');
@@ -355,6 +371,11 @@ export function SettingsPage() {
             fd.append('requestWindowStart', rwMode === 'scheduled' && rwStart ? new Date(rwStart).toISOString() : '');
             fd.append('requestWindowEnd', rwMode === 'scheduled' && rwEnd ? new Date(rwEnd).toISOString() : '');
             fd.append('requestWindowClosedMessage', rwMode === 'open' ? '' : rwClosedMessage);
+            fd.append('enableBookings', String(enableBookings));
+            fd.append('bookingWindowMode', bwMode);
+            fd.append('bookingWindowStart', bwMode === 'scheduled' && bwStart ? new Date(bwStart).toISOString() : '');
+            fd.append('bookingWindowEnd', bwMode === 'scheduled' && bwEnd ? new Date(bwEnd).toISOString() : '');
+            fd.append('bookingWindowClosedMessage', bwMode === 'open' ? '' : bwClosedMessage);
             fd.append('handoverTcEnTitle', tcEnTitle);
             fd.append('handoverTcEnBody', tcEnBody);
             fd.append('handoverTcArTitle', tcArTitle);
@@ -430,41 +451,45 @@ export function SettingsPage() {
                 <p className="text-muted-foreground text-lg mt-1">Configure GCMS parameters and your personal preferences.</p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col lg:flex-row gap-10">
-                <TabsList className="lg:flex-col h-auto lg:w-72 bg-transparent gap-2 p-0">
-                    <TabsTrigger value="profile" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                        <User className="w-5 h-5 mr-3" /> My Profile
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col lg:flex-row lg:items-start gap-6">
+                <TabsList className="lg:sticky lg:top-6 lg:flex-col h-auto lg:w-60 shrink-0 bg-muted/40 rounded-2xl gap-0.5 p-2.5 border">
+                    <TabsTrigger value="profile" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                        <User className="w-4 h-4 mr-2.5" /> My Profile
                     </TabsTrigger>
-                    <TabsTrigger value="appearance" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                        <Palette className="w-5 h-5 mr-3" /> Appearance
+                    <TabsTrigger value="appearance" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                        <Palette className="w-4 h-4 mr-2.5" /> Appearance
                     </TabsTrigger>
                     {isSuperAdmin && (
-                        <div className="flex flex-col gap-2 w-full mt-4">
-                            <div className="px-5 py-2">
+                        <>
+                            <div className="h-px bg-border my-2 mx-1" />
+                            <div className="px-3.5 pb-1.5 pt-1">
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">System Administration</span>
                             </div>
-                            <TabsTrigger value="system" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <Globe className="w-5 h-5 mr-3" /> System Info
+                            <TabsTrigger value="system" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Globe className="w-4 h-4 mr-2.5" /> System Settings
                             </TabsTrigger>
-                            <TabsTrigger value="branding" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <Image className="w-5 h-5 mr-3" /> Branding
+                            <TabsTrigger value="branding" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Image className="w-4 h-4 mr-2.5" /> Branding
                             </TabsTrigger>
-                            <TabsTrigger value="workflow" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <Clock className="w-5 h-5 mr-3" /> Workflow
+                            <TabsTrigger value="workflow" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Clock className="w-4 h-4 mr-2.5" /> Workflow
                             </TabsTrigger>
-                            <TabsTrigger value="handover-tc" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <FileText className="w-5 h-5 mr-3" /> Handover T&amp;C
+                            <TabsTrigger value="handover-tc" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <FileText className="w-4 h-4 mr-2.5" /> Handover T&amp;C
                             </TabsTrigger>
-                            <TabsTrigger value="email" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <Mail className="w-5 h-5 mr-3" /> Email (SMTP)
+                            <TabsTrigger value="email" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Mail className="w-4 h-4 mr-2.5" /> Email
                             </TabsTrigger>
-                            <TabsTrigger value="access" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <ShieldCheck className="w-5 h-5 mr-3" /> Access Control
+                            <TabsTrigger value="templates" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Bell className="w-4 h-4 mr-2.5" /> Notification Templates
                             </TabsTrigger>
-                            <TabsTrigger value="tools" className="w-full justify-start rounded-xl px-5 py-3.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary border border-transparent data-[state=active]:border-primary/20 transition-all font-medium">
-                                <Wrench className="w-5 h-5 mr-3" /> Tools
+                            <TabsTrigger value="access" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <ShieldCheck className="w-4 h-4 mr-2.5" /> Access Control
                             </TabsTrigger>
-                        </div>
+                            <TabsTrigger value="tools" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Wrench className="w-4 h-4 mr-2.5" /> Tools
+                            </TabsTrigger>
+                        </>
                     )}
                 </TabsList>
 
@@ -618,10 +643,19 @@ export function SettingsPage() {
                                 <form onSubmit={handleSaveSystem} className="space-y-8">
                                     <Card className="border-none shadow-md">
                                         <CardHeader>
-                                            <CardTitle className="text-2xl">Request Window</CardTitle>
-                                            <CardDescription>Controls the public “Submit a Request” and “Bookings” channels. Save to apply.</CardDescription>
+                                            <CardTitle className="text-2xl">Submit a Request</CardTitle>
+                                            <CardDescription>Controls the public “Submit a Request” channel on the login page. Save to apply.</CardDescription>
                                         </CardHeader>
                                         <CardContent className="p-8 space-y-4">
+                                            <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                <div>
+                                                    <Label className="text-sm font-bold">Enable Submit a Request</Label>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                        Off: the button disappears completely from the login page and submissions are blocked.
+                                                    </p>
+                                                </div>
+                                                <Switch checked={enableCarRequests} onCheckedChange={setEnableCarRequests} />
+                                            </div>
                                             <div className="flex flex-wrap gap-6">
                                                 {(['open', 'closed', 'scheduled'] as const).map((m) => (
                                                     <label key={m} className="flex items-center gap-2 text-sm">
@@ -657,6 +691,44 @@ export function SettingsPage() {
                                         </CardContent>
                                     </Card>
                                     <Card className="border-none shadow-md">
+                                        <CardHeader>
+                                            <CardTitle className="text-2xl">Bookings</CardTitle>
+                                            <CardDescription>Controls the public “Bookings” channel (Schedule &amp; Instant) on the login page, independently of Submit a Request above. Save to apply.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="p-8 space-y-4">
+                                            <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                <div>
+                                                    <Label className="text-sm font-bold">Enable Bookings</Label>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                        Off: the button disappears completely from the login page and bookings are blocked.
+                                                    </p>
+                                                </div>
+                                                <Switch checked={enableBookings} onCheckedChange={setEnableBookings} />
+                                            </div>
+                                            <div className="flex flex-wrap gap-6">
+                                                {(['open', 'closed', 'scheduled'] as const).map((m) => (
+                                                    <label key={m} className="flex items-center gap-2 text-sm">
+                                                        <input type="radio" name="bwMode" value={m} checked={bwMode === m} onChange={() => setBwMode(m)} />
+                                                        <span className="capitalize">{m}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                            {bwMode === 'scheduled' && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    <div className="space-y-1"><Label>Start accepting</Label>
+                                                        <Input type="datetime-local" value={bwStart} onChange={(e) => setBwStart(e.target.value)} /></div>
+                                                    <div className="space-y-1"><Label>Submission deadline</Label>
+                                                        <Input type="datetime-local" value={bwEnd} onChange={(e) => setBwEnd(e.target.value)} /></div>
+                                                </div>
+                                            )}
+                                            {bwMode !== 'open' && (
+                                                <div className="space-y-1"><Label>Closed message (optional)</Label>
+                                                    <Input value={bwClosedMessage} onChange={(e) => setBwClosedMessage(e.target.value)}
+                                                        placeholder="Bookings open 1 Oct 2026" /></div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                    <Card className="border-none shadow-md">
                                         <CardHeader><CardTitle className="text-2xl">System Identity</CardTitle></CardHeader>
                                         <CardContent className="p-8 space-y-6">
                                             <div className="space-y-2">
@@ -689,15 +761,14 @@ export function SettingsPage() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 {[
                                                     { label: 'Fleet Management', val: enableFleetManagement, set: setEnableFleetManagement, icon: Wrench },
-                                                    { label: 'Submit a Request (Login Page)', val: enableCarRequests, set: setEnableCarRequests, icon: FileText },
                                                     { label: 'Handover Photos', val: enableHandoverPhotos, set: setEnableHandoverPhotos, icon: Image },
                                                     { label: 'Maintenance Reports', val: enableMaintenanceReports, set: setEnableMaintenanceReports, icon: Bell },
                                                     { label: 'User Import', val: enableUserImport, set: setEnableUserImport, icon: User },
                                                     { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations, icon: Check },
                                                     { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports, icon: FileSpreadsheet },
                                                     { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix, icon: ShieldCheck },
-                                                ].map((f, i) => (
-                                                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all">
+                                                ].map((f, i, arr) => (
+                                                    <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all ${i === arr.length - 1 && arr.length % 2 === 1 ? 'md:col-span-2' : ''}`}>
                                                         <div className="flex items-center gap-3">
                                                             <div className="p-2 rounded-lg bg-background text-muted-foreground">
                                                                 <f.icon className="w-4 h-4" />
@@ -722,22 +793,21 @@ export function SettingsPage() {
                             <TabsContent value="branding" className="mt-0">
                                 <Card className="border-none shadow-md">
                                     <CardHeader><CardTitle className="text-2xl">Branding Assets</CardTitle></CardHeader>
-                                    <CardContent className="p-8 space-y-8">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                            <div className="space-y-8">
-                                                <ImageField label="Logo" currentUrl={logoPrev} onPreview={setLogoPrev} onFileChange={setLogoFile} />
-                                                <ImageField label="Header Background" currentUrl={headerPrev} onPreview={setHeaderPrev} onFileChange={setHeaderFile} />
-                                                <ImageField label="Footer Background" currentUrl={footerPrev} onPreview={setFooterPrev} onFileChange={setFooterFile} />
+                                    <CardContent className="p-8 space-y-6">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                            <ImageField label="Logo" currentUrl={logoPrev} onPreview={setLogoPrev} onFileChange={setLogoFile} />
+                                            <ImageField label="Header Background" currentUrl={headerPrev} onPreview={setHeaderPrev} onFileChange={setHeaderFile} />
+                                            <ImageField label="Footer Background" currentUrl={footerPrev} onPreview={setFooterPrev} onFileChange={setFooterFile} />
+                                        </div>
+                                        <Separator />
+                                        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 md:items-end">
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Footer Copyright Text</Label>
+                                                <Textarea value={footerText} onChange={e => setFooterText(e.target.value)} rows={3} className="rounded-xl p-4 bg-muted/5 resize-none" placeholder="Enter copyright notice or footer notes..." />
                                             </div>
-                                            <div className="space-y-6">
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Footer Copyright Text</Label>
-                                                    <Textarea value={footerText} onChange={e => setFooterText(e.target.value)} rows={8} className="rounded-2xl p-4 bg-muted/5" placeholder="Enter copyright notice or footer notes..." />
-                                                </div>
-                                                <Button className="w-full h-12 rounded-xl text-lg font-bold" onClick={handleSaveSystem} disabled={saving}>
-                                                    <Upload className="w-5 h-5 mr-2" /> Apply All Branding
-                                                </Button>
-                                            </div>
+                                            <Button className="h-12 rounded-xl px-8 font-bold shrink-0" onClick={handleSaveSystem} disabled={saving}>
+                                                <Upload className="w-5 h-5 mr-2" /> Apply All Branding
+                                            </Button>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -913,7 +983,7 @@ export function SettingsPage() {
                             <TabsContent value="email" className="mt-0 space-y-6">
                                 <Card className="border-none shadow-md overflow-hidden">
                                     <CardHeader className="bg-muted/10">
-                                        <CardTitle className="text-2xl flex items-center gap-3"><Mail className="w-6 h-6" /> Email (SMTP) Configuration</CardTitle>
+                                        <CardTitle className="text-2xl flex items-center gap-3"><Mail className="w-6 h-6" /> Email Configuration</CardTitle>
                                         <CardDescription>
                                             Configure the corporate SMTP server (e.g. SC Azure email) used to send system
                                             emails and notifications. Leave the password blank to keep the one already saved.
@@ -990,6 +1060,18 @@ export function SettingsPage() {
                                         </Button>
                                     </CardContent>
                                 </Card>
+                            </TabsContent>
+
+                            <TabsContent value="templates" className="mt-0 space-y-6">
+                                <div className="mb-2">
+                                    <h2 className="text-2xl font-bold flex items-center gap-3"><Bell className="w-6 h-6" /> Notification Templates</h2>
+                                    <p className="text-muted-foreground text-sm mt-1">
+                                        Edit the subject/body of every system email and the title/message of its paired push/in-app
+                                        notification. Disabling a channel stops that event from sending on it — the other channel keeps
+                                        working. Changes apply immediately, no save-and-restart needed.
+                                    </p>
+                                </div>
+                                <NotificationTemplatesPanel />
                             </TabsContent>
 
                             <TabsContent value="access" className="mt-0">

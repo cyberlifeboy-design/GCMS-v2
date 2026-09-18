@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { ActiveCarsSection } from '@/components/shared/ActiveCarsSection';
+import { VenueMap } from '@/components/dashboard/VenueMap';
 import { formatDate } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 
@@ -232,6 +233,8 @@ interface StadiumInfo {
     name: string;
     code: string;
     location: string;
+    latitude: number | null;
+    longitude: number | null;
     totalCarts: number;
     activeFAs: number;
     fleetBreakdown: Record<string, number>;
@@ -550,6 +553,24 @@ export function DashboardPage() {
                             <p className="text-xs text-muted-foreground text-center">Issues Reported</p>
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Venue Map — bubble per active venue, sized by fleet on site, positioned from
+                the venue's own saved Google Maps link */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-cyan-500" />
+                        {isAdmin ? 'My Venue on the Map' : 'Venue Map'}
+                    </CardTitle>
+                    <CardDescription className="hidden sm:block">Bubble size = carts on site · click a venue for details</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-2">
+                    <VenueMap
+                        venues={stats?.stadiums ?? []}
+                        onViewFleet={(venueId) => navigate(`/fleet?stadium=${venueId}`)}
+                    />
                 </CardContent>
             </Card>
 

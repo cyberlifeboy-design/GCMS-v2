@@ -2,6 +2,7 @@ import app from './app';
 import { initializeStorage } from './config/storage';
 import { checkDatabaseConnection } from './config/database';
 import { poolBookingRequestsService } from './modules/pool-booking-requests/pool-booking-requests.service';
+import { notificationTemplatesService } from './modules/notification-templates/notification-templates.service';
 
 const PORT = process.env.PORT || 3005;
 const POOL_REMINDER_MINUTES_BEFORE = parseInt(process.env.POOL_REMINDER_MINUTES_BEFORE || '30', 10);
@@ -39,6 +40,9 @@ async function startServer() {
         // Initialize storage (local / MinIO / Azure Blob, per STORAGE_DRIVER)
         console.log('🔍 Initializing storage...');
         await initializeStorage();
+
+        // Seed default notification/email templates (idempotent — only inserts missing keys)
+        await notificationTemplatesService.seedDefaults();
 
         // Start server
         app.listen(PORT, () => {

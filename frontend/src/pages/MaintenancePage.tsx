@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
 import { Pagination } from '@/components/shared/Pagination';
+import { CameraCaptureButton } from '@/components/shared/CameraCaptureButton';
 import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
 interface MaintenanceLog {
@@ -887,7 +888,13 @@ export function MaintenancePage() {
                         </div>
                         <div className="space-y-1.5">
                             <Label className="flex items-center gap-2"><Image className="w-4 h-4" />Photos (up to 5)</Label>
-                            <Input type="file" accept="image/*" multiple onChange={e => setPhotoFiles(Array.from(e.target.files || []).slice(0, 5))} />
+                            <div className="flex items-center gap-2">
+                                <Input type="file" accept="image/*" multiple onChange={e => setPhotoFiles(Array.from(e.target.files || []).slice(0, 5))} />
+                                <CameraCaptureButton
+                                    disabled={photoFiles.length >= 5}
+                                    onCapture={file => setPhotoFiles(prev => [...prev, file].slice(0, 5))}
+                                />
+                            </div>
                             {photoFiles.length > 0 && <p className="text-xs text-muted-foreground">{photoFiles.length} file(s) selected</p>}
                         </div>
                         <DialogFooter>

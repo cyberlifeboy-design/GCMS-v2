@@ -1,5 +1,15 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import { notificationTemplatesService } from '../modules/notification-templates/notification-templates.service';
+
+/** Derives a simple HTML body from a plain-text template body — paragraphs from blank lines, <br> from single newlines. Lets admins edit one plain-text field per template instead of parallel text/html copies. */
+export function textToSimpleHtml(text: string): string {
+    const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return text
+        .split(/\n\s*\n/)
+        .map((para) => `<p>${escape(para).replace(/\n/g, '<br>')}</p>`)
+        .join('\n');
+}
 
 export interface EmailOptions {
     to: string | string[];
@@ -199,14 +209,14 @@ class EmailService implements EmailTransport {
      */
     async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
         const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+        const rendered = await notificationTemplatesService.renderEmail('password_reset', { resetUrl });
+        if (!rendered) return; // disabled by a SuperAdmin
 
         await this.send({
             to: email,
-            subject: 'Password Reset Request',
-            text: `You requested a password reset. Please click here: ${resetUrl}`,
-            html: `<p>You requested a password reset. Please click <a href="${resetUrl}">here</a> to reset your password.</p>
-                   <p>This link will expire in 1 hour.</p>
-                   <p>If you did not request this, please ignore this email.</p>`,
+            subject: rendered.subject,
+            text: rendered.body,
+            html: textToSimpleHtml(rendered.body),
         });
     }
 }

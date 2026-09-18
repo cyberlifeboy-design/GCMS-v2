@@ -317,6 +317,19 @@ export const settingsApi = {
         apiClient.post('/settings/smtp/test', { to }),
 };
 
+export const notificationTemplatesApi = {
+    list: () => apiClient.get('/notification-templates'),
+    update: (key: string, data: {
+        emailEnabled?: boolean;
+        emailSubject?: string | null;
+        emailBody?: string | null;
+        pushEnabled?: boolean;
+        pushTitle?: string | null;
+        pushMessage?: string | null;
+    }) => apiClient.put(`/notification-templates/${key}`, data),
+    reset: (key: string) => apiClient.post(`/notification-templates/${key}/reset`),
+};
+
 export const publicSettingsApi = {
     getBranding: () => axios.get(`${API_URL}/settings/public`),
 };
@@ -472,12 +485,15 @@ export const poolBookingsApi = {
 export const poolBookingRequestsApi = {
     // Public endpoints — apiClient still attaches a Bearer token automatically
     // when the caller happens to be logged in, so createdById gets captured.
+    // Deprecated — the public form now uses publicDataApi.getDepartments instead.
     getFAs: (stadiumId: string) =>
         apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/fas`),
     getAvailableCarts: (
         stadiumId: string,
         params: { startDate: string; endDate: string; startTime: string; endTime: string; excludeBookingId?: string },
     ) => apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/available-carts`, { params }),
+    getAvailableCartsMulti: (stadiumId: string, slots: { date: string; startTime: string; endTime: string }[]) =>
+        apiClient.post(`/public/pool-booking-requests/venues/${stadiumId}/available-carts-multi`, { slots }),
     getInstantAvailableCarts: (stadiumId: string) =>
         apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/instant-available-carts`),
     createPublic: (data: {
@@ -486,21 +502,31 @@ export const poolBookingRequestsApi = {
         requesterName: string;
         requesterEmail: string;
         requesterPhone: string;
-        faUserId: string;
-        bookingType: 'Single' | 'Recurring';
+        departmentId: string;
+        bookingType: 'Single';
         startDate: string;
         endDate: string;
         startTime: string;
         endTime: string;
         purpose?: string;
     }) => apiClient.post('/public/pool-booking-requests', data),
+    createRecurringPublic: (data: {
+        stadiumId: string;
+        fleetId: string;
+        requesterName: string;
+        requesterEmail: string;
+        requesterPhone: string;
+        departmentId: string;
+        purpose?: string;
+        slots: { date: string; startTime: string; endTime: string }[];
+    }) => apiClient.post('/public/pool-booking-requests/recurring', data),
     createInstantPublic: (data: {
         stadiumId: string;
         fleetId: string;
         requesterName: string;
         requesterEmail: string;
         requesterPhone: string;
-        faUserId: string;
+        departmentId: string;
         purpose?: string;
     }) => apiClient.post('/public/pool-booking-requests/instant', data),
     getByTokenPublic: (token: string) =>

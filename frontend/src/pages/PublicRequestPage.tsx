@@ -246,16 +246,18 @@ export function PublicRequestPage() {
                     className="w-full py-4 px-6 flex items-center gap-3"
                     style={{ background: 'linear-gradient(135deg, #5b2a9e 0%, #4a4fc4 38%, #2f6fd6 62%, #14a3ac 100%)' }}
                 >
-                    <img
-                        src={branding.logoUrl || '/branding/sc-logo.png'}
-                        alt="Logo"
-                        className="h-10 object-contain"
-                        onError={(e) => {
-                            const img = e.target as HTMLImageElement;
-                            if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
-                            else img.style.display = 'none';
-                        }}
-                    />
+                    <Link to="/login" aria-label="Back to login">
+                        <img
+                            src={branding.logoUrl || '/branding/sc-logo.png'}
+                            alt="Logo"
+                            className="h-10 object-contain cursor-pointer"
+                            onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
+                                else img.style.display = 'none';
+                            }}
+                        />
+                    </Link>
                 </div>
             )}
 

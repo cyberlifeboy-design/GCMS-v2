@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, CheckCircle, XCircle, Mail, Phone, MapPin, Car } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Mail, Phone, MapPin, Car, Plus, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
 
 interface Stadium {
@@ -15,14 +15,21 @@ interface Stadium {
     name: string;
     code: string;
 }
-interface FA {
+interface Department {
     id: string;
     name: string;
+    code?: string | null;
 }
 interface AvailableCart {
     id: string;
     carNumber: string;
     carType: string;
+}
+interface BookingSlot {
+    id: string;
+    date: string;
+    startTime: string;
+    endTime: string;
 }
 interface Branding {
     tournamentName: string;
@@ -30,7 +37,29 @@ interface Branding {
     headerUrl: string | null;
     footerUrl: string | null;
     footerText: string | null;
-    requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
+    bookingWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
+}
+
+let slotIdCounter = 0;
+function newSlot(): BookingSlot {
+    slotIdCounter += 1;
+    return { id: `slot-${slotIdCounter}`, date: '', startTime: '', endTime: '' };
+}
+
+/** Expands a Daily booking's date range into one slot per calendar day, same time each day. */
+function expandDailySlots(startDate: string, endDate: string, startTime: string, endTime: string) {
+    if (!startDate || !endDate || !startTime || !endTime || endDate < startDate) return [];
+    const slots: { date: string; startTime: string; endTime: string }[] = [];
+    const cur = new Date(`${startDate}T00:00:00`);
+    const last = new Date(`${endDate}T00:00:00`);
+    while (cur <= last) {
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const d = String(cur.getDate()).padStart(2, '0');
+        slots.push({ date: `${y}-${m}-${d}`, startTime, endTime });
+        cur.setDate(cur.getDate() + 1);
+    }
+    return slots;
 }
 
 const statusColors: Record<string, string> = {
@@ -199,7 +228,7 @@ function NewPoolBookingRequestView() {
 
     const [mode, setMode] = useState<'schedule' | 'instant'>('schedule');
 
-    const [fas, setFAs] = useState<FA[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
     const [availableCarts, setAvailableCarts] = useState<AvailableCart[]>([]);
     const [loadingCarts, setLoadingCarts] = useState(false);
     const [instantCarts, setInstantCarts] = useState<AvailableCart[]>([]);
@@ -208,18 +237,20 @@ function NewPoolBookingRequestView() {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [submittedMode, setSubmittedMode] = useState<'schedule' | 'instant'>('schedule');
-    const [requestToken, setRequestToken] = useState('');
+    const [requestTokens, setRequestTokens] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
+
+    const [slots, setSlots] = useState<BookingSlot[]>([newSlot(), newSlot()]);
 
     const [formData, setFormData] = useState({
         stadiumId: '',
         requesterName: '',
         requesterEmail: '',
         requesterPhone: '',
-        faUserId: '',
-        bookingType: 'Single' as 'Single' | 'Recurring',
+        departmentId: '',
+        bookingType: 'Single' as 'Single' | 'Daily' | 'Recurring',
         startDate: '',
-        endDate: '',
+        endDate: '', // Daily only
         startTime: '',
         endTime: '',
         fleetId: '',
@@ -238,33 +269,64 @@ function NewPoolBookingRequestView() {
 
     useEffect(() => {
         if (!formData.stadiumId) {
-            setFAs([]);
+            setDepartments([]);
             return;
         }
-        poolBookingRequestsApi
-            .getFAs(formData.stadiumId)
-            .then((res) => setFAs(res.data.data || []))
-            .catch((err) => console.error('Failed to load FAs:', err));
+        publicDataApi
+            .getDepartments(formData.stadiumId)
+            .then((res) => setDepartments(res.data.data || []))
+            .catch((err) => console.error('Failed to load departments:', err));
     }, [formData.stadiumId]);
 
+    // Single-day availability
     useEffect(() => {
-        const { stadiumId, startDate, endDate, startTime, endTime } = formData;
-        const effectiveEndDate = formData.bookingType === 'Single' ? startDate : endDate;
-        if (!stadiumId || !startDate || !effectiveEndDate || !startTime || !endTime) {
-            setAvailableCarts([]);
-            return;
-        }
-        if (endTime <= startTime) {
+        if (formData.bookingType !== 'Single') return;
+        const { stadiumId, startDate, startTime, endTime } = formData;
+        if (!stadiumId || !startDate || !startTime || !endTime || endTime <= startTime) {
             setAvailableCarts([]);
             return;
         }
         setLoadingCarts(true);
         poolBookingRequestsApi
-            .getAvailableCarts(stadiumId, { startDate, endDate: effectiveEndDate, startTime, endTime })
+            .getAvailableCarts(stadiumId, { startDate, endDate: startDate, startTime, endTime })
             .then((res) => setAvailableCarts(res.data.data || []))
             .catch((err) => console.error('Failed to load available carts:', err))
             .finally(() => setLoadingCarts(false));
-    }, [formData.stadiumId, formData.startDate, formData.endDate, formData.startTime, formData.endTime, formData.bookingType]);
+    }, [formData.stadiumId, formData.startDate, formData.startTime, formData.endTime, formData.bookingType]);
+
+    // Recurring availability — one cart free across EVERY selected date/time slot
+    const validSlots = slots.filter((s) => s.date && s.startTime && s.endTime && s.endTime > s.startTime);
+    useEffect(() => {
+        if (formData.bookingType !== 'Recurring') return;
+        if (!formData.stadiumId || validSlots.length < 2) {
+            setAvailableCarts([]);
+            return;
+        }
+        setLoadingCarts(true);
+        poolBookingRequestsApi
+            .getAvailableCartsMulti(formData.stadiumId, validSlots.map(({ date, startTime, endTime }) => ({ date, startTime, endTime })))
+            .then((res) => setAvailableCarts(res.data.data || []))
+            .catch((err) => console.error('Failed to load available carts:', err))
+            .finally(() => setLoadingCarts(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.stadiumId, formData.bookingType, JSON.stringify(validSlots)]);
+
+    // Daily availability — same shape as Recurring, slots are just every day in the range
+    const dailySlots = expandDailySlots(formData.startDate, formData.endDate, formData.startTime, formData.endTime);
+    useEffect(() => {
+        if (formData.bookingType !== 'Daily') return;
+        if (!formData.stadiumId || dailySlots.length === 0) {
+            setAvailableCarts([]);
+            return;
+        }
+        setLoadingCarts(true);
+        poolBookingRequestsApi
+            .getAvailableCartsMulti(formData.stadiumId, dailySlots)
+            .then((res) => setAvailableCarts(res.data.data || []))
+            .catch((err) => console.error('Failed to load available carts:', err))
+            .finally(() => setLoadingCarts(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.stadiumId, formData.bookingType, JSON.stringify(dailySlots)]);
 
     useEffect(() => {
         if (mode !== 'instant' || !formData.stadiumId) {
@@ -285,6 +347,11 @@ function NewPoolBookingRequestView() {
         setFormData((f) => ({ ...f, fleetId: '' }));
     };
 
+    const addSlot = () => setSlots((s) => [...s, newSlot()]);
+    const removeSlot = (id: string) => setSlots((s) => (s.length > 2 ? s.filter((x) => x.id !== id) : s));
+    const updateSlot = (id: string, patch: Partial<BookingSlot>) =>
+        setSlots((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -303,31 +370,57 @@ function NewPoolBookingRequestView() {
                     requesterName: formData.requesterName,
                     requesterEmail: formData.requesterEmail,
                     requesterPhone: formData.requesterPhone,
-                    faUserId: formData.faUserId,
+                    departmentId: formData.departmentId,
                     purpose: formData.purpose || undefined,
                 });
-                setRequestToken(res.data.data.requestToken);
+                setRequestTokens([res.data.data.requestToken]);
                 setSubmittedMode('instant');
                 setSubmitted(true);
                 return;
             }
 
-            const effectiveEndDate = formData.bookingType === 'Single' ? formData.startDate : formData.endDate;
+            if (formData.bookingType === 'Recurring' || formData.bookingType === 'Daily') {
+                const slotsToSubmit = formData.bookingType === 'Daily'
+                    ? dailySlots
+                    : validSlots.map(({ date, startTime, endTime }) => ({ date, startTime, endTime }));
+                if (slotsToSubmit.length < 2) {
+                    setError(formData.bookingType === 'Daily'
+                        ? 'End date must be at least one day after the start date for a daily booking'
+                        : 'Add at least two dates');
+                    setSubmitting(false);
+                    return;
+                }
+                const res = await poolBookingRequestsApi.createRecurringPublic({
+                    stadiumId: formData.stadiumId,
+                    fleetId: formData.fleetId,
+                    requesterName: formData.requesterName,
+                    requesterEmail: formData.requesterEmail,
+                    requesterPhone: formData.requesterPhone,
+                    departmentId: formData.departmentId,
+                    purpose: formData.purpose || undefined,
+                    slots: slotsToSubmit,
+                });
+                setRequestTokens((res.data.data.bookings as { requestToken: string }[]).map((b) => b.requestToken));
+                setSubmittedMode('schedule');
+                setSubmitted(true);
+                return;
+            }
+
             const res = await poolBookingRequestsApi.createPublic({
                 stadiumId: formData.stadiumId,
                 fleetId: formData.fleetId,
                 requesterName: formData.requesterName,
                 requesterEmail: formData.requesterEmail,
                 requesterPhone: formData.requesterPhone,
-                faUserId: formData.faUserId,
-                bookingType: formData.bookingType,
+                departmentId: formData.departmentId,
+                bookingType: 'Single',
                 startDate: formData.startDate,
-                endDate: effectiveEndDate,
+                endDate: formData.startDate,
                 startTime: formData.startTime,
                 endTime: formData.endTime,
                 purpose: formData.purpose || undefined,
             });
-            setRequestToken(res.data.data.requestToken);
+            setRequestTokens([res.data.data.requestToken]);
             setSubmittedMode('schedule');
             setSubmitted(true);
         } catch (err: any) {
@@ -346,15 +439,17 @@ function NewPoolBookingRequestView() {
     }
 
     if (submitted) {
-        const trackingUrl = `${window.location.origin}/book-pool/confirm/${requestToken}`;
+        const trackingUrls = requestTokens.map((t) => `${window.location.origin}/book-pool/confirm/${t}`);
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <Card className="max-w-md w-full shadow-lg">
                     <CardContent className="pt-8 pb-6 text-center">
                         <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold mb-2">Request Submitted!</h2>
+                        <h2 className="text-2xl font-bold mb-2">
+                            {trackingUrls.length > 1 ? `${trackingUrls.length} Booking Requests Submitted!` : 'Request Submitted!'}
+                        </h2>
                         <p className="text-muted-foreground mb-4">
-                            Logistics team will review your request and respond to you shortly.
+                            Logistics team will review your request{trackingUrls.length > 1 ? 's' : ''} and respond to you shortly.
                         </p>
                         {submittedMode === 'instant' && (
                             <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4 text-sm text-amber-900">
@@ -364,11 +459,17 @@ function NewPoolBookingRequestView() {
                                 users.
                             </div>
                         )}
-                        <div className="bg-muted p-3 rounded-md mb-6">
-                            <p className="text-sm text-muted-foreground mb-2">Track your booking:</p>
-                            <a href={trackingUrl} className="text-primary hover:underline text-sm break-all">
-                                {trackingUrl}
-                            </a>
+                        <div className="bg-muted p-3 rounded-md mb-6 text-left">
+                            <p className="text-sm text-muted-foreground mb-2 text-center">
+                                {trackingUrls.length > 1 ? 'Track your bookings:' : 'Track your booking:'}
+                            </p>
+                            <div className="space-y-1">
+                                {trackingUrls.map((url, i) => (
+                                    <a key={url} href={url} className="block text-primary hover:underline text-sm break-all">
+                                        {trackingUrls.length > 1 ? `${i + 1}. ` : ''}{url}
+                                    </a>
+                                ))}
+                            </div>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button asChild variant="outline" className="flex-1">
@@ -378,10 +479,11 @@ function NewPoolBookingRequestView() {
                                 className="flex-1"
                                 onClick={() => {
                                     setSubmitted(false);
-                                    setRequestToken('');
+                                    setRequestTokens([]);
+                                    setSlots([newSlot(), newSlot()]);
                                     setFormData({
                                         stadiumId: '', requesterName: '', requesterEmail: '', requesterPhone: '',
-                                        faUserId: '', bookingType: 'Single', startDate: '', endDate: '',
+                                        departmentId: '', bookingType: 'Single', startDate: '', endDate: '',
                                         startTime: '', endTime: '', fleetId: '', purpose: '',
                                     });
                                 }}
@@ -406,16 +508,18 @@ function NewPoolBookingRequestView() {
                     className="w-full py-4 px-6 flex items-center gap-3"
                     style={{ background: 'linear-gradient(135deg, #5b2a9e 0%, #4a4fc4 38%, #2f6fd6 62%, #14a3ac 100%)' }}
                 >
-                    <img
-                        src={branding.logoUrl || '/branding/sc-logo.png'}
-                        alt="Logo"
-                        className="h-10 object-contain"
-                        onError={(e) => {
-                            const img = e.target as HTMLImageElement;
-                            if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
-                            else img.style.display = 'none';
-                        }}
-                    />
+                    <Link to="/login" aria-label="Back to login">
+                        <img
+                            src={branding.logoUrl || '/branding/sc-logo.png'}
+                            alt="Logo"
+                            className="h-10 object-contain cursor-pointer"
+                            onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
+                                else img.style.display = 'none';
+                            }}
+                        />
+                    </Link>
                 </div>
             )}
 
@@ -445,14 +549,14 @@ function NewPoolBookingRequestView() {
                         </Button>
                     </div>
 
-                    {branding.requestWindow && !branding.requestWindow.isOpen ? (
+                    {branding.bookingWindow && !branding.bookingWindow.isOpen ? (
                         <Card className="max-w-lg mx-auto">
                             <CardContent className="py-10 text-center space-y-2">
                                 <h2 className="text-xl font-semibold">Bookings are currently closed</h2>
                                 <p className="text-muted-foreground">
-                                    {branding.requestWindow.message
-                                        || (branding.requestWindow.opensAt
-                                            ? `The booking window opens ${new Date(branding.requestWindow.opensAt).toLocaleString()}.`
+                                    {branding.bookingWindow.message
+                                        || (branding.bookingWindow.opensAt
+                                            ? `The booking window opens ${new Date(branding.bookingWindow.opensAt).toLocaleString()}.`
                                             : 'Please check back later.')}
                                 </p>
                             </CardContent>
@@ -461,11 +565,17 @@ function NewPoolBookingRequestView() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Booking Details</CardTitle>
+                            {mode === 'schedule' && (
+                                <p className="text-sm font-semibold text-foreground">Schedule Pool Car Booking in Advance</p>
+                            )}
                             <CardDescription>
                                 {mode === 'instant'
                                     ? 'Select a venue to see pool cars available right now — no date or time needed.'
                                     : 'Select a venue to begin.'}
                             </CardDescription>
+                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mt-2">
+                                All bookings are subjected to approvals and to availability.
+                            </p>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-6">
@@ -476,7 +586,7 @@ function NewPoolBookingRequestView() {
                                     <Select
                                         value={formData.stadiumId}
                                         onValueChange={(value) =>
-                                            setFormData({ ...formData, stadiumId: value, faUserId: '', fleetId: '' })
+                                            setFormData({ ...formData, stadiumId: value, departmentId: '', fleetId: '' })
                                         }
                                     >
                                         <SelectTrigger>
@@ -532,18 +642,18 @@ function NewPoolBookingRequestView() {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="faUserId">FA *</Label>
+                                                    <Label htmlFor="departmentId">Department *</Label>
                                                     <Select
-                                                        value={formData.faUserId}
-                                                        onValueChange={(value) => setFormData({ ...formData, faUserId: value })}
+                                                        value={formData.departmentId}
+                                                        onValueChange={(value) => setFormData({ ...formData, departmentId: value })}
                                                     >
                                                         <SelectTrigger>
-                                                            <SelectValue placeholder={fas.length ? 'Select FA' : 'No FAs at this venue'} />
+                                                            <SelectValue placeholder={departments.length ? 'Select department' : 'No active departments at this venue'} />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            {fas.map((fa) => (
-                                                                <SelectItem key={fa.id} value={fa.id}>
-                                                                    {fa.name}
+                                                            {departments.map((d) => (
+                                                                <SelectItem key={d.id} value={d.id}>
+                                                                    {d.name} — {d.code || 'No Code'}
                                                                 </SelectItem>
                                                             ))}
                                                         </SelectContent>
@@ -559,64 +669,167 @@ function NewPoolBookingRequestView() {
                                                 <Label htmlFor="bookingType">Booking Type *</Label>
                                                 <Select
                                                     value={formData.bookingType}
-                                                    onValueChange={(value) => setFormData({ ...formData, bookingType: value as 'Single' | 'Recurring', fleetId: '' })}
+                                                    onValueChange={(value) => setFormData({ ...formData, bookingType: value as 'Single' | 'Daily' | 'Recurring', fleetId: '' })}
                                                 >
                                                     <SelectTrigger>
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="Single">Single day</SelectItem>
-                                                        <SelectItem value="Recurring">Recurring (every day in a date range)</SelectItem>
+                                                        <SelectItem value="Daily">Daily (same time every day in a range)</SelectItem>
+                                                        <SelectItem value="Recurring">Recurring (multiple dates, own timing each)</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="startDate">{formData.bookingType === 'Single' ? 'Date *' : 'Start Date *'}</Label>
-                                                    <Input
-                                                        id="startDate"
-                                                        type="date"
-                                                        value={formData.startDate}
-                                                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value, fleetId: '' })}
-                                                        required
-                                                    />
-                                                </div>
-                                                {formData.bookingType === 'Recurring' && (
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="endDate">End Date *</Label>
-                                                        <Input
-                                                            id="endDate"
-                                                            type="date"
-                                                            value={formData.endDate}
-                                                            min={formData.startDate || undefined}
-                                                            onChange={(e) => setFormData({ ...formData, endDate: e.target.value, fleetId: '' })}
-                                                            required
-                                                        />
+
+                                            {formData.bookingType === 'Single' ? (
+                                                <>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="startDate">Date *</Label>
+                                                            <Input
+                                                                id="startDate"
+                                                                type="date"
+                                                                value={formData.startDate}
+                                                                onChange={(e) => setFormData({ ...formData, startDate: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="startTime">Start Time *</Label>
-                                                    <Input
-                                                        id="startTime"
-                                                        type="time"
-                                                        value={formData.startTime}
-                                                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value, fleetId: '' })}
-                                                        required
-                                                    />
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="startTime">Start Time *</Label>
+                                                            <Input
+                                                                id="startTime"
+                                                                type="time"
+                                                                value={formData.startTime}
+                                                                onChange={(e) => setFormData({ ...formData, startTime: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="endTime">End Time *</Label>
+                                                            <Input
+                                                                id="endTime"
+                                                                type="time"
+                                                                value={formData.endTime}
+                                                                onChange={(e) => setFormData({ ...formData, endTime: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : formData.bookingType === 'Daily' ? (
+                                                <>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Books the same time window every day from the start date through the end date.
+                                                    </p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="dailyStartDate">Start Date *</Label>
+                                                            <Input
+                                                                id="dailyStartDate"
+                                                                type="date"
+                                                                value={formData.startDate}
+                                                                onChange={(e) => setFormData({ ...formData, startDate: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="dailyEndDate">End Date *</Label>
+                                                            <Input
+                                                                id="dailyEndDate"
+                                                                type="date"
+                                                                value={formData.endDate}
+                                                                min={formData.startDate || undefined}
+                                                                onChange={(e) => setFormData({ ...formData, endDate: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="dailyStartTime">Time From *</Label>
+                                                            <Input
+                                                                id="dailyStartTime"
+                                                                type="time"
+                                                                value={formData.startTime}
+                                                                onChange={(e) => setFormData({ ...formData, startTime: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="dailyEndTime">Time To *</Label>
+                                                            <Input
+                                                                id="dailyEndTime"
+                                                                type="time"
+                                                                value={formData.endTime}
+                                                                onChange={(e) => setFormData({ ...formData, endTime: e.target.value, fleetId: '' })}
+                                                                required
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    {formData.startDate && formData.endDate && dailySlots.length === 1 && (
+                                                        <p className="text-xs text-amber-700">
+                                                            End date must be after the start date for a daily booking — use "Single day" for one date.
+                                                        </p>
+                                                    )}
+                                                    {dailySlots.length > 1 && (
+                                                        <p className="text-xs text-muted-foreground">{dailySlots.length} days will be booked.</p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Add each date you need the cart, with its own start/end time. One cart is
+                                                        reserved across all of them.
+                                                    </p>
+                                                    {slots.map((s, i) => (
+                                                        <div key={s.id} className="flex items-end gap-2 flex-wrap sm:flex-nowrap">
+                                                            <div className="space-y-1 flex-1 min-w-[140px]">
+                                                                {i === 0 && <Label className="text-xs">Date *</Label>}
+                                                                <Input
+                                                                    type="date"
+                                                                    value={s.date}
+                                                                    onChange={(e) => { updateSlot(s.id, { date: e.target.value }); setFormData((f) => ({ ...f, fleetId: '' })); }}
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1 flex-1 min-w-[110px]">
+                                                                {i === 0 && <Label className="text-xs">Start Time *</Label>}
+                                                                <Input
+                                                                    type="time"
+                                                                    value={s.startTime}
+                                                                    onChange={(e) => { updateSlot(s.id, { startTime: e.target.value }); setFormData((f) => ({ ...f, fleetId: '' })); }}
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1 flex-1 min-w-[110px]">
+                                                                {i === 0 && <Label className="text-xs">End Time *</Label>}
+                                                                <Input
+                                                                    type="time"
+                                                                    value={s.endTime}
+                                                                    onChange={(e) => { updateSlot(s.id, { endTime: e.target.value }); setFormData((f) => ({ ...f, fleetId: '' })); }}
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="icon"
+                                                                disabled={slots.length <= 2}
+                                                                onClick={() => { removeSlot(s.id); setFormData((f) => ({ ...f, fleetId: '' })); }}
+                                                                title={slots.length <= 2 ? 'A recurring booking needs at least two dates' : 'Remove this date'}
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    <Button type="button" variant="outline" size="sm" onClick={addSlot} className="gap-1">
+                                                        <Plus className="w-4 h-4" /> Add another date
+                                                    </Button>
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="endTime">End Time *</Label>
-                                                    <Input
-                                                        id="endTime"
-                                                        type="time"
-                                                        value={formData.endTime}
-                                                        onChange={(e) => setFormData({ ...formData, endTime: e.target.value, fleetId: '' })}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
+                                            )}
                                         </div>
                                         )}
 
@@ -655,6 +868,10 @@ function NewPoolBookingRequestView() {
                                             <h3 className="font-medium flex items-center gap-2">
                                                 <Car className="w-4 h-4" /> Available Pool Cars Right Now *
                                             </h3>
+                                            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                                                Please note that if the car is not collected within 10 minutes from the booking,
+                                                the booking will automatically be cancelled and the car will return to the shared pool.
+                                            </p>
                                             {loadingInstantCarts ? (
                                                 <div className="flex justify-center py-6">
                                                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -662,6 +879,19 @@ function NewPoolBookingRequestView() {
                                             ) : instantCarts.length === 0 ? (
                                                 <p className="text-sm text-muted-foreground">No pool cars are free at this venue right now.</p>
                                             ) : (
+                                                <>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {Object.entries(
+                                                        instantCarts.reduce<Record<string, number>>((acc, c) => {
+                                                            acc[c.carType] = (acc[c.carType] || 0) + 1;
+                                                            return acc;
+                                                        }, {}),
+                                                    ).map(([carType, count]) => (
+                                                        <span key={carType} className="text-xs font-semibold bg-emerald-100 text-emerald-800 rounded-full px-3 py-1">
+                                                            {carType} — {count} Available
+                                                        </span>
+                                                    ))}
+                                                </div>
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                                     {instantCarts.map((c) => {
                                                         const selected = formData.fleetId === c.id;
@@ -682,6 +912,7 @@ function NewPoolBookingRequestView() {
                                                         );
                                                     })}
                                                 </div>
+                                                </>
                                             )}
                                         </div>
                                         )}

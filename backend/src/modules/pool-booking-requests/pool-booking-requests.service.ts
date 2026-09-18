@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import crypto from 'crypto';
 import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { deriveBookingState } from './booking-state';
 
 export interface CreatePoolBookingRequestData {
@@ -10,8 +11,8 @@ export interface CreatePoolBookingRequestData {
     requesterName: string;
     requesterEmail: string;
     requesterPhone: string;
-    faUserId: string;
-    bookingType: 'Single' | 'Recurring';
+    departmentId: string;
+    bookingType: 'Single';
     startDate: string;
     endDate: string;
     startTime: string;
@@ -26,9 +27,27 @@ export interface CreateInstantBookingRequestData {
     requesterName: string;
     requesterEmail: string;
     requesterPhone: string;
-    faUserId: string;
+    departmentId: string;
     purpose?: string;
     createdById?: string;
+}
+
+export interface BookingSlot {
+    date: string; // "YYYY-MM-DD"
+    startTime: string; // "HH:mm"
+    endTime: string; // "HH:mm"
+}
+
+export interface CreateRecurringBookingRequestData {
+    stadiumId: string;
+    fleetId: string;
+    requesterName: string;
+    requesterEmail: string;
+    requesterPhone: string;
+    departmentId: string;
+    purpose?: string;
+    createdById?: string;
+    slots: BookingSlot[];
 }
 
 const INSTANT_COLLECTION_WINDOW_MINUTES = 10;
@@ -59,6 +78,7 @@ const BOOKING_INCLUDE = {
     stadium: { select: { id: true, name: true, code: true } },
     fleet: { select: { id: true, carNumber: true, carType: true } },
     faUser: { select: { id: true, name: true, accreditationNumber: true, phone: true } },
+    department: { select: { id: true, name: true, code: true, focalPointName: true, focalPointEmail: true } },
     reviewedBy: { select: { id: true, name: true } },
     returnedBy: { select: { id: true, name: true } },
     createdByUser: { select: { id: true, name: true } },
@@ -104,6 +124,42 @@ export class PoolBookingRequestsService {
                         endDate >= b.startDate &&
                         startTime < b.endTime &&
                         endTime > b.startTime,
+                )
+                .map((b) => b.fleetId),
+        );
+
+        return carts.filter((c) => !busyFleetIds.has(c.id));
+    }
+
+    /**
+     * Same as getAvailableCarts, but for a Recurring booking made of several
+     * independent date/time slots that must all share ONE cart. A cart is only
+     * "available" here if it's free for EVERY slot (intersection) — i.e. excluded
+     * as soon as it's busy for any single slot.
+     */
+    async getAvailableCartsForSlots(stadiumId: string, slots: { startDate: string; endDate: string; startTime: string; endTime: string }[]) {
+        const carts = await prisma.fleet.findMany({
+            where: { stadiumId, isPool: true },
+            select: { id: true, carNumber: true, carType: true },
+            orderBy: { carNumber: 'asc' },
+        });
+        if (carts.length === 0 || slots.length === 0) return [];
+
+        const overlapping = await prisma.poolBookingRequest.findMany({
+            where: { fleetId: { in: carts.map((c) => c.id) }, status: 'Approved' },
+            select: { fleetId: true, startDate: true, endDate: true, startTime: true, endTime: true },
+        });
+
+        const busyFleetIds = new Set(
+            overlapping
+                .filter((b) =>
+                    slots.some(
+                        (s) =>
+                            s.startDate <= b.endDate &&
+                            s.endDate >= b.startDate &&
+                            s.startTime < b.endTime &&
+                            s.endTime > b.startTime,
+                    ),
                 )
                 .map((b) => b.fleetId),
         );
@@ -201,7 +257,24 @@ export class PoolBookingRequestsService {
         }
     }
 
-    /** Cross-field integrity: the chosen FA must be an FA assigned to the chosen venue. */
+    /**
+     * Cross-field integrity: the chosen department must be an active department at
+     * the chosen venue. Returns the department (with its focal point user id, which
+     * may be null — not every department has a linked FA user) so the caller can
+     * derive faUserId without a second query.
+     */
+    private async assertDepartmentBelongsToStadium(departmentId: string, stadiumId: string) {
+        const department = await prisma.department.findUnique({
+            where: { id: departmentId },
+            select: { id: true, stadiumId: true, isActive: true, focalPointId: true },
+        });
+        if (!department || department.stadiumId !== stadiumId || !department.isActive) {
+            throw new Error('Selected department is not active at this venue');
+        }
+        return department;
+    }
+
+    /** Admin-only amend path: reassigning a booking's FA directly still needs this — the public form no longer uses it. */
     private async assertFABelongsToStadium(faUserId: string, stadiumId: string) {
         const user = await prisma.user.findUnique({
             where: { id: faUserId },
@@ -212,9 +285,23 @@ export class PoolBookingRequestsService {
         }
     }
 
+    /** Throws a 409 shaped like approve()'s conflict error when the cart is already booked (Approved) over this window. */
+    private async assertNoApprovedConflict(fleetId: string, startDate: string, endDate: string, startTime: string, endTime: string) {
+        const conflict = await this.findConflict(fleetId, startDate, endDate, startTime, endTime);
+        if (conflict) {
+            const err = new Error(
+                `This cart already has an approved booking that overlaps ${startDate}${endDate !== startDate ? `–${endDate}` : ''} ${startTime}–${endTime}`,
+            ) as Error & { status: number; conflict: unknown };
+            err.status = 409;
+            err.conflict = conflict;
+            throw err;
+        }
+    }
+
     async create(data: CreatePoolBookingRequestData) {
         await this.assertFleetBelongsToStadium(data.fleetId, data.stadiumId);
-        await this.assertFABelongsToStadium(data.faUserId, data.stadiumId);
+        const department = await this.assertDepartmentBelongsToStadium(data.departmentId, data.stadiumId);
+        await this.assertNoApprovedConflict(data.fleetId, data.startDate, data.endDate, data.startTime, data.endTime);
 
         const requestToken = this.generateRequestToken();
 
@@ -225,7 +312,8 @@ export class PoolBookingRequestsService {
                 requesterName: data.requesterName,
                 requesterEmail: data.requesterEmail,
                 requesterPhone: data.requesterPhone,
-                faUserId: data.faUserId,
+                departmentId: data.departmentId,
+                faUserId: department.focalPointId,
                 bookingType: data.bookingType,
                 startDate: data.startDate,
                 endDate: data.endDate,
@@ -262,7 +350,15 @@ export class PoolBookingRequestsService {
      */
     async createInstant(data: CreateInstantBookingRequestData) {
         await this.assertFleetBelongsToStadium(data.fleetId, data.stadiumId);
-        await this.assertFABelongsToStadium(data.faUserId, data.stadiumId);
+        const department = await this.assertDepartmentBelongsToStadium(data.departmentId, data.stadiumId);
+        // Instant carts are only ever offered from getInstantAvailableCarts, but re-check
+        // here too to close the race window between "listed as free" and "submitted".
+        const stillFree = await this.getInstantAvailableCarts(data.stadiumId);
+        if (!stillFree.some((c) => c.id === data.fleetId)) {
+            const err = new Error('This cart was just booked by someone else — please pick another available cart') as Error & { status: number };
+            err.status = 409;
+            throw err;
+        }
 
         const now = new Date();
         const startDate = formatDate(now);
@@ -280,7 +376,8 @@ export class PoolBookingRequestsService {
                 requesterName: data.requesterName,
                 requesterEmail: data.requesterEmail,
                 requesterPhone: data.requesterPhone,
-                faUserId: data.faUserId,
+                departmentId: data.departmentId,
+                faUserId: department.focalPointId,
                 bookingType: 'Instant',
                 startDate,
                 endDate,
@@ -306,6 +403,82 @@ export class PoolBookingRequestsService {
         );
 
         return booking;
+    }
+
+    /**
+     * Recurring booking: one cart, multiple independent date/time slots (not
+     * necessarily contiguous, not necessarily the same time of day). Creates one
+     * PoolBookingRequest row per slot — reusing every existing approve/reject/amend/
+     * extension code path unchanged — tagged with a shared recurringGroupId.
+     *
+     * No overbooking / no double-booking: every slot is checked against currently
+     * Approved bookings on the chosen cart BEFORE any row is written, and the whole
+     * submission is rejected atomically if any slot conflicts (matches create()'s
+     * single-slot behaviour, just applied per slot).
+     */
+    async createRecurring(data: CreateRecurringBookingRequestData) {
+        if (data.slots.length < 2) throw new Error('A recurring booking needs at least two dates — use a single booking otherwise');
+
+        await this.assertFleetBelongsToStadium(data.fleetId, data.stadiumId);
+        const department = await this.assertDepartmentBelongsToStadium(data.departmentId, data.stadiumId);
+
+        const sorted = [...data.slots].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+        for (const s of sorted) {
+            if (s.endTime <= s.startTime) throw new Error(`End time must be after start time for ${s.date}`);
+        }
+        for (let i = 0; i < sorted.length; i++) {
+            for (let j = i + 1; j < sorted.length; j++) {
+                if (sorted[i]!.date === sorted[j]!.date && sorted[i]!.startTime < sorted[j]!.endTime && sorted[i]!.endTime > sorted[j]!.startTime) {
+                    throw new Error(`Two selected slots overlap on ${sorted[i]!.date} — please adjust the times`);
+                }
+            }
+        }
+        for (const s of sorted) {
+            await this.assertNoApprovedConflict(data.fleetId, s.date, s.date, s.startTime, s.endTime);
+        }
+
+        const recurringGroupId = crypto.randomBytes(12).toString('hex');
+
+        const bookings = await prisma.$transaction(
+            sorted.map((s) =>
+                prisma.poolBookingRequest.create({
+                    data: {
+                        stadiumId: data.stadiumId,
+                        fleetId: data.fleetId,
+                        requesterName: data.requesterName,
+                        requesterEmail: data.requesterEmail,
+                        requesterPhone: data.requesterPhone,
+                        departmentId: data.departmentId,
+                        faUserId: department.focalPointId,
+                        bookingType: 'Recurring',
+                        startDate: s.date,
+                        endDate: s.date,
+                        startTime: s.startTime,
+                        endTime: s.endTime,
+                        purpose: data.purpose,
+                        requestToken: this.generateRequestToken(),
+                        createdById: data.createdById,
+                        recurringGroupId,
+                        status: 'Pending',
+                    },
+                    include: BOOKING_INCLUDE,
+                }),
+            ),
+        );
+
+        const first = bookings[0]!;
+        const message = `${data.requesterName} requested a ${bookings.length}-date recurring booking for ${first.fleet.carNumber} at ${first.stadium.name}`;
+        await notificationService.createForRoles(
+            { type: 'PoolBookingRequested', title: 'New Recurring Booking Request', message, entityType: 'PoolBookingRequest', entityId: first.id },
+            ['Admin'],
+            data.stadiumId,
+        );
+        await notificationService.createForRoles(
+            { type: 'PoolBookingRequested', title: 'New Recurring Booking Request', message, entityType: 'PoolBookingRequest', entityId: first.id },
+            ['SuperAdmin'],
+        );
+
+        return { recurringGroupId, bookings };
     }
 
     /** Requester (or venue staff) confirms the key has physically been collected — stops the 10-minute auto-cancel clock. */
@@ -414,19 +587,26 @@ export class PoolBookingRequestsService {
             include: BOOKING_INCLUDE,
         });
 
-        const instantWarning =
+        const instantWarningLine =
             updated.bookingType === 'Instant'
                 ? ` Collect the key within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes or this booking will be automatically cancelled and the car returned to the pool.`
                 : '';
         if (updated.createdById) {
-            await notificationService.create({
-                type: 'PoolBookingApproved',
-                title: 'Pool Booking Approved',
-                message: `Your pool booking for ${updated.fleet.carNumber} at ${updated.stadium.name} was approved — collect the key and return the car to the charging station when done.${instantWarning}`,
-                entityType: 'PoolBookingRequest',
-                entityId: id,
-                userId: updated.createdById,
+            const push = await notificationTemplatesService.renderPush('pool_booking_approved', {
+                carNumber: updated.fleet.carNumber,
+                stadiumName: updated.stadium.name,
+                instantWarningLine,
             });
+            if (push) {
+                await notificationService.create({
+                    type: 'PoolBookingApproved',
+                    title: push.title,
+                    message: push.message,
+                    entityType: 'PoolBookingRequest',
+                    entityId: id,
+                    userId: updated.createdById,
+                });
+            }
         }
         await this.notifyBookingRequester(updated, 'approved', reviewComment);
 
@@ -445,14 +625,20 @@ export class PoolBookingRequestsService {
         });
 
         if (updated.createdById) {
-            await notificationService.create({
-                type: 'PoolBookingRejected',
-                title: 'Pool Booking Rejected',
-                message: `Your pool booking for ${updated.fleet.carNumber} at ${updated.stadium.name} was rejected`,
-                entityType: 'PoolBookingRequest',
-                entityId: id,
-                userId: updated.createdById,
+            const push = await notificationTemplatesService.renderPush('pool_booking_rejected', {
+                carNumber: updated.fleet.carNumber,
+                stadiumName: updated.stadium.name,
             });
+            if (push) {
+                await notificationService.create({
+                    type: 'PoolBookingRejected',
+                    title: push.title,
+                    message: push.message,
+                    entityType: 'PoolBookingRequest',
+                    entityId: id,
+                    userId: updated.createdById,
+                });
+            }
         }
         await this.notifyBookingRequester(updated, 'rejected', reviewComment);
 
@@ -466,24 +652,30 @@ export class PoolBookingRequestsService {
         reviewComment?: string,
     ) {
         try {
-            const approvedInstructions =
-                `\n\nPlease collect the car key and ensure the car is returned to the charging station ` +
-                `once you are done, and hand back the key to the venue's logistics representative.` +
-                (booking.bookingType === 'Instant'
-                    ? ` If the request is not attended and the key has not been collected within ` +
-                      `${INSTANT_COLLECTION_WINDOW_MINUTES} minutes, this booking will be automatically ` +
-                      `cancelled and the car will return to the pool due to demand from other users.`
-                    : '');
-            await emailService.send({
-                to: booking.requesterEmail,
-                subject: `Pool booking ${status}: ${booking.fleet.carNumber}`,
-                text:
-                    `Hello ${booking.requesterName},\n\n` +
-                    `Your pool booking for ${booking.fleet.carNumber} at ${booking.stadium.name} has been ${status}.` +
-                    (status === 'approved' ? approvedInstructions : '') +
-                    (reviewComment ? `\n\nReviewer notes: ${reviewComment}` : '') +
-                    `\n\nThank you,\nGCMS`,
-            });
+            const reviewCommentLine = reviewComment ? `\n\nReviewer notes: ${reviewComment}` : '';
+            const vars = {
+                carNumber: booking.fleet.carNumber,
+                stadiumName: booking.stadium.name,
+                requesterName: booking.requesterName,
+                reviewCommentLine,
+            };
+            const rendered =
+                status === 'approved'
+                    ? await notificationTemplatesService.renderEmail('pool_booking_approved', {
+                          ...vars,
+                          approvedInstructionsBlock:
+                              `\n\nPlease collect the car key and ensure the car is returned to the charging station ` +
+                              `once you are done, and hand back the key to the venue's logistics representative.` +
+                              (booking.bookingType === 'Instant'
+                                  ? ` If the request is not attended and the key has not been collected within ` +
+                                    `${INSTANT_COLLECTION_WINDOW_MINUTES} minutes, this booking will be automatically ` +
+                                    `cancelled and the car will return to the pool due to demand from other users.`
+                                  : ''),
+                      })
+                    : await notificationTemplatesService.renderEmail('pool_booking_rejected', vars);
+            if (rendered) {
+                await emailService.send({ to: booking.requesterEmail, subject: rendered.subject, text: rendered.body });
+            }
         } catch (e) {
             console.error('Pool booking requester email failed:', e);
         }
@@ -601,7 +793,9 @@ export class PoolBookingRequestsService {
                 : `Your extension request for ${updated.fleet.carNumber} was rejected. Please return the car as scheduled.`,
             entityType: 'PoolBookingRequest',
             entityId: id,
-            userId: updated.faUserId,
+            // Reaching reviewExtension means requestExtension already matched faUserId
+            // against a real logged-in FA user, so it's never actually null here.
+            userId: updated.faUserId ?? undefined,
         });
 
         return updated;
@@ -638,10 +832,12 @@ export class PoolBookingRequestsService {
                 if (claimed.count === 0) continue; // another replica already sent this one
 
                 const message = `${b.fleet.carNumber} is due back at ${b.endDate} ${b.endTime}. Return it or request an extension.`;
-                await notificationService.create({
-                    type: 'PoolBookingReminder', title: 'Pool cart due soon', message,
-                    entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
-                });
+                if (b.faUserId) {
+                    await notificationService.create({
+                        type: 'PoolBookingReminder', title: 'Pool cart due soon', message,
+                        entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
+                    });
+                }
                 await notificationService.createForRoles(
                     { type: 'PoolBookingReminder', title: 'Pool cart due soon', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
                     ['Admin'], b.stadiumId,
@@ -658,10 +854,12 @@ export class PoolBookingRequestsService {
                 if (claimed.count === 0) continue;
 
                 const message = `${b.fleet.carNumber} was due back at ${b.endDate} ${b.endTime} and has not been returned.`;
-                await notificationService.create({
-                    type: 'PoolBookingOverdue', title: 'Pool cart overdue', message,
-                    entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
-                });
+                if (b.faUserId) {
+                    await notificationService.create({
+                        type: 'PoolBookingOverdue', title: 'Pool cart overdue', message,
+                        entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
+                    });
+                }
                 await notificationService.createForRoles(
                     { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
                     ['Admin'], b.stadiumId,
@@ -702,26 +900,28 @@ export class PoolBookingRequestsService {
             });
             if (claimed.count === 0) continue; // another replica already claimed/collected it
 
-            const message = `${b.fleet.carNumber} instant booking for ${b.requesterName} was auto-cancelled (key not collected in time) and returned to the pool at ${b.stadium.name}.`;
-            await notificationService.createForRoles(
-                { type: 'PoolBookingAutoCancelled', title: 'Instant booking auto-cancelled', message, entityType: 'PoolBookingRequest', entityId: b.id },
-                ['Admin'], b.stadiumId,
-            );
-            await notificationService.createForRoles(
-                { type: 'PoolBookingAutoCancelled', title: 'Instant booking auto-cancelled', message, entityType: 'PoolBookingRequest', entityId: b.id },
-                ['SuperAdmin'],
-            );
+            const vars = {
+                carNumber: b.fleet.carNumber,
+                requesterName: b.requesterName,
+                stadiumName: b.stadium.name,
+                collectionWindowMinutes: String(INSTANT_COLLECTION_WINDOW_MINUTES),
+            };
+            const push = await notificationTemplatesService.renderPush('instant_booking_auto_cancelled', vars);
+            if (push) {
+                await notificationService.createForRoles(
+                    { type: 'PoolBookingAutoCancelled', title: push.title, message: push.message, entityType: 'PoolBookingRequest', entityId: b.id },
+                    ['Admin'], b.stadiumId,
+                );
+                await notificationService.createForRoles(
+                    { type: 'PoolBookingAutoCancelled', title: push.title, message: push.message, entityType: 'PoolBookingRequest', entityId: b.id },
+                    ['SuperAdmin'],
+                );
+            }
             try {
-                await emailService.send({
-                    to: b.requesterEmail,
-                    subject: `Instant booking cancelled: ${b.fleet.carNumber}`,
-                    text:
-                        `Hello ${b.requesterName},\n\n` +
-                        `Your instant booking for ${b.fleet.carNumber} at ${b.stadium.name} was cancelled because ` +
-                        `the key was not collected within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes of approval. ` +
-                        `The car has returned to the pool due to demand from other users. You're welcome to submit a new request.\n\n` +
-                        `Thank you,\nGCMS`,
-                });
+                const rendered = await notificationTemplatesService.renderEmail('instant_booking_auto_cancelled', vars);
+                if (rendered) {
+                    await emailService.send({ to: b.requesterEmail, subject: rendered.subject, text: rendered.body });
+                }
             } catch (e) {
                 console.error('Instant booking auto-cancel email failed:', e);
             }

@@ -14,6 +14,10 @@ model Stadium {
   code                 String               @unique
   location             String
   isActive             Boolean              @default(true)
+  // Real-world position, used to place this venue's marker on the Dashboard map.
+  // Null renders the venue in the map's unplaced list instead of guessing a location.
+  latitude             Float?
+  longitude            Float?
   poolBookingStartTime String? // "HH:mm", null = no restriction
   poolBookingEndTime   String? // "HH:mm", null = no restriction
   createdAt            DateTime             @default(now())
@@ -42,11 +46,12 @@ model Department {
   // focalPointId is auto-linked so the rep also shows up as the resolved system account.
   focalPointName  String?
   focalPointEmail String?
-  users           User[]
-  fleet           Fleet[]
-  carRequests     CarRequest[]
-  accessRequests  AccessRequest[]
-  invitations     Invitation[]
+  users               User[]
+  fleet               Fleet[]
+  carRequests         CarRequest[]
+  accessRequests      AccessRequest[]
+  invitations         Invitation[]
+  poolBookingRequests PoolBookingRequest[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -260,11 +265,17 @@ model SystemSettings {
   enableBulkOperations          Boolean   @default(true)
   enableAdvancedReports         Boolean   @default(true)
   enableAssignmentMatrix        Boolean   @default(true)
-  // Request / booking window control
+  // Request window control (public "Submit a Request" channel)
   requestWindowMode             String    @default("open") // open | closed | scheduled
   requestWindowStart            DateTime?
   requestWindowEnd              DateTime?
   requestWindowClosedMessage    String?   @db.Text
+  // Booking window control (public "Bookings" channel) — independent of the request window above
+  enableBookings                Boolean   @default(true)
+  bookingWindowMode             String    @default("open") // open | closed | scheduled
+  bookingWindowStart            DateTime?
+  bookingWindowEnd              DateTime?
+  bookingWindowClosedMessage    String?   @db.Text
   // System announcements (deprecated - use Announcement model)
   systemAnnouncement            String?   @db.Text // Optional system-wide announcement text
   announcementExpiry            DateTime? // When announcement expires
@@ -301,6 +312,33 @@ model SystemSettings {
 
   updatedAt   DateTime @updatedAt
   updatedById String?
+}
+
+// Admin-editable content for every transactional email + its paired in-app/push
+// notification. One row per system event (e.g. "pool_booking_approved"), seeded
+// with the system's built-in defaults on first read so the row always exists.
+// {{placeholder}} tokens in the text get substituted at send time — see
+// notification-templates.service.ts for the resolver and the variable catalog.
+model NotificationTemplate {
+  id          String  @id @default(cuid())
+  key         String  @unique // stable code identifier, e.g. "pool_booking_approved"
+  name        String // admin-facing display name, e.g. "Pool Booking Approved"
+  category    String // Bookings | Requests | Accounts | Incidents | Handover | System
+  description String? @db.Text // what triggers this, shown to the admin
+  variables   String? @db.Text // JSON string[] of {{placeholder}} names available here
+
+  emailEnabled Boolean @default(true) // false when this event has no email component
+  emailSubject String? @db.Text
+  emailBody    String? @db.Text
+
+  pushEnabled Boolean @default(true)
+  pushTitle   String?
+  pushMessage String? @db.Text
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@index([category])
 }
 
 // Scheduled/push announcements to users
@@ -586,15 +624,27 @@ model PoolBookingRequest {
   requesterEmail String
   requesterPhone String
 
-  faUserId String
-  faUser   User   @relation("PoolBookingRequestFA", fields: [faUserId], references: [id])
+  // The requesting department, captured directly (mirrors CarRequest.departmentId).
+  // Nullable only so existing pre-migration rows don't break; every new booking sets it.
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
 
-  bookingType String // "Single" | "Recurring"
+  // Auto-resolved from department.focalPointId at creation time — null when the
+  // department has no linked FA user yet. Kept for the existing FA-facing flows
+  // (extension requests, admin display, PDFs) which all already read this optionally.
+  faUserId String?
+  faUser   User?   @relation("PoolBookingRequestFA", fields: [faUserId], references: [id])
+
+  bookingType String // "Single" | "Recurring" | "Instant"
   startDate   String // "YYYY-MM-DD"; equals startDate for Single
   endDate     String // "YYYY-MM-DD"
   startTime   String // "HH:mm", daily window start
   endTime     String // "HH:mm", daily window end
   purpose     String?
+
+  // Groups the N rows created by one multi-date Recurring submission (one row per
+  // selected date/time slot, same cart). Null for Single/Instant bookings.
+  recurringGroupId String?
 
   status        String    @default("Pending") // Pending, Approved, Rejected, Cancelled, Completed
   reviewedById  String?
@@ -634,6 +684,8 @@ model PoolBookingRequest {
   @@index([fleetId])
   @@index([status])
   @@index([requestToken])
+  @@index([departmentId])
+  @@index([recurringGroupId])
 }
 
 model Incident {

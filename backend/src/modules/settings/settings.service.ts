@@ -48,6 +48,12 @@ export class SettingsService {
         requestWindowStart: Date | null;
         requestWindowEnd: Date | null;
         requestWindowClosedMessage: string | null;
+        // Booking window
+        enableBookings: boolean;
+        bookingWindowMode: string;
+        bookingWindowStart: Date | null;
+        bookingWindowEnd: Date | null;
+        bookingWindowClosedMessage: string | null;
         // Handover T&C
         handoverTcEnTitle: string | null;
         handoverTcEnBody: string | null;
@@ -74,6 +80,20 @@ export class SettingsService {
                 requestWindowStart: s.requestWindowStart,
                 requestWindowEnd: s.requestWindowEnd,
                 requestWindowClosedMessage: s.requestWindowClosedMessage,
+            },
+            new Date(),
+        );
+    }
+
+    /** Independent of getRequestWindowState — controls the "Bookings" channel separately. */
+    async getBookingWindowState(): Promise<RequestWindowState> {
+        const s = await this.get();
+        return computeRequestWindow(
+            {
+                requestWindowMode: s.bookingWindowMode,
+                requestWindowStart: s.bookingWindowStart,
+                requestWindowEnd: s.bookingWindowEnd,
+                requestWindowClosedMessage: s.bookingWindowClosedMessage,
             },
             new Date(),
         );

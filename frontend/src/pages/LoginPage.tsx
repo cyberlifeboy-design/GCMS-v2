@@ -17,6 +17,8 @@ export function LoginPage() {
         tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string;
         enableCarRequests?: boolean;
         requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
+        enableBookings?: boolean;
+        bookingWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
     }>({});
     const { login, isLoading } = useAuthStore();
     const navigate = useNavigate();
@@ -173,29 +175,42 @@ export function LoginPage() {
                         >
                             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</> : 'Sign In'}
                         </button>
+
+                        {(() => {
+                            const bw = branding.bookingWindow;
+                            const bookingsEnabled = branding.enableBookings !== false;
+                            const bookingsOpen = bw ? bw.isOpen : true;
+                            // Disabled OR the window isn't open — the button must not appear at
+                            // all, not just be shown unclickable.
+                            if (!bookingsEnabled || !bookingsOpen) return null;
+                            return (
+                                <Button
+                                    asChild
+                                    variant="default"
+                                    className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                >
+                                    <Link to="/book-pool">Bookings</Link>
+                                </Button>
+                            );
+                        })()}
                     </form>
 
                     {(() => {
                         const w = branding.requestWindow;
                         const open = w ? w.isOpen : true;
                         const requestsEnabled = branding.enableCarRequests !== false;
-                        const note = requestsEnabled && !open
-                            ? (w?.message
-                                || (w?.opensAt ? `Requirement collection opens ${new Date(w.opensAt).toLocaleDateString()}` : 'Requests are currently closed'))
-                            : null;
+                        // Disabled OR the window isn't open — the button must not appear at
+                        // all, not just be shown unclickable. Tracking an already-submitted
+                        // request still works while the toggle itself is on, regardless of window.
+                        const showRequestButton = requestsEnabled && open;
+                        if (!showRequestButton && !requestsEnabled) return null;
                         return (
                             <div className="mt-5 space-y-2">
-                                <div className={`grid grid-cols-1 gap-3 ${requestsEnabled ? 'sm:grid-cols-2' : ''}`}>
-                                    {requestsEnabled && (
-                                        <Button asChild={open} variant="secondary" className="w-full" disabled={!open}>
-                                            {open ? <Link to="/request">Submit a Request</Link> : <span>Submit a Request</span>}
-                                        </Button>
-                                    )}
+                                {showRequestButton && (
                                     <Button asChild variant="secondary" className="w-full">
-                                        <Link to="/book-pool">Bookings</Link>
+                                        <Link to="/request">Submit a Request</Link>
                                     </Button>
-                                </div>
-                                {note && <p className="text-xs text-center text-[#9aa2b5]">{note}</p>}
+                                )}
                                 {requestsEnabled && (
                                     <p className="text-xs text-center">
                                         <Link to="/request/track" className="text-[#3874ff] hover:underline font-semibold">

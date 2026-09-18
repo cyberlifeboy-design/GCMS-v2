@@ -6,6 +6,7 @@ import multer from 'multer';
 import { prisma } from '../../config/database';
 import { emailService } from '../../services/email.service';
 import { notificationService } from '../notifications/notification.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { imageFileFilter } from '../../middleware/uploadFilters';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
@@ -72,11 +73,17 @@ const updateSettingsSchema = z.object({
     handoverReminderHoursBefore: coerceOptionalNumber,
     // Timezone settings
     timezone: z.string().optional().nullable(),
-    // Request window control
+    // Request window control (Submit a Request)
     requestWindowMode: z.enum(['open', 'closed', 'scheduled']).optional(),
     requestWindowStart: coerceDate,
     requestWindowEnd: coerceDate,
     requestWindowClosedMessage: z.string().optional().nullable(),
+    // Booking window control (Bookings) — independent of the request window above
+    enableBookings: coerceBoolean.optional(),
+    bookingWindowMode: z.enum(['open', 'closed', 'scheduled']).optional(),
+    bookingWindowStart: coerceDate,
+    bookingWindowEnd: coerceDate,
+    bookingWindowClosedMessage: z.string().optional().nullable(),
     // Handover T&C (SuperAdmin only — enforced at route level)
     handoverTcEnTitle: z.string().optional().nullable(),
     handoverTcEnBody: z.string().optional().nullable(),
@@ -185,25 +192,28 @@ export class SettingsController {
             const closesLine = state.closesAt
                 ? ` Submit your requests by ${new Date(state.closesAt).toLocaleString()}.`
                 : '';
+            const vars = { closesLine, requestUrl: `${process.env.FRONTEND_URL || ''}/request` };
             const recipients = await prisma.user.findMany({
                 where: { isActive: true, role: { in: ['FA'] } },
                 select: { id: true, email: true, name: true },
             });
-            const subject = 'Requirement collection is now open';
-            const text = `The GCMS request window is now open.${closesLine}\n\nSubmit at: ${process.env.FRONTEND_URL || ''}/request`;
-            for (const u of recipients) {
-                try {
-                    await emailService.send({ to: u.email, subject, text });
-                } catch (e) {
-                    console.error('announce email failed', u.email, e);
+            const email = await notificationTemplatesService.renderEmail('request_window_opened', vars);
+            if (email) {
+                for (const u of recipients) {
+                    try {
+                        await emailService.send({ to: u.email, subject: email.subject, text: email.body });
+                    } catch (e) {
+                        console.error('announce email failed', u.email, e);
+                    }
                 }
             }
-            if (recipients.length) {
+            const push = await notificationTemplatesService.renderPush('request_window_opened', vars);
+            if (push && recipients.length) {
                 await notificationService.createForUsers(
                     {
                         type: 'RequestWindowOpen',
-                        title: subject,
-                        message: `The request window is open.${closesLine}`,
+                        title: push.title,
+                        message: push.message,
                         entityType: 'SystemSettings',
                         entityId: 'request-window',
                     },

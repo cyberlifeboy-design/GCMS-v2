@@ -12,6 +12,7 @@ router.get('/public', async (_req: Request, res: Response) => {
     try {
         const settings = await prisma.systemSettings.findFirst();
         const requestWindow = await settingsService.getRequestWindowState();
+        const bookingWindow = await settingsService.getBookingWindowState();
         res.json({
             tournamentName: settings?.tournamentName || 'GCMS',
             logoUrl: settings?.logoUrl || null,
@@ -25,6 +26,8 @@ router.get('/public', async (_req: Request, res: Response) => {
             handoverTcCheckboxes: settings?.handoverTcCheckboxes || null,
             enableCarRequests: settings?.enableCarRequests ?? true,
             requestWindow,
+            enableBookings: settings?.enableBookings ?? true,
+            bookingWindow,
         });
     } catch {
         // A settings read failure must never block submissions — default to open.
@@ -32,6 +35,8 @@ router.get('/public', async (_req: Request, res: Response) => {
             tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null,
             enableCarRequests: true,
             requestWindow: { isOpen: true, opensAt: null, closesAt: null, message: null },
+            enableBookings: true,
+            bookingWindow: { isOpen: true, opensAt: null, closesAt: null, message: null },
         });
     }
 });

@@ -319,6 +319,8 @@ export class ReportsService {
                 name: true,
                 code: true,
                 location: true,
+                latitude: true,
+                longitude: true,
                 _count: {
                     select: { fleet: true, users: { where: { role: 'FA', isActive: true } } },
                 },
@@ -347,6 +349,8 @@ export class ReportsService {
             name: stadium.name,
             code: stadium.code,
             location: stadium.location,
+            latitude: stadium.latitude,
+            longitude: stadium.longitude,
             totalCarts: stadium._count.fleet,
             activeFAs: stadium._count.users,
             fleetBreakdown: stadiumTypeMap.get(stadium.id) || {},

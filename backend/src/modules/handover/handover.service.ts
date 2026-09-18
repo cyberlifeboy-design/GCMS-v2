@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { canCreateOrSignHandover } from './handover-phase';
 
 export interface PoolStatusByStadium {
@@ -119,17 +120,20 @@ export class HandoverService {
         });
 
         // Create notification
-        await notificationService.createForRoles(
-            {
-                type: 'CheckIn',
-                title: 'Cart Usage Started',
-                message: `${vehicle.carNumber} checked in by assigned user.`,
-                entityType: 'HandoverLog',
-                entityId: result.id,
-            },
-            ['SuperAdmin', 'Admin'],
-            vehicle.stadiumId,
-        );
+        const checkinPush = await notificationTemplatesService.renderPush('handover_checkin', { carNumber: vehicle.carNumber });
+        if (checkinPush) {
+            await notificationService.createForRoles(
+                {
+                    type: 'CheckIn',
+                    title: checkinPush.title,
+                    message: checkinPush.message,
+                    entityType: 'HandoverLog',
+                    entityId: result.id,
+                },
+                ['SuperAdmin', 'Admin'],
+                vehicle.stadiumId,
+            );
+        }
 
         return result;
     }
@@ -189,17 +193,23 @@ export class HandoverService {
 
             return log;
         }).then(async (log) => {
-            await notificationService.createForRoles(
-                {
-                    type: 'CheckOut',
-                    title: 'Cart Usage Ended',
-                    message: `${vehicle.carNumber} checked out by user. Status: ${data.hasIssue ? 'Maintenance' : 'Returned'}.`,
-                    entityType: 'HandoverLog',
-                    entityId: log.id,
-                },
-                ['SuperAdmin', 'Admin'],
-                vehicle.stadiumId,
-            );
+            const checkoutPush = await notificationTemplatesService.renderPush('handover_checkout', {
+                carNumber: vehicle.carNumber,
+                status: data.hasIssue ? 'Maintenance' : 'Returned',
+            });
+            if (checkoutPush) {
+                await notificationService.createForRoles(
+                    {
+                        type: 'CheckOut',
+                        title: checkoutPush.title,
+                        message: checkoutPush.message,
+                        entityType: 'HandoverLog',
+                        entityId: log.id,
+                    },
+                    ['SuperAdmin', 'Admin'],
+                    vehicle.stadiumId,
+                );
+            }
             return log;
         });
     }
