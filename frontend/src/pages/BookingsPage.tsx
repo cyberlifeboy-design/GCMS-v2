@@ -356,7 +356,7 @@ function AvailableCarsPanel({ stadiumId }: { stadiumId?: string }) {
     );
 }
 
-function HistoryPanel({ stadiumId }: { stadiumId?: string }) {
+function HistoryPanel({ stadiumId, departmentId, canExport = true }: { stadiumId?: string; departmentId?: string; canExport?: boolean }) {
     const [rows, setRows] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<string | null>(null);
@@ -367,6 +367,7 @@ function HistoryPanel({ stadiumId }: { stadiumId?: string }) {
         try {
             const params: Record<string, string> = {};
             if (stadiumId) params.stadiumId = stadiumId;
+            if (departmentId) params.departmentId = departmentId;
             if (filters.fromDate) params.fromDate = filters.fromDate;
             if (filters.toDate) params.toDate = filters.toDate;
             if (filters.status) params.status = filters.status;
@@ -375,13 +376,14 @@ function HistoryPanel({ stadiumId }: { stadiumId?: string }) {
         } finally {
             setLoading(false);
         }
-    }, [stadiumId, filters]);
+    }, [stadiumId, departmentId, filters]);
     useEffect(() => { load(); }, [load]);
 
     const download = async (format: 'pdf' | 'xlsx') => {
         try {
             const params: Record<string, string> = { format };
             if (stadiumId) params.stadiumId = stadiumId;
+            if (departmentId) params.departmentId = departmentId;
             if (filters.fromDate) params.fromDate = filters.fromDate;
             if (filters.toDate) params.toDate = filters.toDate;
             if (filters.status) params.status = filters.status;
@@ -422,10 +424,12 @@ function HistoryPanel({ stadiumId }: { stadiumId?: string }) {
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => download('pdf')}><Download className="w-4 h-4 mr-1" /> PDF</Button>
-                    <Button variant="outline" size="sm" onClick={() => download('xlsx')}><Download className="w-4 h-4 mr-1" /> Excel</Button>
-                </div>
+                {canExport && (
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => download('pdf')}><Download className="w-4 h-4 mr-1" /> PDF</Button>
+                        <Button variant="outline" size="sm" onClick={() => download('xlsx')}><Download className="w-4 h-4 mr-1" /> Excel</Button>
+                    </div>
+                )}
             </div>
             {loading ? (
                 <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
@@ -714,6 +718,29 @@ export function BookingsPage() {
             setHoursLoading(false);
         }
     };
+
+    // FA gets a read-only history of their own department's bookings at their venue —
+    // not the Admin/SuperAdmin/Observer review console (queue, live/upcoming, available
+    // cars, operating hours). They can't approve or reject either way.
+    if (user?.role === 'FA') {
+        return (
+            <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold">Bookings</h1>
+                        <p className="text-muted-foreground mt-1">Your department's booking history at {user?.stadium?.name ?? 'your venue'}</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setReportIncidentOpen(true)}>
+                        <ShieldAlert className="w-4 h-4 mr-2" /> Report incident
+                    </Button>
+                </div>
+                <ReportIncidentModal open={reportIncidentOpen} onOpenChange={setReportIncidentOpen} />
+                <Card><CardContent className="pt-6">
+                    <HistoryPanel stadiumId={user?.stadiumId ?? undefined} departmentId={user?.departmentId ?? undefined} canExport={false} />
+                </CardContent></Card>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

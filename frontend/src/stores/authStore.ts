@@ -76,6 +76,7 @@ export interface AuthUser {
     phone?: string;
     stadiumId?: string;
     stadium?: { id: string; name: string };
+    departmentId?: string;
     isActive: boolean;
     exportFormat?: 'xlsx' | 'pdf' | 'docx';
     exportPreferences?: ExportPreferences;

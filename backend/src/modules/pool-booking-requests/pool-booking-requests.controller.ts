@@ -4,7 +4,7 @@ import * as ExcelJS from 'exceljs';
 import { poolBookingRequestsService } from './pool-booking-requests.service';
 import { stadiumsService } from '../stadiums/stadiums.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
-import { resolveStadiumScope } from '../reports/reports.scope';
+import { resolveStadiumScope, resolveDepartmentScope } from '../reports/reports.scope';
 import { bookingHistoryPdf, makeReference } from '../../services/pdf.service';
 import { settingsService } from '../settings/settings.service';
 
@@ -352,10 +352,13 @@ export class PoolBookingRequestsController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
             // Admin and FA are venue-locked; a client stadiumId is ignored for them.
+            // FA is additionally department-locked — they only see their own department's bookings.
             const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const departmentId = resolveDepartmentScope(req.user, req.query.departmentId);
             const data = await poolBookingRequestsService.getAll({
                 status: req.query.status as string | undefined,
                 stadiumId,
+                departmentId,
                 derivedState: req.query.derivedState as string | undefined,
             });
             res.json({ data });
@@ -369,8 +372,10 @@ export class PoolBookingRequestsController {
     static async history(req: AuthRequest, res: Response) {
         try {
             const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
+            const departmentId = resolveDepartmentScope(req.user, req.query.departmentId);
             const data = await poolBookingRequestsService.getHistory({
                 stadiumId,
+                departmentId,
                 fleetId: req.query.fleetId as string | undefined,
                 status: req.query.status as string | undefined,
                 derivedState: req.query.derivedState as string | undefined,

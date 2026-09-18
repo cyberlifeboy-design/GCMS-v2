@@ -504,10 +504,11 @@ export class PoolBookingRequestsService {
         return prisma.poolBookingRequest.findUnique({ where: { id }, include: BOOKING_INCLUDE });
     }
 
-    async getAll(filters: { status?: string; stadiumId?: string; derivedState?: string }) {
+    async getAll(filters: { status?: string; stadiumId?: string; departmentId?: string; derivedState?: string }) {
         const where: Record<string, unknown> = {};
         if (filters.status) where.status = filters.status;
         if (filters.stadiumId) where.stadiumId = filters.stadiumId;
+        if (filters.departmentId) where.departmentId = filters.departmentId;
         const rows = await prisma.poolBookingRequest.findMany({ where, include: BOOKING_INCLUDE, orderBy: { createdAt: 'desc' } });
         const now = new Date();
         const decorated = rows.map((r) => ({ ...r, derivedState: deriveBookingState(r, now) }));
@@ -521,11 +522,12 @@ export class PoolBookingRequestsService {
      * ordered by the booking window (most recent first).
      */
     async getHistory(filters: {
-        stadiumId?: string; fleetId?: string; status?: string; derivedState?: string;
+        stadiumId?: string; departmentId?: string; fleetId?: string; status?: string; derivedState?: string;
         fromDate?: string; toDate?: string; q?: string;
     }) {
         const where: Record<string, any> = {};
         if (filters.stadiumId) where.stadiumId = filters.stadiumId;
+        if (filters.departmentId) where.departmentId = filters.departmentId;
         if (filters.fleetId) where.fleetId = filters.fleetId;
         if (filters.status) where.status = filters.status;
         if (filters.fromDate || filters.toDate) {
