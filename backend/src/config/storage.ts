@@ -42,6 +42,17 @@ function getAzureContainer(): ContainerClient {
 }
 const azureBlobPath = (bucket: string, fileName: string) => `${bucket}/${fileName}`;
 
+/**
+ * Filenames must be a single flat path segment. Rejects any traversal or separator
+ * sequence (e.g. "../../.env", "..%2f..%2f.env" once URL-decoded by Express) before
+ * it ever reaches a filesystem path.join() or a cloud blob key.
+ */
+function assertSafeFileName(fileName: string): void {
+    if (!fileName || fileName.includes('/') || fileName.includes('\\') || fileName.includes('..') || path.basename(fileName) !== fileName) {
+        throw new Error('Invalid file name');
+    }
+}
+
 async function localWrite(bucket: string, fileName: string, buffer: Buffer): Promise<void> {
     const dir = path.join(UPLOADS_DIR, bucket);
     await fs.promises.mkdir(dir, { recursive: true });
@@ -102,6 +113,7 @@ export async function uploadFile(
     fileBuffer: Buffer,
     contentType: string = 'application/octet-stream'
 ): Promise<string> {
+    assertSafeFileName(fileName);
     try {
         if (DRIVER === 'azure-blob') {
             const container = getAzureContainer();
@@ -126,6 +138,7 @@ export async function uploadFile(
  * Read a file buffer via the selected driver; falls back to local disk.
  */
 export async function getFileBuffer(bucket: string, fileName: string): Promise<Buffer> {
+    assertSafeFileName(fileName);
     try {
         if (DRIVER === 'azure-blob') {
             const container = getAzureContainer();
