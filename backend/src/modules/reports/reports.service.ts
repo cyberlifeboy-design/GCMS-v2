@@ -267,12 +267,19 @@ export class ReportsService {
             _count: { _all: true },
         });
 
-        // 2. Cart Status Summary
-        const fleetByStatus = await this.prisma.fleet.groupBy({
+        // 2. Cart Status Summary — pool cars are called out as their own slice rather
+        // than being lumped into whatever status (usually 'Available') they happen to be in.
+        const fleetByStatusRaw = await this.prisma.fleet.groupBy({
             by: ['status'],
-            where,
+            where: { ...where, isPool: false },
             _count: { _all: true },
         });
+        const poolCartCount = await this.prisma.fleet.count({
+            where: { ...where, isPool: true },
+        });
+        const fleetByStatus = poolCartCount > 0
+            ? [...fleetByStatusRaw, { status: 'Pool', _count: { _all: poolCartCount } }]
+            : fleetByStatusRaw;
 
         // 3. Active Users
         const activeUsersCount = await this.prisma.user.count({
@@ -369,6 +376,7 @@ export class ReportsService {
                 email: true,
                 stadiumId: true,
                 stadium: { select: { id: true, name: true } },
+                department: { select: { id: true, name: true } },
                 _count: { select: { assignedCarts: true } },
             },
             orderBy: { name: 'asc' },
@@ -391,6 +399,7 @@ export class ReportsService {
                     name: fa.name,
                     email: fa.email,
                     stadium: fa.stadium,
+                    department: fa.department,
                     totalAssigned: fa._count.assignedCarts,
                     carts: assignedCarts,
                 };
@@ -398,9 +407,6 @@ export class ReportsService {
         );
 
         // 9. Pool bookings today (available / in use / overdue)
-        const poolCartCount = await this.prisma.fleet.count({
-            where: { isPool: true, ...(filters.stadiumId ? { stadiumId: filters.stadiumId } : {}) },
-        });
         const liveBookings = await this.prisma.poolBookingRequest.findMany({
             where: {
                 status: 'Approved',

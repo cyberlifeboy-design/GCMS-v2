@@ -245,6 +245,7 @@ interface FAFleetInfo {
     name: string;
     email: string;
     stadium: { id: string; name: string } | null;
+    department: { id: string; name: string } | null;
     totalAssigned: number;
     carts: Array<{ id: string; carNumber: string; carType: string; status: string }>;
 }
@@ -680,7 +681,7 @@ export function DashboardPage() {
                                     <div className="flex items-center justify-between mb-2">
                                         <div>
                                             <p className="font-medium">{fa.name}</p>
-                                            <p className="text-sm text-muted-foreground">{fa.stadium?.name || 'Unassigned'}</p>
+                                            <p className="text-sm text-muted-foreground">{fa.department?.name || 'No department'}</p>
                                         </div>
                                         <Badge variant="outline">{fa.totalAssigned} carts</Badge>
                                     </div>
