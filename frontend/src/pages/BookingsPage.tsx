@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight, ShieldAlert, Car } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, RefreshCw, Edit2, Ban, AlertTriangle, Undo2, Download, ChevronDown, ChevronRight, ChevronLeft, ShieldAlert, Car, Bell, Clock } from 'lucide-react';
 import { ReportIncidentModal } from '@/components/incidents/ReportIncidentModal';
 import {
     Dialog,
@@ -67,6 +67,78 @@ const derivedBadge: Record<string, string> = {
     Completed: 'bg-slate-100 text-slate-600',
 };
 
+function combineDateTime(dateStr: string, timeStr: string): Date {
+    return new Date(`${dateStr}T${timeStr}:00`);
+}
+
+function formatElapsed(minutes: number): string {
+    const m = Math.max(0, Math.round(minutes));
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    const days = Math.floor(h / 24);
+    if (days > 0) return `${days}d ${h % 24}h`;
+    const remMin = m % 60;
+    return remMin > 0 ? `${h}h ${remMin}m` : `${h}h`;
+}
+
+type Tone = 'red' | 'amber' | 'blue' | 'green' | 'muted';
+
+/** A countdown chip's text + color tone, derived from the booking's live derivedState. */
+function formatCountdown(b: Booking): { text: string; tone: Tone } {
+    const now = Date.now();
+    if (b.derivedState === 'Overdue') {
+        const end = combineDateTime(b.endDate, b.endTime);
+        return { text: `${formatElapsed((now - end.getTime()) / 60000)} overdue`, tone: 'red' };
+    }
+    if (b.derivedState === 'Active') {
+        return { text: 'Active now', tone: 'green' };
+    }
+    if (b.derivedState === 'Upcoming') {
+        const start = combineDateTime(b.startDate, b.startTime);
+        const diffMin = (start.getTime() - now) / 60000;
+        return { text: `starts in ${formatElapsed(diffMin)}`, tone: diffMin <= 120 ? 'blue' : 'muted' };
+    }
+    return { text: b.derivedState || b.status, tone: 'muted' };
+}
+
+/** "Today" / "Tomorrow" / "Yesterday" / "Fri, 20 Sep" for a YYYY-MM-DD date string. */
+function dayLabel(dateStr: string): string {
+    const d = new Date(`${dateStr}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+
+/** Groups bookings by their start date, sorted chronologically. */
+function groupByDay(bookings: Booking[]): Array<[string, Booking[]]> {
+    const map = new Map<string, Booking[]>();
+    for (const b of bookings) {
+        if (!map.has(b.startDate)) map.set(b.startDate, []);
+        map.get(b.startDate)!.push(b);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+}
+
+const toneCardCls: Record<Tone, string> = {
+    red: 'border-red-200 bg-red-50/70',
+    amber: 'border-amber-200 bg-amber-50/70',
+    blue: 'border-sky-200 bg-sky-50/70',
+    green: 'border-emerald-200 bg-emerald-50/70',
+    muted: 'border-border bg-card',
+};
+
+const toneChipCls: Record<Tone, string> = {
+    red: 'bg-red-600 text-white',
+    amber: 'bg-amber-500 text-white',
+    blue: 'bg-sky-600 text-white',
+    green: 'bg-emerald-600 text-white',
+    muted: 'bg-muted text-muted-foreground',
+};
+
 /** Expandable detail row shared by the live/history tables. */
 function BookerDetail({ b }: { b: Booking }) {
     return (
@@ -94,16 +166,307 @@ function BookerDetail({ b }: { b: Booking }) {
     );
 }
 
+/** A single booking as a scannable card — cart, requester, time window, and a live
+ * countdown/status chip — used by both the Upcoming/Active day-groups and the Calendar tab. */
+function BookingCard({
+    b,
+    mode,
+    canManage,
+    currentUserId,
+    busy,
+    expanded,
+    onToggleExpand,
+    onMarkReturned,
+    onMarkCollected,
+    onExtend,
+    onReviewExtension,
+}: {
+    b: Booking;
+    mode?: 'live' | 'upcoming';
+    canManage: boolean;
+    currentUserId?: string;
+    busy?: boolean;
+    expanded?: boolean;
+    onToggleExpand?: () => void;
+    onMarkReturned?: () => void;
+    onMarkCollected?: () => void;
+    onExtend?: () => void;
+    onReviewExtension?: (approve: boolean) => void;
+}) {
+    const cd = formatCountdown(b);
+    const hasActions = mode === 'live';
+
+    return (
+        <div className={`rounded-xl border p-4 ${toneCardCls[cd.tone]}`}>
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
+                        <Car className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                        <p className="font-semibold">
+                            {b.fleet?.carNumber} <span className="font-normal text-muted-foreground text-sm">· {b.fleet?.carType}</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">{b.requesterName} · FA {b.faUser?.accreditationNumber ?? '—'}</p>
+                        <p className="text-sm mt-0.5">
+                            {b.startTime}–{b.endTime}{b.endDate !== b.startDate ? ` (→ ${b.endDate})` : ''}
+                        </p>
+                        {b.extensionStatus === 'Pending' && (
+                            <p className="text-xs text-amber-700 font-semibold mt-1">
+                                Extension requested → {b.extensionRequestedEndDate} {b.extensionRequestedEndTime}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${toneChipCls[cd.tone]}`}>
+                    {cd.text}
+                </span>
+            </div>
+            {(onToggleExpand || hasActions) && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {onToggleExpand && (
+                        <button onClick={onToggleExpand} className="text-xs text-muted-foreground hover:text-primary underline">
+                            {expanded ? 'Hide details' : 'Details'}
+                        </button>
+                    )}
+                    {hasActions && canManage && b.bookingType === 'Instant' && !b.keyCollectedAt && (
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={onMarkCollected}>
+                            Confirm Key Collected
+                        </Button>
+                    )}
+                    {hasActions && canManage && (
+                        <Button size="sm" variant="outline" disabled={busy} onClick={onMarkReturned}>
+                            <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
+                        </Button>
+                    )}
+                    {hasActions && canManage && b.extensionStatus === 'Pending' && (
+                        <>
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={busy} onClick={() => onReviewExtension?.(true)}>
+                                Approve Extension
+                            </Button>
+                            <Button size="sm" variant="destructive" disabled={busy} onClick={() => onReviewExtension?.(false)}>
+                                Reject
+                            </Button>
+                        </>
+                    )}
+                    {hasActions && !canManage && b.faUser?.id === currentUserId && b.extensionStatus !== 'Pending' && (
+                        <Button size="sm" variant="outline" disabled={busy} onClick={onExtend}>
+                            Request Extension
+                        </Button>
+                    )}
+                </div>
+            )}
+            {expanded && (
+                <div className="mt-3">
+                    <BookerDetail b={b} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+/** Alert chips surfacing what needs attention right now — overdue returns, pending
+ * extension requests, and bookings about to start — without digging through tabs. */
+function AlertsStrip({
+    stadiumId,
+    refreshKey,
+    onNavigate,
+}: {
+    stadiumId?: string;
+    refreshKey?: number;
+    onNavigate: (tab: string) => void;
+}) {
+    const [rows, setRows] = useState<Booking[]>([]);
+
+    useEffect(() => {
+        const params: Record<string, string> = { status: 'Approved' };
+        if (stadiumId) params.stadiumId = stadiumId;
+        poolBookingRequestsApi.getAll(params)
+            .then((res) => setRows(res.data.data || []))
+            .catch(() => setRows([]));
+    }, [stadiumId, refreshKey]);
+
+    const overdue = rows.filter((b) => b.derivedState === 'Overdue');
+    const extensions = rows.filter((b) => b.extensionStatus === 'Pending');
+    const startingSoon = rows.filter((b) => {
+        if (b.derivedState !== 'Upcoming') return false;
+        return combineDateTime(b.startDate, b.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000;
+    });
+
+    const chips: Array<{ tab: string; label: string; icon: typeof AlertTriangle; cls: string }> = [
+        overdue.length > 0 && {
+            tab: 'live',
+            label: `${overdue.length} Overdue`,
+            icon: AlertTriangle,
+            cls: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100',
+        },
+        extensions.length > 0 && {
+            tab: 'live',
+            label: `${extensions.length} Extension request${extensions.length > 1 ? 's' : ''}`,
+            icon: Clock,
+            cls: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
+        },
+        startingSoon.length > 0 && {
+            tab: 'upcoming',
+            label: `${startingSoon.length} starting soon`,
+            icon: Bell,
+            cls: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100',
+        },
+    ].filter(Boolean) as Array<{ tab: string; label: string; icon: typeof AlertTriangle; cls: string }>;
+
+    if (chips.length === 0) return null;
+
+    return (
+        <div className="flex flex-wrap gap-2">
+            {chips.map((c, i) => (
+                <button
+                    key={i}
+                    onClick={() => onNavigate(c.tab)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${c.cls}`}
+                >
+                    <c.icon className="w-3.5 h-3.5" /> {c.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+/** Month calendar of approved bookings — click a day to see what's booked. Read-only;
+ * approving/rejecting/managing stays in the Review queue / Active & Overdue tabs. */
+function CalendarTab({ stadiumId, refreshKey }: { stadiumId?: string; refreshKey?: number }) {
+    const [monthCursor, setMonthCursor] = useState(() => {
+        const d = new Date();
+        d.setDate(1);
+        return d;
+    });
+    const [rows, setRows] = useState<Booking[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+    useEffect(() => {
+        setLoading(true);
+        const params: Record<string, string> = { status: 'Approved' };
+        if (stadiumId) params.stadiumId = stadiumId;
+        poolBookingRequestsApi.getAll(params)
+            .then((res) => setRows(res.data.data || []))
+            .finally(() => setLoading(false));
+    }, [stadiumId, refreshKey]);
+
+    const byDate = new Map<string, Booking[]>();
+    for (const b of rows) {
+        const cur = new Date(`${b.startDate}T00:00:00`);
+        const end = new Date(`${b.endDate}T00:00:00`);
+        let guard = 0;
+        while (cur <= end && guard < 366) {
+            const key = cur.toISOString().slice(0, 10);
+            if (!byDate.has(key)) byDate.set(key, []);
+            byDate.get(key)!.push(b);
+            cur.setDate(cur.getDate() + 1);
+            guard++;
+        }
+    }
+
+    const year = monthCursor.getFullYear();
+    const month = monthCursor.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    const startWeekday = firstOfMonth.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: Array<{ date: string | null; dayNum: number | null }> = [];
+    for (let i = 0; i < startWeekday; i++) cells.push({ date: null, dayNum: null });
+    for (let d = 1; d <= daysInMonth; d++) {
+        cells.push({ date: `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, dayNum: d });
+    }
+
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const dayTone = (dayBookings: Booking[]): Tone => {
+        if (dayBookings.some((b) => b.derivedState === 'Overdue')) return 'red';
+        if (dayBookings.some((b) => b.derivedState === 'Active')) return 'green';
+        if (dayBookings.length > 0) return 'blue';
+        return 'muted';
+    };
+    const dotCls: Record<Tone, string> = {
+        red: 'bg-red-500',
+        amber: 'bg-amber-500',
+        blue: 'bg-sky-500',
+        green: 'bg-emerald-500',
+        muted: '',
+    };
+
+    const selectedRows = selectedDate ? byDate.get(selectedDate) || [] : [];
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <Button variant="outline" size="icon" onClick={() => setMonthCursor(new Date(year, month - 1, 1))}>
+                    <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <h3 className="font-semibold text-lg">
+                    {monthCursor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                </h3>
+                <Button variant="outline" size="icon" onClick={() => setMonthCursor(new Date(year, month + 1, 1))}>
+                    <ChevronRight className="w-4 h-4" />
+                </Button>
+            </div>
+            {loading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            ) : (
+                <>
+                    <div className="grid grid-cols-7 gap-1.5 text-center text-xs text-muted-foreground font-medium mb-1">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d}>{d}</div>)}
+                    </div>
+                    <div className="grid grid-cols-7 gap-1.5">
+                        {cells.map((c, i) => {
+                            if (!c.date) return <div key={`blank-${i}`} />;
+                            const dayBookings = byDate.get(c.date) || [];
+                            const tone = dayTone(dayBookings);
+                            const isToday = c.date === todayKey;
+                            const isSelected = c.date === selectedDate;
+                            return (
+                                <button
+                                    key={c.date}
+                                    onClick={() => setSelectedDate(isSelected ? null : c.date)}
+                                    className={`aspect-square rounded-lg border p-1.5 flex flex-col items-center justify-center gap-0.5 text-sm transition-colors
+                                        ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border hover:border-primary/50'}
+                                        ${isToday ? 'bg-primary/5 font-bold' : ''}`}
+                                >
+                                    <span>{c.dayNum}</span>
+                                    {dayBookings.length > 0 && <span className={`w-1.5 h-1.5 rounded-full ${dotCls[tone]}`} />}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {selectedDate && (
+                        <div className="pt-2">
+                            <h4 className="text-sm font-semibold text-muted-foreground mb-2">
+                                {dayLabel(selectedDate)} · {selectedRows.length} booking{selectedRows.length === 1 ? '' : 's'}
+                            </h4>
+                            {selectedRows.length === 0 ? (
+                                <p className="text-sm text-muted-foreground py-4 text-center">No bookings this day.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {selectedRows.map((b) => <BookingCard key={b.id} b={b} canManage={false} />)}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
 function LiveBookingsPanel({
     mode,
     stadiumId,
     canManage,
     currentUserId,
+    onChanged,
 }: {
     mode: 'live' | 'upcoming';
     stadiumId?: string;
     canManage: boolean;
     currentUserId?: string;
+    onChanged?: () => void;
 }) {
     const [rows, setRows] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
@@ -139,6 +502,7 @@ function LiveBookingsPanel({
             await poolBookingRequestsApi.markReturned(id);
             toast.success('Booking marked returned');
             load();
+            onChanged?.();
         } catch (e: any) {
             toast.error(e.response?.data?.error || 'Failed to mark returned');
         } finally {
@@ -152,6 +516,7 @@ function LiveBookingsPanel({
             await poolBookingRequestsApi.markKeyCollected(id);
             toast.success('Key collection confirmed');
             load();
+            onChanged?.();
         } catch (e: any) {
             toast.error(e.response?.data?.error || 'Failed to confirm key collection');
         } finally {
@@ -167,6 +532,7 @@ function LiveBookingsPanel({
             toast.success('Extension requested — waiting for Admin approval');
             setExtendTarget(null);
             load();
+            onChanged?.();
         } catch (e: any) {
             toast.error(e.response?.data?.error || 'Failed to request extension');
         } finally {
@@ -180,6 +546,7 @@ function LiveBookingsPanel({
             await poolBookingRequestsApi.reviewExtension(id, approve);
             toast.success(approve ? 'Extension approved' : 'Extension rejected');
             load();
+            onChanged?.();
         } catch (e: any) {
             toast.error(e.response?.data?.error || 'Failed to review extension');
         } finally {
@@ -190,91 +557,33 @@ function LiveBookingsPanel({
     if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
     if (rows.length === 0) return <div className="text-center py-8 text-muted-foreground">Nothing here right now.</div>;
 
+    const groups = groupByDay(rows);
+
     return (
-        <div className="overflow-x-auto">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead>Cart</TableHead>
-                        <TableHead>Requester / FA</TableHead>
-                        <TableHead>Window</TableHead>
-                        <TableHead>State</TableHead>
-                        {mode === 'live' && <TableHead className="text-right">Action</TableHead>}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {rows.map((b) => (
-                        <>
-                            <TableRow key={b.id}>
-                                <TableCell>
-                                    <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-muted-foreground">
-                                        {expanded === b.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                    </button>
-                                </TableCell>
-                                <TableCell>
-                                    <p className="font-medium">{b.fleet?.carNumber}</p>
-                                    <p className="text-xs text-muted-foreground">{b.fleet?.carType} · {b.stadium?.name}</p>
-                                </TableCell>
-                                <TableCell>
-                                    <p>{b.requesterName}</p>
-                                    <p className="text-xs text-muted-foreground">FA {b.faUser?.accreditationNumber ?? '—'} · {b.requesterPhone}</p>
-                                </TableCell>
-                                <TableCell className="text-sm">
-                                    {b.startDate} {b.startTime} → {b.endDate} {b.endTime}
-                                </TableCell>
-                                <TableCell>
-                                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${derivedBadge[b.derivedState || ''] || 'bg-muted'}`}>
-                                        {b.derivedState}
-                                    </span>
-                                    {b.derivedState === 'Overdue' && (
-                                        <span className="ml-2 text-xs text-red-600 font-semibold">should be returned</span>
-                                    )}
-                                    {b.extensionStatus === 'Pending' && (
-                                        <div className="mt-1 text-[10px] text-amber-700 font-semibold">
-                                            Extension requested → {b.extensionRequestedEndDate} {b.extensionRequestedEndTime}
-                                        </div>
-                                    )}
-                                </TableCell>
-                                {mode === 'live' && (
-                                    <TableCell className="text-right space-x-1 space-y-1">
-                                        {canManage && b.bookingType === 'Instant' && !b.keyCollectedAt && (
-                                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy === b.id} onClick={() => markCollected(b.id)}>
-                                                Confirm Key Collected
-                                            </Button>
-                                        )}
-                                        {canManage && (
-                                            <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => markReturned(b.id)}>
-                                                <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
-                                            </Button>
-                                        )}
-                                        {canManage && b.extensionStatus === 'Pending' && (
-                                            <>
-                                                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={busy === b.id} onClick={() => reviewExtension(b.id, true)}>
-                                                    Approve Extension
-                                                </Button>
-                                                <Button size="sm" variant="destructive" disabled={busy === b.id} onClick={() => reviewExtension(b.id, false)}>
-                                                    Reject
-                                                </Button>
-                                            </>
-                                        )}
-                                        {!canManage && b.faUser?.id === currentUserId && b.extensionStatus !== 'Pending' && (
-                                            <Button size="sm" variant="outline" disabled={busy === b.id} onClick={() => { setExtendTarget(b); setExtendDate(b.endDate); setExtendTime(b.endTime); }}>
-                                                Request Extension
-                                            </Button>
-                                        )}
-                                    </TableCell>
-                                )}
-                            </TableRow>
-                            {expanded === b.id && (
-                                <TableRow>
-                                    <TableCell colSpan={6}><BookerDetail b={b} /></TableCell>
-                                </TableRow>
-                            )}
-                        </>
-                    ))}
-                </TableBody>
-            </Table>
+        <div className="space-y-6">
+            {groups.map(([date, dayRows]) => (
+                <div key={date}>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-2">{dayLabel(date)}</h3>
+                    <div className="space-y-3">
+                        {dayRows.map((b) => (
+                            <BookingCard
+                                key={b.id}
+                                b={b}
+                                mode={mode}
+                                canManage={canManage}
+                                currentUserId={currentUserId}
+                                busy={busy === b.id}
+                                expanded={expanded === b.id}
+                                onToggleExpand={() => setExpanded(expanded === b.id ? null : b.id)}
+                                onMarkReturned={() => markReturned(b.id)}
+                                onMarkCollected={() => markCollected(b.id)}
+                                onExtend={() => { setExtendTarget(b); setExtendDate(b.endDate); setExtendTime(b.endTime); }}
+                                onReviewExtension={(approve) => reviewExtension(b.id, approve)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            ))}
 
             <Dialog open={!!extendTarget} onOpenChange={o => !o && setExtendTarget(null)}>
                 <DialogContent className="max-w-sm">
@@ -647,6 +956,9 @@ export function BookingsPage() {
     const [stadiumFilter, setStadiumFilter] = useState('');
     // Panels are venue-scoped by the server for Admin/FA; SuperAdmin can narrow with the picker.
     const panelStadiumId = isAdmin ? user?.stadiumId || undefined : stadiumFilter || undefined;
+    const [activeTab, setActiveTab] = useState('queue');
+    // Bumped after any mutation so the alerts strip / calendar / live panels refetch in sync.
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const [selected, setSelected] = useState<Booking | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -722,6 +1034,7 @@ export function BookingsPage() {
             setReviewOpen(false);
             toast.success(reviewAction === 'approve' ? 'Booking approved' : 'Booking rejected');
             loadBookings();
+            setRefreshKey((k) => k + 1);
         } catch (err: any) {
             if (err.response?.status === 409) {
                 setConflict(err.response.data.conflict);
@@ -773,6 +1086,7 @@ export function BookingsPage() {
             setEditOpen(false);
             toast.success('Booking updated');
             loadBookings();
+            setRefreshKey((k) => k + 1);
         } catch (err: any) {
             if (err.response?.status === 409) {
                 toast.error('This cart is already booked for an overlapping time — pick another cart or adjust the schedule');
@@ -790,6 +1104,7 @@ export function BookingsPage() {
             await poolBookingRequestsApi.amend(booking.id, { status: 'Cancelled' });
             toast.success('Booking cancelled');
             loadBookings();
+            setRefreshKey((k) => k + 1);
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to cancel booking');
         } finally {
@@ -872,7 +1187,7 @@ export function BookingsPage() {
                             Operating Hours
                         </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={loadBookings}>
+                    <Button variant="outline" size="sm" onClick={() => { loadBookings(); setRefreshKey((k) => k + 1); }}>
                         <RefreshCw className="w-4 h-4 mr-2" /> Refresh
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setReportIncidentOpen(true)}>
@@ -881,25 +1196,44 @@ export function BookingsPage() {
                 </div>
             </div>
 
+            <AlertsStrip stadiumId={panelStadiumId} refreshKey={refreshKey} onNavigate={setActiveTab} />
+
             <ReportIncidentModal open={reportIncidentOpen} onOpenChange={setReportIncidentOpen} />
 
-            <Tabs defaultValue="queue">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="flex flex-wrap h-auto">
                     <TabsTrigger value="queue">Review queue</TabsTrigger>
                     <TabsTrigger value="live">Active &amp; Overdue</TabsTrigger>
                     <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+                    <TabsTrigger value="calendar">Calendar</TabsTrigger>
                     <TabsTrigger value="available">Available cars</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="live" className="pt-4">
                     <Card><CardContent className="pt-6">
-                        <LiveBookingsPanel mode="live" stadiumId={panelStadiumId} canManage={canManage} currentUserId={user?.id} />
+                        <LiveBookingsPanel
+                            mode="live"
+                            stadiumId={panelStadiumId}
+                            canManage={canManage}
+                            currentUserId={user?.id}
+                            onChanged={() => setRefreshKey((k) => k + 1)}
+                        />
                     </CardContent></Card>
                 </TabsContent>
                 <TabsContent value="upcoming" className="pt-4">
                     <Card><CardContent className="pt-6">
-                        <LiveBookingsPanel mode="upcoming" stadiumId={panelStadiumId} canManage={canManage} />
+                        <LiveBookingsPanel
+                            mode="upcoming"
+                            stadiumId={panelStadiumId}
+                            canManage={canManage}
+                            onChanged={() => setRefreshKey((k) => k + 1)}
+                        />
+                    </CardContent></Card>
+                </TabsContent>
+                <TabsContent value="calendar" className="pt-4">
+                    <Card><CardContent className="pt-6">
+                        <CalendarTab stadiumId={panelStadiumId} refreshKey={refreshKey} />
                     </CardContent></Card>
                 </TabsContent>
                 <TabsContent value="available" className="pt-4">
