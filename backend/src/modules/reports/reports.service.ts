@@ -267,18 +267,19 @@ export class ReportsService {
             _count: { _all: true },
         });
 
-        // 2. Cart Status Summary — pool cars are called out as their own slice rather
-        // than being lumped into whatever status (usually 'Available') they happen to be in.
+        // 2. Cart Status Summary — an idle pool car (isPool + status 'Available') is called
+        // out as its own "Pool" slice instead of hiding inside "Available"; a pool car that's
+        // actually assigned/checked out still shows under its real status like any other cart.
         const fleetByStatusRaw = await this.prisma.fleet.groupBy({
             by: ['status'],
-            where: { ...where, isPool: false },
+            where: { ...where, OR: [{ isPool: false }, { status: { not: 'Available' } }] },
             _count: { _all: true },
         });
-        const poolCartCount = await this.prisma.fleet.count({
-            where: { ...where, isPool: true },
+        const poolAvailableCount = await this.prisma.fleet.count({
+            where: { ...where, isPool: true, status: 'Available' },
         });
-        const fleetByStatus = poolCartCount > 0
-            ? [...fleetByStatusRaw, { status: 'Pool', _count: { _all: poolCartCount } }]
+        const fleetByStatus = poolAvailableCount > 0
+            ? [...fleetByStatusRaw, { status: 'Pool', _count: { _all: poolAvailableCount } }]
             : fleetByStatusRaw;
 
         // 3. Active Users
@@ -407,6 +408,9 @@ export class ReportsService {
         );
 
         // 9. Pool bookings today (available / in use / overdue)
+        const poolCartCount = await this.prisma.fleet.count({
+            where: { ...where, isPool: true },
+        });
         const liveBookings = await this.prisma.poolBookingRequest.findMany({
             where: {
                 status: 'Approved',
