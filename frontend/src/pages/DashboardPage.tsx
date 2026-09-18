@@ -278,8 +278,8 @@ const COLORS = ['#1E88E5', '#43A047', '#FDD835', '#E53935', '#8E24AA'];
 const CAR_TYPE_COLORS: Record<string, string> = {
     '4-Seater': '#3b82f6',
     '6-Seater': '#22c55e',
-    'Cargo': '#eab308',
-    'Accessibility': '#a855f7',
+    'Cargo': '#ef4444',
+    'Accessibility': '#eab308',
 };
 const DEFAULT_TYPE_COLOR = '#64748b';
 
@@ -633,17 +633,17 @@ export function DashboardPage() {
                                             </p>
                                             <p className="text-xs text-green-600 dark:text-green-400">6-Seater</p>
                                         </div>
-                                        <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded p-2 text-center">
-                                            <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">
+                                        <div className="bg-red-100 dark:bg-red-900/30 rounded p-2 text-center">
+                                            <p className="text-lg font-bold text-red-700 dark:text-red-300">
                                                 {stadium.fleetBreakdown?.['Cargo'] || 0}
                                             </p>
-                                            <p className="text-xs text-yellow-600 dark:text-yellow-400">Cargo</p>
+                                            <p className="text-xs text-red-600 dark:text-red-400">Cargo</p>
                                         </div>
-                                        <div className="bg-purple-100 dark:bg-purple-900/30 rounded p-2 text-center">
-                                            <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                                        <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded p-2 text-center">
+                                            <p className="text-lg font-bold text-yellow-700 dark:text-yellow-300">
                                                 {stadium.fleetBreakdown?.['Accessibility'] || 0}
                                             </p>
-                                            <p className="text-xs text-purple-600 dark:text-purple-400">Accessible</p>
+                                            <p className="text-xs text-yellow-600 dark:text-yellow-400">Accessible</p>
                                         </div>
                                     </div>
 
