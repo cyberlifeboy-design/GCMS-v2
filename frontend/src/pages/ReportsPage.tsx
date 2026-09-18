@@ -80,7 +80,7 @@ interface UserReport {
 export function ReportsPage() {
     const { user } = useAuthStore();
     const role = user?.role;
-    const canViewReports = role === 'SuperAdmin' || role === 'Admin' || role === 'Observer';
+    const canViewReports = role === 'SuperAdmin' || role === 'Admin' || role === 'Observer' || role === 'Contracts';
     const defaultExportFormat = user?.exportFormat || 'xlsx';
     // Only Admin is locked to their own venue; Observer/Contracts/MaintenanceTeam see all stadiums
     const isStadiumLocked = !!(user?.stadiumId && role === 'Admin');

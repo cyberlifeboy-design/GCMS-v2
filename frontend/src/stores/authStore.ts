@@ -91,7 +91,7 @@ interface AuthState {
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
     loginWithMicrosoft: (idToken: string) => Promise<{ registered: true } | { registered: false; email: string; name: string }>;
-    logout: () => void;
+    logout: () => Promise<void>;
     updateExportFormat: (format: 'xlsx' | 'pdf' | 'docx') => void;
     updateExportPreferences: (preferences: ExportPreferences) => void;
 }
@@ -132,9 +132,15 @@ export const useAuthStore = create<AuthState>()(
                     throw error;
                 }
             },
-            logout: () => {
+            logout: async () => {
+                try {
+                    await authApi.logout();
+                } catch {
+                    // Best-effort — token may already be expired/invalid; still clear locally.
+                }
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
+                localStorage.removeItem('auth-storage');
                 set({ user: null, isAuthenticated: false });
                 // Full document load so no in-memory state (React Query caches,
                 // component state) survives. Guard against a reload loop when

@@ -121,23 +121,28 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     flex flex-col
                 `}>
                     {/* Header with Tournament Name and Logo */}
-                    <div className="p-4 border-b">
+                    <div className="relative bg-gradient-to-br from-primary via-primary to-primary/70 text-primary-foreground p-5">
                         <div className="flex items-center gap-3">
-                            <div className="min-w-0">
-                                <h1 className="text-lg font-bold truncate">
-                                    {branding.tournamentName || 'GCMS Fleet Management'}
-                                </h1>
-                            </div>
-                            {branding.logoUrl && (
+                            {branding.logoUrl ? (
                                 <img
                                     src={branding.logoUrl}
                                     alt="Logo"
-                                    className="w-10 h-10 object-contain flex-shrink-0"
+                                    className="w-12 h-12 object-contain flex-shrink-0 rounded bg-white/90 p-1"
                                 />
+                            ) : (
+                                <div className="w-12 h-12 rounded bg-white/15 flex items-center justify-center flex-shrink-0">
+                                    <Car className="w-6 h-6" />
+                                </div>
                             )}
+                            <div className="min-w-0">
+                                <h1 className="text-sm font-bold leading-snug line-clamp-2">
+                                    {branding.tournamentName || 'GCMS'}
+                                </h1>
+                                <p className="text-[11px] opacity-80 leading-tight truncate">Golf Cart Management System</p>
+                            </div>
                         </div>
                         <button
-                            className="lg:hidden absolute top-4 right-4 p-2 hover:bg-accent rounded-md"
+                            className="lg:hidden absolute top-4 right-4 p-2 hover:bg-white/10 rounded-md"
                             onClick={() => setSidebarOpen(false)}
                         >
                             <X className="w-5 h-5" />
@@ -145,7 +150,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     </div>
 
                     {/* Navigation */}
-                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                    <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
                         {filteredNavItems.map((item) => {
                             const Icon = item.icon;
                             const isActive = location.pathname === item.href;
