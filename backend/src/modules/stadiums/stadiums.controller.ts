@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { stadiumsService } from './stadiums.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { resolveStadiumScope } from '../reports/reports.scope';
 
 // Helper to safely parse params
 const parseParam = (param: unknown): string | undefined => {
@@ -15,10 +16,11 @@ export class StadiumController {
         try {
             const pageParam = parseParam(req.query.page);
             const limitParam = parseParam(req.query.limit);
+            const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const result = await stadiumsService.getAll({
                 page: pageParam ? parseInt(pageParam) : undefined,
                 limit: limitParam ? parseInt(limitParam) : undefined,
-            });
+            }, stadiumId);
             res.json(result);
         } catch (error) {
             res.status(500).json({ error: (error as Error).message });
@@ -30,6 +32,10 @@ export class StadiumController {
             const id = parseParam(req.params.id);
             if (!id) {
                 res.status(400).json({ error: 'Stadium ID is required' });
+                return;
+            }
+            if (req.user?.role === 'Admin' && req.user.stadiumId !== id) {
+                res.status(403).json({ error: 'Access denied to this venue' });
                 return;
             }
             const stadium = await stadiumsService.getById(id);

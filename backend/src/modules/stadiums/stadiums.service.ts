@@ -40,18 +40,20 @@ export class StadiumsService {
         this.prisma = prisma;
     }
 
-    async getAll(pagination?: PaginationParams): Promise<PaginatedResult<StadiumWithFleetStats>> {
+    async getAll(pagination?: PaginationParams, stadiumId?: string): Promise<PaginatedResult<StadiumWithFleetStats>> {
         const page = pagination?.page || 1;
         const limit = pagination?.limit || 50;
         const skip = (page - 1) * limit;
+        const where = stadiumId ? { id: stadiumId } : {};
 
         const [stadiums, total] = await Promise.all([
             this.prisma.stadium.findMany({
+                where,
                 orderBy: { name: 'asc' },
                 skip,
                 take: limit,
             }),
-            this.prisma.stadium.count(),
+            this.prisma.stadium.count({ where }),
         ]);
 
         // Get fleet counts per stadium

@@ -313,7 +313,7 @@ export class ReportsService {
 
         // 7. Stadium Information
         const activeStadiums = await this.prisma.stadium.findMany({
-            where: { isActive: true },
+            where: { isActive: true, ...(filters.stadiumId && { id: filters.stadiumId }) },
             select: {
                 id: true,
                 name: true,
