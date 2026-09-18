@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { notificationTemplatesApi } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ChevronDown, ChevronUp, Save, RotateCcw, Mail, Bell } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Save, RotateCcw, Mail, Bell, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Template {
@@ -26,7 +26,16 @@ interface Template {
     updatedAt: string;
 }
 
-const CATEGORY_ORDER = ['System', 'Requests', 'Bookings', 'Accounts', 'Incidents', 'Handover'];
+const CATEGORY_ORDER = ['System', 'Requests', 'Bookings', 'Accounts', 'Access Requests', 'Incidents', 'Handover'];
+
+/** "venueName" -> "Venue Name" — a readable stand-in for {{var}} in the preview, no example data needed per template. */
+function humanizeVar(v: string): string {
+    return v.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
+}
+
+function previewText(text: string): string {
+    return text.replace(/\{\{(\w+)\}\}/g, (_match, name) => `[${humanizeVar(name)}]`);
+}
 
 export function NotificationTemplatesPanel() {
     const [loading, setLoading] = useState(true);
@@ -35,6 +44,29 @@ export function NotificationTemplatesPanel() {
     const [drafts, setDrafts] = useState<Record<string, Template>>({});
     const [saving, setSaving] = useState<string | null>(null);
     const [resetting, setResetting] = useState<string | null>(null);
+    const [previewOpen, setPreviewOpen] = useState<Record<string, boolean>>({});
+
+    type EditableField = 'emailSubject' | 'emailBody' | 'pushTitle' | 'pushMessage';
+    const lastFocused = useRef<Record<string, EditableField>>({});
+    const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
+
+    const insertVariable = (key: string, varName: string) => {
+        const field = lastFocused.current[key] || 'emailBody';
+        const el = fieldRefs.current[`${key}:${field}`];
+        const draft = drafts[key];
+        if (!draft) return;
+        const current = draft[field] || '';
+        const start = el?.selectionStart ?? current.length;
+        const end = el?.selectionEnd ?? start;
+        const insertion = `{{${varName}}}`;
+        updateDraft(key, { [field]: current.slice(0, start) + insertion + current.slice(end) });
+        requestAnimationFrame(() => {
+            if (!el) return;
+            el.focus();
+            const pos = start + insertion.length;
+            el.setSelectionRange(pos, pos);
+        });
+    };
 
     const load = () => {
         setLoading(true);
@@ -143,14 +175,31 @@ export function NotificationTemplatesPanel() {
 
                                     {isOpen && (
                                         <CardContent className="p-6 pt-0 border-t space-y-6 animate-in slide-in-from-top-2 duration-200">
-                                            {t.variables.length > 0 && (
-                                                <div className="flex flex-wrap gap-1.5 pt-4">
-                                                    <span className="text-xs text-muted-foreground mr-1">Available variables:</span>
-                                                    {t.variables.map((v) => (
-                                                        <Badge key={v} variant="outline" className="font-mono text-[10px]">{`{{${v}}}`}</Badge>
-                                                    ))}
-                                                </div>
-                                            )}
+                                            <div className="flex items-center justify-between pt-4">
+                                                {t.variables.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <span className="text-xs text-muted-foreground mr-1 self-center">Click to insert:</span>
+                                                        {t.variables.map((v) => (
+                                                            <Badge
+                                                                key={v}
+                                                                variant="outline"
+                                                                className="font-mono text-[10px] cursor-pointer hover:bg-primary/10 hover:border-primary"
+                                                                onClick={() => insertVariable(t.key, v)}
+                                                                title={`Insert into ${humanizeVar(lastFocused.current[t.key] || 'emailBody')}`}
+                                                            >
+                                                                {`{{${v}}}`}
+                                                            </Badge>
+                                                        ))}
+                                                    </div>
+                                                ) : <span />}
+                                                <Button
+                                                    type="button" variant="ghost" size="sm"
+                                                    onClick={() => setPreviewOpen((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                                                >
+                                                    {previewOpen[t.key] ? <EyeOff className="w-4 h-4 mr-1.5" /> : <Eye className="w-4 h-4 mr-1.5" />}
+                                                    {previewOpen[t.key] ? 'Hide preview' : 'Preview'}
+                                                </Button>
+                                            </div>
 
                                             {/* Email */}
                                             <div className="space-y-3 rounded-2xl border bg-muted/5 p-4">
@@ -167,20 +216,30 @@ export function NotificationTemplatesPanel() {
                                                         <div className="space-y-1.5">
                                                             <Label className="text-xs">Subject</Label>
                                                             <Input
+                                                                ref={(el) => { fieldRefs.current[`${t.key}:emailSubject`] = el; }}
                                                                 value={draft.emailSubject || ''}
                                                                 onChange={(e) => updateDraft(t.key, { emailSubject: e.target.value })}
+                                                                onFocus={() => { lastFocused.current[t.key] = 'emailSubject'; }}
                                                                 disabled={!draft.emailEnabled}
                                                             />
+                                                            {previewOpen[t.key] && (
+                                                                <p className="text-sm italic text-muted-foreground border rounded-lg px-3 py-2 bg-background">{previewText(draft.emailSubject || '')}</p>
+                                                            )}
                                                         </div>
                                                         <div className="space-y-1.5">
                                                             <Label className="text-xs">Body</Label>
                                                             <Textarea
+                                                                ref={(el) => { fieldRefs.current[`${t.key}:emailBody`] = el; }}
                                                                 value={draft.emailBody || ''}
                                                                 onChange={(e) => updateDraft(t.key, { emailBody: e.target.value })}
+                                                                onFocus={() => { lastFocused.current[t.key] = 'emailBody'; }}
                                                                 disabled={!draft.emailEnabled}
                                                                 rows={6}
                                                                 className="font-mono text-sm"
                                                             />
+                                                            {previewOpen[t.key] && (
+                                                                <p className="text-sm whitespace-pre-wrap border rounded-lg px-3 py-2 bg-background">{previewText(draft.emailBody || '')}</p>
+                                                            )}
                                                         </div>
                                                     </>
                                                 ) : (
@@ -203,20 +262,30 @@ export function NotificationTemplatesPanel() {
                                                         <div className="space-y-1.5">
                                                             <Label className="text-xs">Title</Label>
                                                             <Input
+                                                                ref={(el) => { fieldRefs.current[`${t.key}:pushTitle`] = el; }}
                                                                 value={draft.pushTitle || ''}
                                                                 onChange={(e) => updateDraft(t.key, { pushTitle: e.target.value })}
+                                                                onFocus={() => { lastFocused.current[t.key] = 'pushTitle'; }}
                                                                 disabled={!draft.pushEnabled}
                                                             />
+                                                            {previewOpen[t.key] && (
+                                                                <p className="text-sm italic text-muted-foreground border rounded-lg px-3 py-2 bg-background">{previewText(draft.pushTitle || '')}</p>
+                                                            )}
                                                         </div>
                                                         <div className="space-y-1.5">
                                                             <Label className="text-xs">Message</Label>
                                                             <Textarea
+                                                                ref={(el) => { fieldRefs.current[`${t.key}:pushMessage`] = el; }}
                                                                 value={draft.pushMessage || ''}
                                                                 onChange={(e) => updateDraft(t.key, { pushMessage: e.target.value })}
+                                                                onFocus={() => { lastFocused.current[t.key] = 'pushMessage'; }}
                                                                 disabled={!draft.pushEnabled}
                                                                 rows={3}
                                                                 className="font-mono text-sm"
                                                             />
+                                                            {previewOpen[t.key] && (
+                                                                <p className="text-sm whitespace-pre-wrap border rounded-lg px-3 py-2 bg-background">{previewText(draft.pushMessage || '')}</p>
+                                                            )}
                                                         </div>
                                                     </>
                                                 ) : (

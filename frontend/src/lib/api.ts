@@ -411,8 +411,8 @@ export const accessRequestsApi = {
         apiClient.get('/access-requests', { params }),
     getById: (id: string) =>
         apiClient.get(`/access-requests/${id}`),
-    approve: (id: string, reviewNotes?: string) =>
-        apiClient.post(`/access-requests/${id}/approve`, { reviewNotes }),
+    approve: (id: string, reviewNotes?: string, departmentId?: string) =>
+        apiClient.post(`/access-requests/${id}/approve`, { reviewNotes, departmentId }),
     reject: (id: string, reviewNotes?: string) =>
         apiClient.post(`/access-requests/${id}/reject`, { reviewNotes }),
     delete: (id: string) =>

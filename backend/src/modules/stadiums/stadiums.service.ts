@@ -3,6 +3,8 @@ import { prisma } from '../../config/database';
 import { resolveMapsLinkCoords } from '../../services/geocode.service';
 import { usersService } from '../users/users.service';
 import { resolveVenueAdminAssignment } from './venue-admin-assignment';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
+import { emailService, textToSimpleHtml } from '../../services/email.service';
 
 export interface PaginationParams {
     page?: number;
@@ -160,10 +162,11 @@ export class StadiumsService {
         });
     }
 
-    /** SuperAdmin convenience action: turn a name+email into this venue's Admin,
-     * reusing the same temp-password/welcome-email path a fresh user create goes through. */
+    /** SuperAdmin convenience action: turn a name+email into this venue's Admin. Always
+     * sends the "Venue Logistics Manager" email (in place of the generic account-created
+     * one on the create path) so the person knows what they were assigned and how to sign in. */
     async assignAdmin(stadiumId: string, data: { name: string; email: string }) {
-        const stadium = await this.prisma.stadium.findUnique({ where: { id: stadiumId }, select: { id: true } });
+        const stadium = await this.prisma.stadium.findUnique({ where: { id: stadiumId }, select: { id: true, name: true } });
         if (!stadium) throw new Error('Stadium not found');
 
         const existingUser = await this.prisma.user.findUnique({
@@ -174,13 +177,25 @@ export class StadiumsService {
         const decision = resolveVenueAdminAssignment(existingUser);
         if (decision.action === 'blocked') throw new Error(decision.reason);
 
-        if (decision.action === 'promote') {
-            const user = await usersService.update(decision.userId, { name: data.name, role: 'Admin', stadiumId });
-            return { user, promoted: true };
-        }
+        const user = decision.action === 'promote'
+            ? await usersService.update(decision.userId, { name: data.name, role: 'Admin', stadiumId })
+            : await usersService.create({ name: data.name, email: data.email, role: 'Admin', stadiumId, skipWelcomeEmail: true });
 
-        const user = await usersService.create({ name: data.name, email: data.email, role: 'Admin', stadiumId });
-        return { user, promoted: false };
+        await this.sendVenueAdminAssignedEmail(data.name, data.email, stadium.name);
+
+        return { user, promoted: decision.action === 'promote' };
+    }
+
+    private async sendVenueAdminAssignedEmail(name: string, email: string, venueName: string) {
+        try {
+            const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+            const rendered = await notificationTemplatesService.renderEmail('venue_admin_assigned', { name, venueName, loginUrl });
+            if (rendered) {
+                await emailService.send({ to: email, subject: rendered.subject, text: rendered.body, html: textToSimpleHtml(rendered.body) });
+            }
+        } catch (e) {
+            console.error('Venue admin assigned email failed:', e);
+        }
     }
 
     async getPoolBookingHours(id: string) {

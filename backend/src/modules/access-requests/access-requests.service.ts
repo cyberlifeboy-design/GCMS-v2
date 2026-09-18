@@ -2,7 +2,9 @@ import { prisma } from '../../config/database';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { notificationService } from '../notifications/notification.service';
-import { emailService } from '../../services/email.service';
+import { emailService, textToSimpleHtml } from '../../services/email.service';
+import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
+import { resolveApprovalDepartment } from './approval-department';
 
 export interface CreateAccessRequestData {
     name: string;
@@ -28,14 +30,41 @@ export class AccessRequestsService {
     private async notifyRequester(args: {
         email: string; name: string; status: 'Approved' | 'Rejected'; reviewNotes?: string;
     }) {
-        const subject = `Your GCMS access request has been ${args.status.toLowerCase()}`;
-        const body = args.status === 'Approved'
-            ? `Hello ${args.name},\n\nYour account access request has been approved. You can now sign in using your SC/LOC Microsoft account from the GCMS login page.\n${args.reviewNotes ? `\nNotes: ${args.reviewNotes}\n` : ''}\nThank you,\nGCMS`
-            : `Hello ${args.name},\n\nYour account access request has been rejected.\n${args.reviewNotes ? `\nReason: ${args.reviewNotes}\n` : ''}\nThank you,\nGCMS`;
+        const key = args.status === 'Approved' ? 'access_request_approved' : 'access_request_rejected';
+        const reviewNotesLine = args.reviewNotes ? `\n${args.status === 'Approved' ? 'Notes' : 'Reason'}: ${args.reviewNotes}\n` : '';
         try {
-            await emailService.send({ to: args.email, subject, text: body });
+            const rendered = await notificationTemplatesService.renderEmail(key, { name: args.name, reviewNotesLine });
+            if (rendered) {
+                await emailService.send({ to: args.email, subject: rendered.subject, text: rendered.body, html: textToSimpleHtml(rendered.body) });
+            }
         } catch (e) {
             console.error('Access request requester email failed:', e);
+        }
+    }
+
+    /** Emails the venue's Admin(s) and every SuperAdmin that a new request needs review — alongside the existing in-app notification. */
+    private async notifyReviewers(request: { name: string; stadiumId: string; stadium?: { name: string } | null; department?: { name: string } | null }) {
+        try {
+            const reviewers = await prisma.user.findMany({
+                where: { isActive: true, OR: [{ role: 'SuperAdmin' }, { role: 'Admin', stadiumId: request.stadiumId }] },
+                select: { email: true },
+            });
+            if (reviewers.length === 0) return;
+
+            const reviewUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/access-requests`;
+            const rendered = await notificationTemplatesService.renderEmail('access_request_received', {
+                requesterName: request.name,
+                departmentName: request.department?.name || '',
+                stadiumName: request.stadium?.name || '',
+                reviewUrl,
+            });
+            if (!rendered) return;
+
+            await Promise.all(reviewers.map(r =>
+                emailService.send({ to: r.email, subject: rendered.subject, text: rendered.body, html: textToSimpleHtml(rendered.body) })
+            ));
+        } catch (e) {
+            console.error('Access request reviewer email failed:', e);
         }
     }
 
@@ -91,6 +120,7 @@ export class AccessRequestsService {
             ['SuperAdmin', 'Admin'],
             data.stadiumId,
         );
+        await this.notifyReviewers(request);
 
         return request;
     }
@@ -140,10 +170,19 @@ export class AccessRequestsService {
         return { data, total };
     }
 
-    /** Approves the request, creating the User if one doesn't already exist for that email. */
-    async approveRequest(id: string, reviewedById: string, reviewNotes?: string) {
+    /** Approves the request, creating the User if one doesn't already exist for that email.
+     * `departmentIdOverride` lets the reviewer confirm or change the department the
+     * requester picked (defaulting to what was requested) before the account is created. */
+    async approveRequest(id: string, reviewedById: string, reviewNotes?: string, departmentIdOverride?: string) {
         const existing = await prisma.accessRequest.findUnique({ where: { id } });
         if (!existing) throw new Error('Request not found');
+
+        const overrideDept = departmentIdOverride && departmentIdOverride !== existing.departmentId
+            ? await prisma.department.findUnique({ where: { id: departmentIdOverride } })
+            : null;
+        const resolution = resolveApprovalDepartment(existing.departmentId, existing.stadiumId, overrideDept);
+        if ('error' in resolution) throw new Error(resolution.error);
+        const departmentId = resolution.departmentId;
 
         let user = await prisma.user.findUnique({ where: { email: existing.email } });
         if (!user) {
@@ -158,11 +197,13 @@ export class AccessRequestsService {
                     role: 'FA',
                     authProvider: 'microsoft',
                     stadiumId: existing.stadiumId,
-                    departmentId: existing.departmentId,
+                    departmentId,
                     exportPreferences: JSON.stringify({}),
                     grantedPages: JSON.stringify([]),
                 },
             });
+        } else if (user.departmentId !== departmentId) {
+            user = await prisma.user.update({ where: { id: user.id }, data: { departmentId } });
         }
 
         const request = await prisma.accessRequest.update({

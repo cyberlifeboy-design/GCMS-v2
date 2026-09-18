@@ -86,7 +86,7 @@ export const auditLog = () => {
                             entityType: entityType || 'Unknown',
                             entityId: entityId || 'N/A',
                             oldValue: undefined, // For updates, this should be populated before the change
-                            newValue: req.method === 'POST' || req.method === 'PUT' ? sanitizeBody(req.body) : undefined,
+                            newValue: req.method === 'POST' || req.method === 'PUT' ? JSON.stringify(sanitizeBody(req.body)) : undefined,
                             ipAddress,
                             userAgent,
                         },

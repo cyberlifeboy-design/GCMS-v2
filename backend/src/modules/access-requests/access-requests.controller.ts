@@ -14,12 +14,13 @@ const createAccessRequestSchema = z.object({
     invitationToken: z.string().optional(),
 });
 
-const reviewSchema = z.object({ reviewNotes: z.string().optional() });
+const reviewSchema = z.object({ reviewNotes: z.string().optional(), departmentId: z.string().optional() });
 
 function createErrorMessage(code: string): string {
     switch (code) {
         case 'VENUE_NOT_ACTIVE': return 'The selected venue is no longer active.';
         case 'DEPARTMENT_NOT_ACTIVE': return 'The selected department is no longer active at this venue.';
+        case 'DEPARTMENT_WRONG_VENUE': return 'That department does not belong to this request\'s venue.';
         default: return 'Failed to submit request';
     }
 }
@@ -132,7 +133,7 @@ export class AccessRequestsController {
     static async approve(req: AuthRequest, res: Response) {
         try {
             const id = req.params.id as string;
-            const { reviewNotes } = reviewSchema.parse(req.body);
+            const { reviewNotes, departmentId } = reviewSchema.parse(req.body);
 
             const existing = await accessRequestsService.getById(id);
             if (!existing) {
@@ -148,11 +149,13 @@ export class AccessRequestsController {
                 return;
             }
 
-            const request = await accessRequestsService.approveRequest(id, req.user!.userId, reviewNotes);
+            const request = await accessRequestsService.approveRequest(id, req.user!.userId, reviewNotes, departmentId);
             res.status(200).json({ message: 'Request approved successfully', data: request });
         } catch (error) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: 'Validation error', details: error.errors });
+            } else if (error instanceof Error && (error.message === 'DEPARTMENT_WRONG_VENUE' || error.message === 'DEPARTMENT_NOT_ACTIVE')) {
+                res.status(400).json({ error: createErrorMessage(error.message) });
             } else {
                 console.error('Approve access request error:', error);
                 res.status(500).json({ error: 'Failed to approve request' });

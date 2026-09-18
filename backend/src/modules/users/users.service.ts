@@ -142,6 +142,7 @@ export class UsersService {
         stadiumId?: string;
         departmentId?: string;
         assignAllStadiums?: boolean;
+        skipWelcomeEmail?: boolean;
     }) {
         const exists = await prisma.user.findUnique({ where: { email: data.email } });
         if (exists) throw new Error('User with this email already exists');
@@ -183,6 +184,7 @@ export class UsersService {
         });
 
         const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+        if (data.skipWelcomeEmail) return user;
         try {
             const rendered = await notificationTemplatesService.renderEmail('account_created', {
                 name: data.name,

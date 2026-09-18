@@ -3,6 +3,8 @@ import { accessRequestsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import {
@@ -48,6 +50,8 @@ export function AccessRequestsManagementPage() {
     const [reviewNotes, setReviewNotes] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
     const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null);
+    const [approveDepartments, setApproveDepartments] = useState<{ id: string; name: string }[]>([]);
+    const [approveDepartmentId, setApproveDepartmentId] = useState('');
 
     const load = async () => {
         setLoading(true);
@@ -63,12 +67,20 @@ export function AccessRequestsManagementPage() {
 
     useEffect(() => { load(); }, [statusFilter]);
 
+    useEffect(() => {
+        if (confirmAction !== 'approve' || !selected) { setApproveDepartments([]); return; }
+        setApproveDepartmentId(selected.department.id);
+        accessRequestsApi.getPublicDepartments(selected.stadium.id)
+            .then(res => setApproveDepartments(res.data?.data || []))
+            .catch(() => setApproveDepartments([]));
+    }, [confirmAction, selected]);
+
     const handleReview = async () => {
         if (!selected || !confirmAction) return;
         setActionLoading(true);
         try {
             if (confirmAction === 'approve') {
-                await accessRequestsApi.approve(selected.id, reviewNotes || undefined);
+                await accessRequestsApi.approve(selected.id, reviewNotes || undefined, approveDepartmentId || undefined);
                 toast.success('Request approved — the user can now sign in with their SC/LOC account.');
             } else {
                 await accessRequestsApi.reject(selected.id, reviewNotes || undefined);
@@ -167,6 +179,17 @@ export function AccessRequestsManagementPage() {
                             {selected?.name} — {selected?.department?.name} at {selected?.stadium?.name}
                         </DialogDescription>
                     </DialogHeader>
+                    {confirmAction === 'approve' && (
+                        <div className="space-y-1.5">
+                            <Label>Department</Label>
+                            <Select value={approveDepartmentId} onValueChange={setApproveDepartmentId}>
+                                <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
+                                <SelectContent>
+                                    {approveDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                     <Textarea
                         placeholder="Notes (optional)"
                         value={reviewNotes}
