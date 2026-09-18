@@ -1,6 +1,8 @@
 import { PrismaClient, Stadium } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { resolveMapsLinkCoords } from '../../services/geocode.service';
+import { usersService } from '../users/users.service';
+import { resolveVenueAdminAssignment } from './venue-admin-assignment';
 
 export interface PaginationParams {
     page?: number;
@@ -156,6 +158,29 @@ export class StadiumsService {
             where: { id },
             data: patch,
         });
+    }
+
+    /** SuperAdmin convenience action: turn a name+email into this venue's Admin,
+     * reusing the same temp-password/welcome-email path a fresh user create goes through. */
+    async assignAdmin(stadiumId: string, data: { name: string; email: string }) {
+        const stadium = await this.prisma.stadium.findUnique({ where: { id: stadiumId }, select: { id: true } });
+        if (!stadium) throw new Error('Stadium not found');
+
+        const existingUser = await this.prisma.user.findUnique({
+            where: { email: data.email },
+            select: { id: true, role: true },
+        });
+
+        const decision = resolveVenueAdminAssignment(existingUser);
+        if (decision.action === 'blocked') throw new Error(decision.reason);
+
+        if (decision.action === 'promote') {
+            const user = await usersService.update(decision.userId, { name: data.name, role: 'Admin', stadiumId });
+            return { user, promoted: true };
+        }
+
+        const user = await usersService.create({ name: data.name, email: data.email, role: 'Admin', stadiumId });
+        return { user, promoted: false };
     }
 
     async getPoolBookingHours(id: string) {

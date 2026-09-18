@@ -209,6 +209,8 @@ export const stadiumsApi = {
         apiClient.get(`/stadiums/${id}/pool-booking-hours`),
     updatePoolBookingHours: (id: string, data: { poolBookingStartTime: string | null; poolBookingEndTime: string | null }) =>
         apiClient.patch(`/stadiums/${id}/pool-booking-hours`, data),
+    assignAdmin: (id: string, data: { name: string; email: string }) =>
+        apiClient.post(`/stadiums/${id}/admins`, data),
 };
 
 // Departments

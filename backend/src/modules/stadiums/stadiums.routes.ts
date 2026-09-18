@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { StadiumController } from './stadiums.controller';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requireRole, checkStadiumAccess } from '../../middleware/rbac.middleware';
+import { auditLog } from '../../middleware/audit.middleware';
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.post('/', authenticate, requireRole('SuperAdmin'), StadiumController.crea
  * @access  Protected (SuperAdmin only)
  */
 router.put('/:id', authenticate, requireRole('SuperAdmin'), StadiumController.update);
+
+/**
+ * @route   POST /api/v1/stadiums/:id/admins
+ * @desc    Assign (create or promote) a venue Admin by name + email
+ * @access  Protected (SuperAdmin only)
+ */
+router.post('/:id/admins', authenticate, requireRole('SuperAdmin'), auditLog(), StadiumController.assignAdmin);
 
 /**
  * @route   GET /api/v1/stadiums/:id/pool-booking-hours

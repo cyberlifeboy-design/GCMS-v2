@@ -66,6 +66,25 @@ export class StadiumController {
         }
     }
 
+    static async assignAdmin(req: AuthRequest, res: Response): Promise<void> {
+        try {
+            const id = parseParam(req.params.id);
+            if (!id) {
+                res.status(400).json({ error: 'Stadium ID is required' });
+                return;
+            }
+            const { name, email } = req.body;
+            if (!name || !email) {
+                res.status(400).json({ error: 'name and email are required' });
+                return;
+            }
+            const result = await stadiumsService.assignAdmin(id, { name, email });
+            res.status(201).json(result);
+        } catch (error) {
+            res.status(400).json({ error: (error as Error).message });
+        }
+    }
+
     static async getPoolBookingHours(req: AuthRequest, res: Response): Promise<void> {
         try {
             const id = parseParam(req.params.id);

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility, PowerOff, Power, Trash2, Upload, CheckCircle2, SkipForward } from 'lucide-react';
+import { Plus, Search, Edit2, Loader2, MapPin, Truck, Users, UserPlus, Accessibility, PowerOff, Power, Trash2, Upload, CheckCircle2, SkipForward, ShieldCheck, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 
@@ -26,6 +26,12 @@ interface Stadium {
     location: string;
     isActive: boolean;
     fleetStats?: FleetStats;
+}
+
+interface VenueAdmin {
+    id: string;
+    name: string;
+    email: string;
 }
 
 const DEFAULT_VENUES = [
@@ -55,6 +61,12 @@ export function StadiumsPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<Stadium | null>(null);
 
     const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
+    const [adminModal, setAdminModal] = useState<{ open: boolean; stadium?: Stadium }>({ open: false });
+    const [venueAdmins, setVenueAdmins] = useState<VenueAdmin[]>([]);
+    const [adminsLoading, setAdminsLoading] = useState(false);
+    const [adminForm, setAdminForm] = useState({ name: '', email: '' });
+    const [adminSubmitting, setAdminSubmitting] = useState(false);
 
     const loadStadiums = async () => {
         try {
@@ -136,6 +148,43 @@ export function StadiumsPage() {
             toast.error(err.response?.data?.error || 'Bulk import failed');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const loadVenueAdmins = async (stadiumId: string) => {
+        setAdminsLoading(true);
+        try {
+            const res = await stadiumsApi.getById(stadiumId);
+            const users: (VenueAdmin & { role: string })[] = res.data.users || [];
+            setVenueAdmins(users.filter(u => u.role === 'Admin'));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setAdminsLoading(false);
+        }
+    };
+
+    const openAdminModal = (stadium: Stadium) => {
+        setAdminForm({ name: '', email: '' });
+        setAdminModal({ open: true, stadium });
+        loadVenueAdmins(stadium.id);
+    };
+
+    const handleAssignAdmin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!adminModal.stadium) return;
+        setAdminSubmitting(true);
+        try {
+            const res = await stadiumsApi.assignAdmin(adminModal.stadium.id, adminForm);
+            toast.success(res.data.promoted
+                ? `${adminForm.name} promoted to Admin for this venue`
+                : `${adminForm.name} created as Admin — welcome email sent`);
+            setAdminForm({ name: '', email: '' });
+            loadVenueAdmins(adminModal.stadium.id);
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to assign venue admin');
+        } finally {
+            setAdminSubmitting(false);
         }
     };
 
@@ -231,6 +280,9 @@ export function StadiumsPage() {
                                                 setFormData({ name: s.name, code: s.code, location: s.location });
                                                 setModal({ open: true, mode: 'edit', stadium: s });
                                             }}><Edit2 className="w-4 h-4" /></Button>
+                                            <Button variant="ghost" size="sm" title="Manage Venue Admins" onClick={() => openAdminModal(s)}>
+                                                <ShieldCheck className="w-4 h-4 text-blue-600" />
+                                            </Button>
                                             <Button variant="ghost" size="sm" title={s.isActive ? 'Make Inactive' : 'Make Active'} onClick={() => handleToggleActive(s)}>
                                                 {s.isActive ? <PowerOff className="w-4 h-4 text-yellow-600" /> : <Power className="w-4 h-4 text-green-600" />}
                                             </Button>
@@ -261,8 +313,8 @@ export function StadiumsPage() {
                             <Input value={formData.code} onChange={e => setFormData(f => ({ ...f, code: e.target.value }))} required placeholder="e.g. ABS" />
                         </div>
                         <div className="space-y-2">
-                            <Label>Location / Address</Label>
-                            <Input value={formData.location} onChange={e => setFormData(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Al Khor, Qatar" />
+                            <Label>Google Maps Link</Label>
+                            <Input value={formData.location} onChange={e => setFormData(f => ({ ...f, location: e.target.value }))} placeholder="Paste the venue's Google Maps share link" />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setModal(m => ({ ...m, open: false }))}>Cancel</Button>
@@ -313,6 +365,58 @@ export function StadiumsPage() {
                             Import Venues
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Manage Venue Admins Dialog */}
+            <Dialog open={adminModal.open} onOpenChange={o => setAdminModal(m => ({ ...m, open: o }))}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Venue Admins — {adminModal.stadium?.name}</DialogTitle>
+                        <DialogDescription>
+                            Admins can only see and manage this venue's fleet, users, and requests.
+                            Assigning an email already in GCMS promotes that account instead of creating a new one.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-2">
+                        {adminsLoading ? (
+                            <div className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin mx-auto" /></div>
+                        ) : venueAdmins.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No admin assigned to this venue yet.</p>
+                        ) : (
+                            <div className="border rounded-lg divide-y text-sm">
+                                {venueAdmins.map(a => (
+                                    <div key={a.id} className="flex items-center justify-between px-3 py-2">
+                                        <div>
+                                            <span className="font-medium">{a.name}</span>
+                                            <span className="text-muted-foreground ml-2">{a.email}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <form onSubmit={handleAssignAdmin} className="space-y-3 pt-2 border-t">
+                        <div className="space-y-2">
+                            <Label>Admin Name *</Label>
+                            <Input value={adminForm.name} onChange={e => setAdminForm(f => ({ ...f, name: e.target.value }))} required placeholder="Full name" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Admin Email *</Label>
+                            <Input type="email" value={adminForm.email} onChange={e => setAdminForm(f => ({ ...f, email: e.target.value }))} required placeholder="name@example.com" />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setAdminModal({ open: false })}>
+                                <X className="w-4 h-4 mr-2" />Close
+                            </Button>
+                            <Button type="submit" disabled={adminSubmitting}>
+                                {adminSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Assign as Venue Admin
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
 
