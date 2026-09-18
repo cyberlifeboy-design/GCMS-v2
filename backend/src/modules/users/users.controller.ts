@@ -148,6 +148,10 @@ export class UsersController {
                 res.status(404).json({ error: 'User not found' });
                 return;
             }
+            if (req.user?.role === 'Admin' && user.stadiumId !== req.user.stadiumId) {
+                res.status(403).json({ error: 'Access denied to this venue' });
+                return;
+            }
             res.status(200).json(user);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch user' });
