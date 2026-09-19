@@ -12,4 +12,7 @@ SyslogFacility DAEMON
 PasswordAuthentication yes
 PermitEmptyPasswords no
 PermitRootLogin yes
+# PAM's nss/utmp assumptions often don't hold in a minimal container and make
+# sshd accept the TCP connection then drop it during auth — bypass PAM entirely.
+UsePAM no
 Subsystem sftp internal-sftp
