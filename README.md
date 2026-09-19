@@ -397,15 +397,15 @@ into the JS bundle — an App Service setting alone does nothing there), and day
 design that was **not** what got built — it's kept only for historical reference and is
 marked superseded at the top of that file.
 
-> **Not the same server as `gcms.mehaisi.com`.** That's a separate, older production
-> deployment (PostgreSQL, real data, provisioned outside Azure App Service) that this
-> project's `docker-compose.yml` targets via its Traefik labels — it is untouched by the
-> Azure App Service work above and must never be redeployed with this repo's current
-> MySQL-based compose file (see the warning comment at the top of `docker-compose.yml`).
-> When "Azure production" is meant, it refers to the `rg-gcms-dev-qc-001` App Services
-> above, deployed via `az acr build` from the Azure Portal's Cloud Shell — see the runbook
-> for exact commands. This repo does not have Azure credentials and cannot trigger that
-> rebuild itself; a human with PIM-activated access must run it.
+> **Not the same server as `gcms.mehaisi.com`.** That's a separate **testing server**
+> (PostgreSQL) that this project's `docker-compose.yml` targets via its Traefik labels —
+> it is unrelated to and untouched by the Azure App Service (SC corporate) deployment
+> above, and must never be redeployed with this repo's current MySQL-based compose file
+> (see the warning comment at the top of `docker-compose.yml`). When "Azure" / "the SC
+> deployment" is meant, it refers to the `rg-gcms-dev-qc-001` App Services above, deployed
+> via `az acr build` from the Azure Portal's Cloud Shell — see the runbook for exact
+> commands. This repo does not have Azure credentials and cannot trigger that rebuild
+> itself; a human with PIM-activated access must run it.
 
 ### Default Users (after seed)
 
