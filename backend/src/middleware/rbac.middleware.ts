@@ -8,16 +8,6 @@ export type Role = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer' | 'Contracts' | 'M
  */
 export const requireRole = (...roles: Role[]) => {
     return (req: AuthRequest, res: Response, next: NextFunction) => {
-        // If testing and user is injected via header, use that
-        if (process.env.NODE_ENV === 'test' && req.headers['user']) {
-            const user = JSON.parse(req.headers['user'] as string);
-            if (roles.includes(user.role as Role)) {
-                req.user = user;
-                next();
-                return;
-            }
-        }
-
         if (!req.user) {
             res.status(401).json({ error: 'Authentication required' });
             return;

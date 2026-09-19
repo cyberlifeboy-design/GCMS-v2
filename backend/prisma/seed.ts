@@ -3,6 +3,16 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Fixed passwords below are LOCAL-DEV-ONLY fallbacks — fine for a throwaway local
+// database, never for a shared/staging/production one. Any shared environment must
+// set these env vars before seeding, since this file (and its defaults) is public on GitHub.
+const SEEDED_PASSWORDS_ARE_DEFAULT =
+    !process.env.SEED_SUPERADMIN_PASSWORD || !process.env.SEED_ADMIN_PASSWORD;
+const SUPERADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || 'Admin@2024!';
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin@2024!';
+const FA_PASSWORD = process.env.SEED_FA_PASSWORD || 'FA@2024!';
+const OBSERVER_PASSWORD = process.env.SEED_OBSERVER_PASSWORD || 'Observer@2024!';
+
 // ─── Default Venues (FAC25) ───────────────────────────────────────────────────
 const DEFAULT_VENUES = [
     { code: 'ABS', name: 'Al Bayet Stadium',              location: 'Al Khor, Qatar' },
@@ -117,9 +127,10 @@ async function main() {
         create: {
             name: 'Super Admin',
             email: 'superadmin@gcms.com',
-            passwordHash: await bcrypt.hash('Admin@2024!', 10),
+            passwordHash: await bcrypt.hash(SUPERADMIN_PASSWORD, 10),
             role: 'SuperAdmin',
             isActive: true,
+            mustChangePassword: SEEDED_PASSWORDS_ARE_DEFAULT,
         },
     });
     console.log(`✅ SuperAdmin: ${superAdmin.email}`);
@@ -130,10 +141,11 @@ async function main() {
         create: {
             name: 'Venue Admin',
             email: 'admin@gcms.com',
-            passwordHash: await bcrypt.hash('Admin@2024!', 10),
+            passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 10),
             role: 'Admin',
             isActive: true,
             stadiumId: firstVenueId,
+            mustChangePassword: SEEDED_PASSWORDS_ARE_DEFAULT,
         },
     });
     console.log(`✅ Admin: ${admin.email}`);
@@ -144,10 +156,11 @@ async function main() {
         create: {
             name: 'Fleet Attendant',
             email: 'fa@gcms.com',
-            passwordHash: await bcrypt.hash('FA@2024!', 10),
+            passwordHash: await bcrypt.hash(FA_PASSWORD, 10),
             role: 'FA',
             isActive: true,
             stadiumId: firstVenueId,
+            mustChangePassword: SEEDED_PASSWORDS_ARE_DEFAULT,
         },
     });
     console.log(`✅ FA: ${fa.email}`);
@@ -158,10 +171,11 @@ async function main() {
         create: {
             name: 'Observer',
             email: 'observer@gcms.com',
-            passwordHash: await bcrypt.hash('Observer@2024!', 10),
+            passwordHash: await bcrypt.hash(OBSERVER_PASSWORD, 10),
             role: 'Observer',
             isActive: true,
             assignAllStadiums: true,
+            mustChangePassword: SEEDED_PASSWORDS_ARE_DEFAULT,
         },
     });
     console.log(`✅ Observer: ${observer.email}`);
@@ -171,11 +185,18 @@ async function main() {
     console.log(`Venues     : ${venueIds.length} (ABS · AAS · ECS · JHS · KIS · LUS · ATS · 974)`);
     console.log(`Departments: ${DEFAULT_DEPARTMENTS.length} FAs × ${venueIds.length} venues`);
     console.log('Credentials:');
-    console.log('  SuperAdmin  superadmin@gcms.com  Admin@2024!');
-    console.log('  Admin       admin@gcms.com       Admin@2024!');
-    console.log('  FA          fa@gcms.com          FA@2024!');
-    console.log('  Observer    observer@gcms.com    Observer@2024!');
+    console.log(`  SuperAdmin  superadmin@gcms.com  ${SUPERADMIN_PASSWORD}`);
+    console.log(`  Admin       admin@gcms.com       ${ADMIN_PASSWORD}`);
+    console.log(`  FA          fa@gcms.com          ${FA_PASSWORD}`);
+    console.log(`  Observer    observer@gcms.com    ${OBSERVER_PASSWORD}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    if (SEEDED_PASSWORDS_ARE_DEFAULT) {
+        console.log('⚠️  Using built-in demo passwords (public in this repo on GitHub).');
+        console.log('   Fine for a local/throwaway database — every account above is');
+        console.log('   flagged mustChangePassword so first login forces a change.');
+        console.log('   For any shared/staging/production seed, set SEED_SUPERADMIN_PASSWORD,');
+        console.log('   SEED_ADMIN_PASSWORD, SEED_FA_PASSWORD, SEED_OBSERVER_PASSWORD first.');
+    }
 }
 
 main()

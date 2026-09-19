@@ -206,7 +206,7 @@ export function UsersPage() {
             const payload = {
                 name: formData.name,
                 email: formData.email,
-                password: formData.password || 'Admin@2024!',
+                password: formData.password || undefined,
                 role: formData.role,
                 phone: formData.phone || undefined,
                 accreditationNumber: formData.accreditationNumber || undefined,
@@ -751,8 +751,8 @@ export function UsersPage() {
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-sm font-semibold">Password (default: Admin@2024!)</Label>
-                                <Input type="password" value={formData.password} onChange={e => setFormData(f => ({ ...f, password: e.target.value }))} placeholder="Leave blank for default" />
+                                <Label className="text-sm font-semibold">Password</Label>
+                                <Input type="password" value={formData.password} onChange={e => setFormData(f => ({ ...f, password: e.target.value }))} placeholder="Leave blank to auto-generate and email one" />
                             </div>
                         </div>
                         <DialogFooter className="pt-4">

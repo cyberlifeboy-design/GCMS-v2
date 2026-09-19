@@ -31,8 +31,11 @@ async function main() {
   }
 
   // ── Dummy FA + Admin users per venue ──────────────────────────────────────
-  const faPasswordHash = await bcrypt.hash('FA@2024!', 10);
-  const adminPasswordHash = await bcrypt.hash('Admin@2024!', 10);
+  // Fallback passwords are LOCAL-DEV-ONLY (public in this repo) — set SEED_FA_PASSWORD /
+  // SEED_ADMIN_PASSWORD for any shared/staging seed run.
+  const usingDefaultPasswords = !process.env.SEED_FA_PASSWORD || !process.env.SEED_ADMIN_PASSWORD;
+  const faPasswordHash = await bcrypt.hash(process.env.SEED_FA_PASSWORD || 'FA@2024!', 10);
+  const adminPasswordHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD || 'Admin@2024!', 10);
 
   const faUsersByStadium: Record<string, { id: string }[]> = {};
 
@@ -49,6 +52,7 @@ async function main() {
         role: 'Admin',
         isActive: true,
         stadiumId: stadium.id,
+        mustChangePassword: usingDefaultPasswords,
       },
     });
 
@@ -66,6 +70,7 @@ async function main() {
           stadiumId: stadium.id,
           departmentId: depts[i % depts.length]?.id,
           phone: `+974 5${String(1000000 + i).slice(0, 7)}`,
+          mustChangePassword: usingDefaultPasswords,
         },
       });
       faUsers.push(fa);

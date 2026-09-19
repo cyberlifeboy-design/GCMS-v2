@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import multer from 'multer';
 import { imageFileFilter } from '../../middleware/uploadFilters';
+import { uniqueFileToken } from '../../config/storage';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
@@ -238,7 +239,7 @@ export class MaintenanceController {
             let photosUrls: string[] = [];
             if (req.files && Array.isArray(req.files) && req.files.length > 0) {
                 const filenames = (req.files as Express.Multer.File[]).map(
-                    (f, i) => `maint_${validatedData.fleetId}_${Date.now()}_${i}${getExt(f.originalname)}`
+                    (f, i) => `maint_${validatedData.fleetId}_${uniqueFileToken()}_${i}${getExt(f.originalname)}`
                 );
                 const buffers = (req.files as Express.Multer.File[]).map(f => f.buffer);
                 photosUrls = await maintenanceService.uploadPhotos(filenames, buffers);

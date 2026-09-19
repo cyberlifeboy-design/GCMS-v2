@@ -3,7 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { incidentsService } from './incidents.service';
-import { uploadFile, BUCKETS } from '../../config/storage';
+import { uploadFile, BUCKETS, uniqueFileToken } from '../../config/storage';
 import { imageFileFilter } from '../../middleware/uploadFilters';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: imageFileFilter });
@@ -39,7 +39,7 @@ export class IncidentsController {
       if (Array.isArray(req.files) && req.files.length) {
         const files = req.files as Express.Multer.File[];
         photosUrls = await Promise.all(files.map((f, i) =>
-          uploadFile(BUCKETS.INCIDENT_PHOTOS, `inc_${Date.now()}_${i}_${f.originalname.replace(/[^\w.-]/g, '')}`, f.buffer, f.mimetype),
+          uploadFile(BUCKETS.INCIDENT_PHOTOS, `inc_${uniqueFileToken()}_${i}_${f.originalname.replace(/[^\w.-]/g, '')}`, f.buffer, f.mimetype),
         ));
       }
       const incident = await incidentsService.create({

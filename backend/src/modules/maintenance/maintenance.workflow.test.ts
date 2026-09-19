@@ -3,10 +3,14 @@ import request from 'supertest';
 import app from '../../app';
 import { prisma } from '../../config/database';
 
-// Mock authentication middleware
+// Mock authentication middleware — reads the test-only `user` header so requireRole
+// sees a real req.user, instead of rbac middleware itself special-casing NODE_ENV=test.
 vi.mock('../../middleware/auth.middleware', () => ({
     authenticate: (req: any, res: any, next: any) => {
-        // We'll set the user in each test
+        const userHeader = req.headers['user'];
+        if (userHeader) {
+            req.user = JSON.parse(userHeader as string);
+        }
         next();
     }
 }));

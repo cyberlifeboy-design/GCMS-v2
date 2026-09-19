@@ -1,7 +1,19 @@
 import * as Minio from 'minio';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
+
+/**
+ * A filename component that isn't guessable from its upload time. Several buckets
+ * (incident photos, signatures) are served through an unauthenticated storage proxy,
+ * so a `Date.now()`-based name lets anyone who knows roughly when a file was
+ * uploaded enumerate and view someone else's photo/signature. Callers build
+ * `${prefix}_${uniqueFileToken()}_${i}${ext}`.
+ */
+export function uniqueFileToken(): string {
+    return `${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+}
 
 export type StorageDriver = 'local' | 'minio' | 'azure-blob';
 const DRIVER: StorageDriver = (process.env.STORAGE_DRIVER as StorageDriver) || 'minio';

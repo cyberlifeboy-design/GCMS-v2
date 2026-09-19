@@ -38,6 +38,11 @@ RUN echo 'server { \
     resolver ${DNS_RESOLVER} valid=30s ipv6=off; \
     set $backend ${BACKEND_ORIGIN}; \
     \
+    add_header X-Frame-Options "SAMEORIGIN" always; \
+    add_header X-Content-Type-Options "nosniff" always; \
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always; \
+    add_header Content-Security-Policy "default-src '"'"'self'"'"'; script-src '"'"'self'"'"'; style-src '"'"'self'"'"' '"'"'unsafe-inline'"'"' https://fonts.googleapis.com; font-src '"'"'self'"'"' https://fonts.gstatic.com; img-src '"'"'self'"'"' data: https://server.arcgisonline.com; connect-src '"'"'self'"'"' https://login.microsoftonline.com; frame-src https://login.microsoftonline.com; object-src '"'"'none'"'"'; base-uri '"'"'self'"'"'; frame-ancestors '"'"'self'"'"';" always; \
+    \
     location /api/v1 { \
         proxy_pass $backend; \
         proxy_ssl_server_name on; \
