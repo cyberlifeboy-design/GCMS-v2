@@ -41,8 +41,13 @@ async function startServer() {
         console.log('🔍 Initializing storage...');
         await initializeStorage();
 
-        // Seed default notification/email templates (idempotent — only inserts missing keys)
-        await notificationTemplatesService.seedDefaults();
+        // Seed default notification/email templates (idempotent — only inserts missing keys).
+        // Non-fatal: a schema-drift/migration gap here shouldn't take down the whole API.
+        try {
+            await notificationTemplatesService.seedDefaults();
+        } catch (err) {
+            console.error('⚠️  Notification template seeding failed (continuing startup):', err);
+        }
 
         // Start server
         app.listen(PORT, () => {
