@@ -84,6 +84,10 @@ const updateSettingsSchema = z.object({
     bookingWindowStart: coerceDate,
     bookingWindowEnd: coerceDate,
     bookingWindowClosedMessage: z.string().optional().nullable(),
+    // Instant Booking timer — duration choices + which channel(s) notify the venue admin on expiry
+    instantBookingDurationMinutes: z.string().optional(),
+    instantBookingNotifyInApp: coerceBoolean.optional(),
+    instantBookingNotifyEmail: coerceBoolean.optional(),
     // Handover T&C (SuperAdmin only — enforced at route level)
     handoverTcEnTitle: z.string().optional().nullable(),
     handoverTcEnBody: z.string().optional().nullable(),
@@ -100,6 +104,10 @@ const updateSettingsSchema = z.object({
     smtpPassword: z.string().optional(),
     smtpFromEmail: z.string().optional().nullable(),
     smtpFromName: z.string().optional().nullable(),
+    // Branding asset removal — set when the admin clicks "Remove" with no replacement file chosen.
+    removeLogo: coerceBoolean.optional(),
+    removeHeader: coerceBoolean.optional(),
+    removeFooter: coerceBoolean.optional(),
 });
 
 export class SettingsController {
@@ -152,6 +160,14 @@ export class SettingsController {
                     f.mimetype
                 );
             }
+
+            // A remove flag only clears the asset when no replacement file was uploaded in the same request.
+            if (validatedData.removeLogo && !files?.logo?.[0]) validatedData.logoUrl = null;
+            if (validatedData.removeHeader && !files?.header?.[0]) validatedData.headerUrl = null;
+            if (validatedData.removeFooter && !files?.footer?.[0]) validatedData.footerUrl = null;
+            delete validatedData.removeLogo;
+            delete validatedData.removeHeader;
+            delete validatedData.removeFooter;
 
             const settings: any = await settingsService.update(validatedData, req.user?.userId);
             const { smtpPassword, ...safe } = settings;

@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
 import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { canCreateOrSignHandover } from './handover-phase';
+import { getVenueVlm, getVenueVlmMap } from '../../services/vlm.service';
 
 export interface PoolStatusByStadium {
     stadiumId: string;
@@ -16,6 +17,9 @@ export interface PoolStatusByStadium {
     handbackPending: number;
     underMaintenance: number;
     carTypeBreakdown: Record<string, number>;
+    vlmName: string | null;
+    vlmPhone: string | null;
+    vlmEmail: string | null;
 }
 
 export interface PoolDashboardData {
@@ -376,6 +380,7 @@ export class HandoverService {
         });
 
         const statusByStadium: Record<string, PoolStatusByStadium> = {};
+        const vlmByStadium = await getVenueVlmMap(stadiums.map(s => s.id));
 
         for (const stadium of stadiums) {
             statusByStadium[stadium.id] = {
@@ -391,6 +396,9 @@ export class HandoverService {
                 handbackPending: 0,
                 underMaintenance: 0,
                 carTypeBreakdown: {},
+                vlmName: vlmByStadium[stadium.id]?.name ?? null,
+                vlmPhone: vlmByStadium[stadium.id]?.phone ?? null,
+                vlmEmail: vlmByStadium[stadium.id]?.email ?? null,
             };
         }
 
@@ -619,21 +627,30 @@ export class HandoverService {
     }
 
     async getHandoverForm(fleetId: string) {
-        return prisma.handoverForm.findUnique({
+        const form = await prisma.handoverForm.findUnique({
             where: { fleetId },
             include: {
                 fleet: {
                     select: {
-                        carNumber: true, carType: true,
+                        carNumber: true, carType: true, stadiumId: true,
                         stadium: { select: { name: true, code: true } },
-                        department: { select: { name: true, code: true } },
+                        department: {
+                            select: {
+                                name: true, code: true, focalPointName: true, focalPointEmail: true, focalPointPhone: true,
+                                focalPoint: { select: { name: true, email: true, phone: true } },
+                            },
+                        },
                         assignedUser: { select: { name: true, email: true, phone: true, accreditationNumber: true } },
                     },
                 },
                 adminSignedByUser: { select: { name: true, email: true, phone: true } },
                 userSignedByUser: { select: { name: true, email: true } },
+                afteruseSignedByUser: { select: { name: true, email: true } },
             },
         });
+        if (!form?.fleet?.stadium) return form;
+        const vlm = await getVenueVlm(form.fleet.stadiumId);
+        return { ...form, fleet: { ...form.fleet, stadium: { ...form.fleet.stadium, vlmName: vlm.name, vlmPhone: vlm.phone, vlmEmail: vlm.email } } };
     }
 
     async listForms(user: { userId: string; role: string; stadiumId?: string }, params: { page?: number; limit?: number; status?: string }) {

@@ -54,6 +54,9 @@ export class SettingsService {
         bookingWindowStart: Date | null;
         bookingWindowEnd: Date | null;
         bookingWindowClosedMessage: string | null;
+        instantBookingDurationMinutes: string;
+        instantBookingNotifyInApp: boolean;
+        instantBookingNotifyEmail: boolean;
         // Handover T&C
         handoverTcEnTitle: string | null;
         handoverTcEnBody: string | null;

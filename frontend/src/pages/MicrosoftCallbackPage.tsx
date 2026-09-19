@@ -50,14 +50,14 @@ export function MicrosoftCallbackPage() {
                     <button
                         type="button"
                         onClick={() => navigate('/login', { replace: true })}
-                        className="text-sm font-semibold text-[#3874ff] hover:underline"
+                        className="text-sm font-semibold text-[#143b66] hover:underline"
                     >
                         Back to sign in
                     </button>
                 </>
             ) : (
                 <>
-                    <Loader2 className="w-8 h-8 animate-spin text-[#3874ff]" />
+                    <Loader2 className="w-8 h-8 animate-spin text-[#143b66]" />
                     <p className="text-sm text-[#67728a]">Completing sign-in…</p>
                 </>
             )}

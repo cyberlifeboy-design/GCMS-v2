@@ -62,15 +62,15 @@ export function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden bg-[#3b2f7a]">
-            {/* Diagonal gradient theme + soft wave blobs — matches the SC/LOC portal family look */}
+        <div className="min-h-screen flex flex-col relative overflow-hidden bg-[#0d2a4a]">
+            {/* Diagonal navy-to-charcoal gradient + gold/teal glow — matches the real SC brand deck */}
             <div
                 className="absolute inset-0"
-                style={{ background: 'linear-gradient(135deg, #5b2a9e 0%, #4a4fc4 38%, #2f6fd6 62%, #14a3ac 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
             />
-            <div className="absolute -left-32 top-1/3 w-[32rem] h-[32rem] rounded-full bg-[#7c3aed]/30 blur-3xl" />
-            <div className="absolute right-0 -bottom-24 w-[28rem] h-[28rem] rounded-full bg-[#0ea5a8]/30 blur-3xl" />
-            <div className="absolute right-1/4 top-0 w-[24rem] h-[24rem] rounded-full bg-[#3b5fd9]/30 blur-3xl" />
+            <div className="absolute -left-32 top-1/3 w-[32rem] h-[32rem] rounded-full bg-[#d5ba8c]/20 blur-3xl" />
+            <div className="absolute right-0 -bottom-24 w-[28rem] h-[28rem] rounded-full bg-[#1787b5]/25 blur-3xl" />
+            <div className="absolute right-1/4 top-0 w-[24rem] h-[24rem] rounded-full bg-[#fbae40]/15 blur-3xl" />
 
             {branding.headerUrl && (
                 <div className="relative w-full">
@@ -78,12 +78,14 @@ export function LoginPage() {
                 </div>
             )}
 
-            {/* Brand lockup — top-left, mirrors the SC/LOC portal layout */}
+            {/* Brand lockup — top-left, transparent logo (its own PNG alpha) with a soft glow so the
+                dark logo artwork still reads against the dark navy gradient behind it. */}
             <div className="relative z-10 flex items-center gap-3 px-8 pt-8">
                 <img
                     src={branding.logoUrl || '/branding/sc-logo.png'}
                     alt="Logo"
-                    className="h-14 w-auto object-contain"
+                    className="h-24 w-auto object-contain"
+                    style={{ filter: 'drop-shadow(0 0 14px rgba(255,255,255,0.55))' }}
                     onError={(e) => {
                         const img = e.target as HTMLImageElement;
                         if (img.src !== window.location.origin + '/branding/sc-logo.png') {
@@ -99,7 +101,7 @@ export function LoginPage() {
                 <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-8">
                     <div className="text-center mb-6">
                         <h1 className="text-2xl font-extrabold text-[#222834]">{branding.tournamentName || 'GCMS'}</h1>
-                        <p className="text-sm text-[#67728a] mt-1">Please sign into your account.</p>
+                        <p className="text-sm text-[#67728a] mt-1">Golf Car Management System</p>
                     </div>
 
                     {error && (
@@ -113,7 +115,7 @@ export function LoginPage() {
                         onClick={handleMicrosoftSignIn}
                         className="w-full mb-4 flex items-center justify-center gap-2 rounded-md border border-[#e3e6ed] bg-[#f5f7fa] hover:bg-[#eef0f5] transition-colors py-2.5 px-4 text-sm font-bold text-[#31374a]"
                     >
-                        <span className="h-5 w-5 rounded bg-[#14a3ac] flex items-center justify-center shrink-0">
+                        <span className="h-5 w-5 rounded bg-[#1787b5] flex items-center justify-center shrink-0">
                             <ShieldCheck className="h-3.5 w-3.5 text-white" />
                         </span>
                         Sign in with your SC/LOC account
@@ -136,7 +138,7 @@ export function LoginPage() {
                                     id="email" type="email" value={email} required
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@example.com"
-                                    className="w-full rounded-md border border-[#e3e6ed] bg-white pl-9 pr-3 py-2.5 text-sm text-[#222834] placeholder:text-[#9aa2b5] outline-none focus:ring-2 focus:ring-[#3874ff]/40 focus:border-[#3874ff]"
+                                    className="w-full rounded-md border border-[#e3e6ed] bg-white pl-9 pr-3 py-2.5 text-sm text-[#222834] placeholder:text-[#9aa2b5] outline-none focus:ring-2 focus:ring-[#1787b5]/40 focus:border-[#143b66]"
                                 />
                             </div>
                         </div>
@@ -145,7 +147,7 @@ export function LoginPage() {
                                 <label htmlFor="password" className="text-[11px] font-bold uppercase tracking-wide text-[#67728a]">
                                     Password
                                 </label>
-                                <Link to="/forgot-password" title="Forgot password?" className="text-xs font-semibold text-[#fd7e14] hover:underline">
+                                <Link to="/forgot-password" title="Forgot password?" className="text-xs font-semibold text-[#b5791e] hover:underline">
                                     Forgot Password?
                                 </Link>
                             </div>
@@ -155,7 +157,7 @@ export function LoginPage() {
                                     id="password" type={showPassword ? 'text' : 'password'} value={password} required
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Password"
-                                    className="w-full rounded-md border border-[#e3e6ed] bg-white pl-9 pr-9 py-2.5 text-sm text-[#222834] placeholder:text-[#9aa2b5] outline-none focus:ring-2 focus:ring-[#3874ff]/40 focus:border-[#3874ff]"
+                                    className="w-full rounded-md border border-[#e3e6ed] bg-white pl-9 pr-9 py-2.5 text-sm text-[#222834] placeholder:text-[#9aa2b5] outline-none focus:ring-2 focus:ring-[#1787b5]/40 focus:border-[#143b66]"
                                 />
                                 <button
                                     type="button"
@@ -171,7 +173,7 @@ export function LoginPage() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full rounded-md bg-[#3874ff] hover:bg-[#2a63ea] transition-colors py-2.5 text-sm font-bold text-white disabled:opacity-60 flex items-center justify-center"
+                            className="w-full rounded-md bg-[#143b66] hover:bg-[#0d2a4a] transition-colors py-2.5 text-sm font-bold text-white disabled:opacity-60 flex items-center justify-center"
                         >
                             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</> : 'Sign In'}
                         </button>
@@ -213,7 +215,7 @@ export function LoginPage() {
                                 )}
                                 {requestsEnabled && (
                                     <p className="text-xs text-center">
-                                        <Link to="/request/track" className="text-[#3874ff] hover:underline font-semibold">
+                                        <Link to="/request/track" className="text-[#143b66] hover:underline font-semibold">
                                             Track a request
                                         </Link>
                                     </p>

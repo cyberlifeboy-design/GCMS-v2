@@ -166,10 +166,18 @@ export class StadiumsService {
 
     /** SuperAdmin convenience action: turn a name+email into this venue's Admin. Always
      * sends the "Venue Logistics Manager" email (in place of the generic account-created
-     * one on the create path) so the person knows what they were assigned and how to sign in. */
+     * one on the create path) so the person knows what they were assigned and how to sign in.
+     * A venue's Admin is by default its VLM (Venue Logistics Manager) — department Logistics
+     * ("LOG") — so they're assigned that department and set as its focal point automatically. */
     async assignAdmin(stadiumId: string, data: { name: string; email: string }) {
         const stadium = await this.prisma.stadium.findUnique({ where: { id: stadiumId }, select: { id: true, name: true } });
         if (!stadium) throw new Error('Stadium not found');
+
+        const logDept = await this.prisma.department.upsert({
+            where: { name_stadiumId: { name: 'Logistics', stadiumId } },
+            create: { name: 'Logistics', code: 'LOG', stadiumId },
+            update: { code: 'LOG' },
+        });
 
         const existingUser = await this.prisma.user.findUnique({
             where: { email: data.email },
@@ -180,8 +188,10 @@ export class StadiumsService {
         if (decision.action === 'blocked') throw new Error(decision.reason);
 
         const user = decision.action === 'promote'
-            ? await usersService.update(decision.userId, { name: data.name, role: 'Admin', stadiumId })
-            : await usersService.create({ name: data.name, email: data.email, role: 'Admin', stadiumId, skipWelcomeEmail: true });
+            ? await usersService.update(decision.userId, { name: data.name, role: 'Admin', stadiumId, departmentId: logDept.id })
+            : await usersService.create({ name: data.name, email: data.email, role: 'Admin', stadiumId, departmentId: logDept.id, skipWelcomeEmail: true });
+
+        await this.prisma.department.update({ where: { id: logDept.id }, data: { focalPointId: user.id } });
 
         await this.sendVenueAdminAssignedEmail(data.name, data.email, stadium.name);
 

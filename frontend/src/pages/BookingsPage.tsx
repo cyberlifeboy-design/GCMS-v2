@@ -58,6 +58,7 @@ interface Booking {
     extensionRequestedEndDate?: string | null;
     extensionRequestedEndTime?: string | null;
     keyCollectedAt?: string | null;
+    instantDurationMinutes?: number | null;
 }
 
 const derivedBadge: Record<string, string> = {
@@ -91,6 +92,11 @@ function formatCountdown(b: Booking): { text: string; tone: Tone } {
         return { text: `${formatElapsed((now - end.getTime()) / 60000)} overdue`, tone: 'red' };
     }
     if (b.derivedState === 'Active') {
+        if (b.bookingType === 'Instant' && b.keyCollectedAt) {
+            const end = combineDateTime(b.endDate, b.endTime);
+            const remainingMin = (end.getTime() - now) / 60000;
+            return { text: `${formatElapsed(remainingMin)} remaining`, tone: remainingMin <= 15 ? 'amber' : 'green' };
+        }
         return { text: 'Active now', tone: 'green' };
     }
     if (b.derivedState === 'Upcoming') {
@@ -193,8 +199,25 @@ function BookingCard({
     onExtend?: () => void;
     onReviewExtension?: (approve: boolean) => void;
 }) {
+    // Instant bookings' remaining-time text needs to tick on its own — the page's
+    // periodic data refresh isn't frequent enough for a "counting down" feel.
+    const isInstantRunning = b.bookingType === 'Instant' && !!b.keyCollectedAt && b.derivedState === 'Active';
+    const [, forceTick] = useState(0);
+    useEffect(() => {
+        if (!isInstantRunning) return;
+        const id = setInterval(() => forceTick((n) => n + 1), 30_000);
+        return () => clearInterval(id);
+    }, [isInstantRunning]);
+
     const cd = formatCountdown(b);
     const hasActions = mode === 'live';
+    const instantProgressPct = (() => {
+        if (!isInstantRunning || !b.instantDurationMinutes) return null;
+        const collectedAt = new Date(b.keyCollectedAt!).getTime();
+        const totalMs = b.instantDurationMinutes * 60_000;
+        const elapsedMs = Date.now() - collectedAt;
+        return Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
+    })();
 
     return (
         <div className={`rounded-xl border p-4 ${toneCardCls[cd.tone]}`}>
@@ -218,9 +241,19 @@ function BookingCard({
                         )}
                     </div>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${toneChipCls[cd.tone]}`}>
-                    {cd.text}
-                </span>
+                <div className="shrink-0 text-right">
+                    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${toneChipCls[cd.tone]}`}>
+                        {cd.text}
+                    </span>
+                    {instantProgressPct != null && (
+                        <div className="mt-1.5 w-24 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all ${instantProgressPct >= 85 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${instantProgressPct}%` }}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
             {(onToggleExpand || hasActions) && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -681,6 +714,7 @@ function FAInstantBookingModal({ open, onOpenChange, user, onBooked }: {
     const [loadingCarts, setLoadingCarts] = useState(false);
     const [fleetId, setFleetId] = useState('');
     const [purpose, setPurpose] = useState('');
+    const [durationMinutes, setDurationMinutes] = useState(60);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -709,6 +743,7 @@ function FAInstantBookingModal({ open, onOpenChange, user, onBooked }: {
                 requesterPhone: user.phone || '',
                 departmentId: user.departmentId,
                 purpose: purpose || undefined,
+                instantDurationMinutes: durationMinutes,
             });
             toast.success('Booking request submitted — waiting on your venue Admin to approve it.');
             onOpenChange(false);
@@ -748,6 +783,18 @@ function FAInstantBookingModal({ open, onOpenChange, user, onBooked }: {
                                 </SelectContent>
                             </Select>
                         )}
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>How long do you need it?</Label>
+                        <Select value={String(durationMinutes)} onValueChange={(v) => setDurationMinutes(Number(v))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="60">1 hour</SelectItem>
+                                <SelectItem value="180">3 hours</SelectItem>
+                                <SelectItem value="300">5 hours</SelectItem>
+                                <SelectItem value="480">8 hours</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-1.5">
                         <Label>Purpose (optional)</Label>
@@ -1200,13 +1247,17 @@ export function BookingsPage() {
 
             <ReportIncidentModal open={reportIncidentOpen} onOpenChange={setReportIncidentOpen} />
 
+            {/* Pinned above the tabs so availability is visible at a glance, not buried in its own tab */}
+            <Card><CardContent className="pt-6">
+                <AvailableCarsPanel stadiumId={panelStadiumId} />
+            </CardContent></Card>
+
             <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="flex flex-wrap h-auto">
                     <TabsTrigger value="queue">Review queue</TabsTrigger>
                     <TabsTrigger value="live">Active &amp; Overdue</TabsTrigger>
                     <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
                     <TabsTrigger value="calendar">Calendar</TabsTrigger>
-                    <TabsTrigger value="available">Available cars</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
 
@@ -1234,11 +1285,6 @@ export function BookingsPage() {
                 <TabsContent value="calendar" className="pt-4">
                     <Card><CardContent className="pt-6">
                         <CalendarTab stadiumId={panelStadiumId} refreshKey={refreshKey} />
-                    </CardContent></Card>
-                </TabsContent>
-                <TabsContent value="available" className="pt-4">
-                    <Card><CardContent className="pt-6">
-                        <AvailableCarsPanel stadiumId={panelStadiumId} />
                     </CardContent></Card>
                 </TabsContent>
                 <TabsContent value="history" className="pt-4">

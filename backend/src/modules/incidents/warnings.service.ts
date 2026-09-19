@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../../config/database';
 import { activeWarningCount, shouldBlock } from './warning-rules';
-import { makeReference, warningLetterPdf } from '../../services/pdf.service';
+import { buildWarningReference, dedupeReference, warningLetterPdf } from '../../services/pdf.service';
 import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
 import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
@@ -29,6 +29,8 @@ export class WarningsService {
       select: {
         id: true, name: true, email: true, accreditationNumber: true, isBlocked: true,
         warnings: { select: { level: true, revoked: true } },
+        stadium: { select: { code: true } },
+        department: { select: { code: true } },
       },
     });
     if (!user) throw new Error('USER_NOT_FOUND');
@@ -43,7 +45,8 @@ export class WarningsService {
         incidentId: data.incidentId ?? null,
       },
     });
-    const reference = makeReference('WRN', created.id);
+    const base = buildWarningReference(user.stadium?.code, user.department?.code);
+    const reference = await dedupeReference(base, async (candidate) => (await prisma.warning.count({ where: { reference: candidate } })) > 0);
     const warning = await prisma.warning.update({
       where: { id: created.id },
       data: { reference },

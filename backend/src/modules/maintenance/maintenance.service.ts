@@ -2,11 +2,11 @@ import { prisma } from '../../config/database';
 import { uploadFile } from '../../config/storage';
 import { notificationService } from '../notifications/notification.service';
 import { maintenanceTimeline } from './maintenance-timeline';
-import { maintenanceReportPdf, makeReference } from '../../services/pdf.service';
+import { maintenanceReportPdf, buildMaintenanceReference, dedupeReference } from '../../services/pdf.service';
 import { emailService } from '../../services/email.service';
 
 const FULL_INCLUDE = {
-    fleet: { include: { stadium: true } },
+    fleet: { include: { stadium: true, department: { select: { code: true } } } },
     reportedBy: { select: { id: true, name: true, phone: true, email: true, role: true } },
     approvedBy: { select: { id: true, name: true, role: true } },
     contractsEscalatedBy: { select: { id: true, name: true, role: true } },
@@ -74,8 +74,16 @@ export class MaintenanceService {
         updateFleetStatus?: boolean;
     }) {
         const log = await prisma.$transaction(async (tx) => {
+            const fleet = await tx.fleet.findUnique({
+                where: { id: data.fleetId },
+                select: { carNumber: true, stadium: { select: { code: true } }, department: { select: { code: true } } },
+            });
+            const base = buildMaintenanceReference(fleet?.stadium?.code, fleet?.carNumber, fleet?.department?.code);
+            const reference = await dedupeReference(base, async (candidate) => (await tx.maintenanceLog.count({ where: { reference: candidate } })) > 0);
+
             const created = await tx.maintenanceLog.create({
                 data: {
+                    reference,
                     fleetId: data.fleetId,
                     reportedById: data.reportedById,
                     issueType: data.issueType || null,
@@ -428,7 +436,8 @@ export class MaintenanceService {
         const log = await this.getById(id);
         if (!log) throw new Error('Maintenance log not found');
 
-        const reference = makeReference('MNT', log.id);
+        // Pre-migration rows have no persisted reference; compute one for display only (not backfilled).
+        const reference = log.reference ?? buildMaintenanceReference(log.fleet?.stadium?.code, log.fleet?.carNumber, log.fleet?.department?.code, log.reportedAt);
         let photoUrls: string[] = [];
         try { photoUrls = JSON.parse((log.photosUrls as string) || '[]') as string[]; }
         catch { photoUrls = []; }

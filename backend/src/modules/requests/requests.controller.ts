@@ -7,7 +7,8 @@ import { settingsService } from '../settings/settings.service';
 import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import * as ExcelJS from 'exceljs';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
-import { renderPdf } from '../../services/pdf.service';
+import { renderPdf, buildAggregateReference } from '../../services/pdf.service';
+import { section, esc } from '../../services/html-pdf.service';
 
 const createRequestSchema = z.object({
     requesterName: z.string().min(1, 'Name is required'),
@@ -278,21 +279,21 @@ export class RequestsController {
             }
 
             // PDF (default fallback)
+            const rowsHtml = rowData.length === 0
+                ? '<p>No requests match the selected filters.</p>'
+                : `<table><thead><tr><th>#</th><th>Requester</th><th>Venue</th><th>Department</th><th>Type</th><th>Carts</th><th>Status</th></tr></thead><tbody>${rowData.map((r) => `
+                    <tr>
+                        <td>${esc(r.number)}</td>
+                        <td>${esc(r.requester)}<br/><span style="color:#888">${esc(r.email)}</span></td>
+                        <td>${esc(r.stadiumCode)}</td>
+                        <td>${esc(r.department)} (${esc(r.deptCode)})</td>
+                        <td>${esc(r.type)}</td>
+                        <td>Cargo ${esc(r.cargo)} · 4S ${esc(r.fourSeater)} · 6S ${esc(r.sixSeater)} · Acc ${esc(r.accessibility)} (Σ${esc(r.total)})${r.justification ? `<br/><span style="color:#888">${esc(r.justification)}</span>` : ''}</td>
+                        <td>${esc(r.status)}</td>
+                    </tr>`).join('')}</tbody></table>`;
             const buffer = await renderPdf(
-                { title: 'Car Requests Report', subtitle: `${rowData.length} request(s)`, reference: `REQ-${Date.now().toString(36).toUpperCase()}` },
-                (doc) => {
-                    rowData.forEach((r, i) => {
-                        if (i > 0) doc.moveDown(0.5);
-                        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000')
-                            .text(`#${r.number} — ${r.requester} (${r.email})`);
-                        doc.font('Helvetica').fontSize(9).fillColor('#333')
-                            .text(`${r.stadiumCode} · ${r.department} (${r.deptCode}) · ${r.type} · ${r.status}`);
-                        doc.text(`Carts — Cargo: ${r.cargo}  4-Seater: ${r.fourSeater}  6-Seater: ${r.sixSeater}  Accessibility: ${r.accessibility}  (Total: ${r.total})`);
-                        if (r.justification) doc.text(`Justification: ${r.justification}`);
-                        doc.fillColor('#000');
-                    });
-                    if (rowData.length === 0) doc.text('No requests match the selected filters.');
-                },
+                { title: 'Car Requests Report', subtitle: `${rowData.length} request(s)`, reference: buildAggregateReference('REQ', null, null) },
+                section('Requests', rowsHtml),
             );
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'attachment; filename=car_requests.pdf');

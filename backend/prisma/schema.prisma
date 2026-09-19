@@ -46,6 +46,7 @@ model Department {
   // focalPointId is auto-linked so the rep also shows up as the resolved system account.
   focalPointName  String?
   focalPointEmail String?
+  focalPointPhone String?
   users               User[]
   fleet               Fleet[]
   carRequests         CarRequest[]
@@ -198,6 +199,8 @@ model HandoverLog {
 // Statuses: Open, InProgress, Resolved, PendingQuotation, PendingApproval
 model MaintenanceLog {
   id               String    @id @default(cuid())
+  // Stamped once at creation: MNT-{venueCode}-{cartNumber}-{deptCode}-{YYYY}-{MM}
+  reference        String?
   fleetId          String
   fleet            Fleet     @relation(fields: [fleetId], references: [id], onDelete: Cascade)
   reportedById     String
@@ -276,6 +279,11 @@ model SystemSettings {
   bookingWindowStart            DateTime?
   bookingWindowEnd              DateTime?
   bookingWindowClosedMessage    String?   @db.Text
+  // Instant Booking timer — duration choices offered to the requester (minutes,
+  // comma-separated) and which channel(s) fire the "time's up" follow-up to the venue admin
+  instantBookingDurationMinutes String    @default("60,180,300,480")
+  instantBookingNotifyInApp     Boolean   @default(true)
+  instantBookingNotifyEmail     Boolean   @default(false)
   // System announcements (deprecated - use Announcement model)
   systemAnnouncement            String?   @db.Text // Optional system-wide announcement text
   announcementExpiry            DateTime? // When announcement expires
@@ -483,6 +491,11 @@ model HandoverForm {
   fleetId String @unique
   fleet   Fleet  @relation(fields: [fleetId], references: [id], onDelete: Cascade)
 
+  // Stamped once, the first time each phase is actually generated/downloaded —
+  // Handover-{venueCode}-{cartNumber}-{deptCode}-{MM-DD} / Handback-...
+  handoverReference String?
+  handbackReference String?
+
   // ── Section 1: Handover Details ──
   serialNumber       String?
   faCode             String?
@@ -665,6 +678,11 @@ model PoolBookingRequest {
   // booking is auto-cancelled by the in-process poller and the car returns to the pool.
   keyCollectedAt  DateTime?
   autoCancelledAt DateTime?
+  // Requester-chosen usage duration in minutes (60/180/300/480 by default, configurable
+  // in Settings). Once the key is collected, endDate/endTime are recomputed to
+  // keyCollectedAt + this duration so the existing reminder/overdue poller drives the
+  // countdown notification — no separate timer mechanism needed.
+  instantDurationMinutes Int?
 
   // Extension request — the FA asks for more time; only Admin/SuperAdmin can approve
   extensionRequestedEndDate String?

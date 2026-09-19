@@ -43,8 +43,12 @@ export interface HandoverFormData {
     userSignedByUser?: { name: string };
     fleet?: {
         carNumber: string; carType: string;
-        stadium?: { name: string; code: string };
-        department?: { name: string; code: string };
+        stadium?: { name: string; code: string; vlmName?: string | null; vlmPhone?: string | null; vlmEmail?: string | null };
+        department?: {
+            name: string; code: string;
+            focalPointName?: string | null; focalPointEmail?: string | null; focalPointPhone?: string | null;
+            focalPoint?: { name: string; email: string; phone?: string | null } | null;
+        };
         assignedUser?: { name: string; email: string; phone?: string; accreditationNumber?: string };
     };
 }
@@ -298,7 +302,10 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
     const isReadonly = mode === 'view' || mode === 'admin-return' || (mode === 'user' && form?.status === 'COMPLETE');
     const isComplete = form?.status === 'COMPLETE';
     const isReturned = form?.status === 'RETURNED';
-    const canPrint = isComplete || isReturned;
+    // A printable handover PDF exists as soon as either party has signed — not just once both have.
+    const canPrint = !!form?.status && form.status !== 'PENDING';
+    // A printable handback PDF exists once the return phase has any signature (afteruse/FA), not just once fully returned.
+    const canPrintHandback = form?.status === 'HANDBACK_PENDING' || isReturned;
     const today = new Date().toISOString().slice(0, 10);
 
     const phaseLabel =
@@ -331,14 +338,15 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 // Form exists — load saved values, fall back to system data
                 setF({
                     serialNumber: data.serialNumber || data.fleet?.carNumber || '',
-                    faCode: data.faCode || data.fleet?.assignedUser?.accreditationNumber || '',
+                    faCode: data.faCode || data.fleet?.department?.code || '',
                     handoverDate: data.handoverDate || today,
                     approvedReturnDate: mode === 'admin-return' ? today : (data.approvedReturnDate || ''),
                     handoverLocation: data.handoverLocation || data.fleet?.stadium?.code || '',
                     receiverLicenseNo: data.receiverLicenseNo || '',
                     handoverBy: data.handoverBy || adminName || '',
                     handedOverTo: data.handedOverTo || data.fleet?.assignedUser?.name || '',
-                    handoverByContact: data.handoverByContact || adminPhone || '',
+                    // Logistics Rep contact = the venue's VLM (LOG department focal point), not hand-typed
+                    handoverByContact: data.handoverByContact || data.fleet?.stadium?.vlmPhone || adminPhone || '',
                     receiverContact: data.receiverContact || data.fleet?.assignedUser?.phone || '',
                     issuesNotes: data.issuesNotes || '',
                     finalName: data.finalName || (mode === 'user' ? (currentUserName || '') : ''),
@@ -376,12 +384,12 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                 setF(prev => ({
                     ...prev,
                     serialNumber: fleet?.carNumber || preloadedForm?.serialNumber || '',
-                    faCode: fleet?.assignedUser?.accreditationNumber || '',
+                    faCode: fleet?.department?.code || '',
                     handoverDate: today,
                     handoverLocation: fleet?.stadium?.code || '',
                     handoverBy: adminName || '',
                     handedOverTo: fleet?.assignedUser?.name || '',
-                    handoverByContact: adminPhone || '',
+                    handoverByContact: fleet?.stadium?.vlmPhone || adminPhone || '',
                     receiverContact: fleet?.assignedUser?.phone || '',
                 }));
                 if (fleet?.carType) {
@@ -580,7 +588,7 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                         </div>
                         <div className="flex gap-2 no-print">
                             {canPrint && <Button variant="secondary" size="sm" onClick={() => handlePrint('handover')}><Printer className="w-4 h-4 mr-2" /> Download Handover</Button>}
-                            {isReturned && <Button variant="secondary" size="sm" onClick={() => handlePrint('handback')}><Printer className="w-4 h-4 mr-2" /> Download Handback</Button>}
+                            {canPrintHandback && <Button variant="secondary" size="sm" onClick={() => handlePrint('handback')}><Printer className="w-4 h-4 mr-2" /> Download Handback</Button>}
                         </div>
                     </div>
 
@@ -590,20 +598,19 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                         <div className="bg-white text-sm text-gray-900">
                             {(() => { const fleet = form?.fleet ?? fleetInfo; return (
                             <>
-                            {/* Serial + FA Code bars — both fetched from the system record (assigned cart / Focal Point), never hand-typed */}
+                            {/* Serial + FA Code bars — both fetched from the system record (assigned cart / department focal point), never hand-typed */}
                             <div className="bg-zinc-800 text-white px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1">
                                 <span className="text-xs font-bold uppercase">Golf Cart Serial Number:</span>
                                 <input className="bg-white/10 border border-white/30 text-white rounded px-3 py-1 text-sm flex-1 max-w-xs placeholder:text-white/40"
                                     placeholder="Serial number..." value={f.serialNumber || fleet?.carNumber || ''} readOnly />
-                                <span className="text-xs text-white/50">Type: <b className="text-white/90">{fleet?.carType ?? '—'}</b></span>
                                 <span className="text-xs text-white/50">Venue: <b className="text-white/90">{fleet?.stadium?.name ?? '—'}</b></span>
                             </div>
                             <div className="bg-zinc-700 text-white px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1">
                                 <span className="text-xs font-bold uppercase">FA Code:</span>
                                 <input className="bg-white/10 border border-white/30 text-white rounded px-3 py-1 text-sm flex-1 max-w-xs placeholder:text-white/40"
-                                    placeholder="FA code..." value={f.faCode || fleet?.assignedUser?.accreditationNumber || ''} readOnly />
-                                <span className="text-xs text-white/50">Assigned FA: <b className="text-white/90">{fleet?.assignedUser?.name ?? '—'}</b></span>
-                                <span className="text-xs text-white/50">FA phone: <b className="text-white/90">{fleet?.assignedUser?.phone ?? '—'}</b></span>
+                                    placeholder="FA code..." value={f.faCode || fleet?.department?.code || ''} readOnly />
+                                <span className="text-xs text-white/50">Assigned FA: <b className="text-white/90">{fleet?.department?.focalPoint?.name ?? fleet?.department?.focalPointName ?? '—'}</b></span>
+                                <span className="text-xs text-white/50">FA phone: <b className="text-white/90">{fleet?.department?.focalPoint?.phone ?? fleet?.department?.focalPointPhone ?? '—'}</b></span>
                             </div>
                             </>
                             ); })()}
@@ -985,6 +992,14 @@ export function HandoverFormModal({ open, onClose, mode, fleetId, preloadedForm,
                                 <div className="flex items-center gap-3 p-4 bg-indigo-50 border-t text-indigo-800 no-print">
                                     <CheckCircle2 className="w-5 h-5 text-indigo-600" />
                                     <span className="font-semibold text-sm">Cart returned and released to pool. Return form signed.</span>
+                                    <div className="flex-1" />
+                                    <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={() => handlePrint('handback')}><Printer className="w-4 h-4 mr-2" /> Download Handback PDF</Button>
+                                </div>
+                            )}
+                            {form?.status === 'HANDBACK_PENDING' && (
+                                <div className="flex items-center gap-3 p-4 bg-indigo-50 border-t text-indigo-800 no-print">
+                                    <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+                                    <span className="font-semibold text-sm">Return in progress — signed so far, awaiting admin sign-off.</span>
                                     <div className="flex-1" />
                                     <Button variant="outline" size="sm" className="border-indigo-300 text-indigo-700 hover:bg-indigo-100" onClick={() => handlePrint('handback')}><Printer className="w-4 h-4 mr-2" /> Download Handback PDF</Button>
                                 </div>

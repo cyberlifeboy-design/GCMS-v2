@@ -5,7 +5,7 @@ import { poolBookingRequestsService } from './pool-booking-requests.service';
 import { stadiumsService } from '../stadiums/stadiums.service';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { resolveStadiumScope, resolveDepartmentScope } from '../reports/reports.scope';
-import { bookingHistoryPdf, makeReference } from '../../services/pdf.service';
+import { bookingHistoryPdf, buildAggregateReference } from '../../services/pdf.service';
 import { settingsService } from '../settings/settings.service';
 
 const createSchema = z.object({
@@ -31,6 +31,7 @@ const createInstantSchema = z.object({
     requesterPhone: z.string().min(1),
     departmentId: z.string().min(1),
     purpose: z.string().optional(),
+    instantDurationMinutes: z.coerce.number().int().positive().default(60),
 });
 
 const bookingSlotSchema = z.object({
@@ -411,7 +412,7 @@ export class PoolBookingRequestsController {
                 req.query.status ? `status=${req.query.status}` : null,
                 req.query.derivedState ? `state=${req.query.derivedState}` : null,
             ].filter(Boolean).join('  ·  ');
-            const reference = makeReference('BKH', (rows[0] as { id?: string })?.id ?? 'NONE00');
+            const reference = buildAggregateReference('BKH', stadiumId ? (rows[0] as any)?.stadium?.code : null, null);
 
             if (format === 'xlsx') {
                 const wb = new ExcelJS.Workbook();

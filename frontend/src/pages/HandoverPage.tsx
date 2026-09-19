@@ -99,6 +99,9 @@ interface PoolStatusStadium {
     handbackPending: number;
     underMaintenance: number;
     carTypeBreakdown?: Record<string, number>;
+    vlmName: string | null;
+    vlmPhone: string | null;
+    vlmEmail: string | null;
 }
 
 interface RecentActivity {
@@ -153,6 +156,7 @@ export function HandoverPage() {
 
     const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'pending');
+    const [logView, setLogView] = useState<'live' | 'filtered'>('live');
     const [poolDashboard, setPoolDashboard] = useState<PoolDashboard | null>(null);
     const [poolLoading, setPoolLoading] = useState(true);
     const [history, setHistory] = useState<HandoverLog[]>([]);
@@ -578,8 +582,7 @@ export function HandoverPage() {
                             <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="activity" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Real-time Stream</TabsTrigger>
-                    <TabsTrigger value="history" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Global Audit</TabsTrigger>
+                    <TabsTrigger value="log" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Activity Log</TabsTrigger>
                     <TabsTrigger value="venues" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
                 </TabsList>
 
@@ -667,107 +670,112 @@ export function HandoverPage() {
                 </TabsContent>
                 )}
 
-                <TabsContent value="activity">
-                    <Card className="border-none shadow-md overflow-hidden">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6 border-b bg-muted/5">
-                            <div>
-                                <CardTitle className="text-lg">System-wide Activity</CardTitle>
-                                <CardDescription>Last 50 actions performed across the platform.</CardDescription>
-                            </div>
-                            <div className="relative w-64">
-                                <Input 
-                                    placeholder="Filter activity..." 
-                                    value={search} 
-                                    onChange={e => setSearch(e.target.value)}
-                                    className="rounded-lg h-9"
-                                />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="hover:bg-transparent">
-                                        <TableHead className="w-[100px]">Cart #</TableHead>
-                                        <TableHead>Event</TableHead>
-                                        <TableHead>User</TableHead>
-                                        <TableHead>Venue</TableHead>
-                                        <TableHead className="text-right">Timestamp</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {poolLoading ? (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground/30" /></TableCell></TableRow>
-                                    ) : !filteredActivity || filteredActivity.length === 0 ? (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic">No activity matching criteria</TableCell></TableRow>
-                                    ) : filteredActivity.slice(0, 15).map(a => (
-                                        <TableRow key={a.id} className="group hover:bg-muted/5 border-muted/50">
-                                            <TableCell className="font-black text-primary font-mono">{a.carNumber}</TableCell>
-                                            <TableCell>
-                                                <Badge className={`${actionColors[a.action]} shadow-none border-none text-[9px] font-bold px-2 py-0.5`}>{actionLabels[a.action] || a.action}</Badge>
-                                            </TableCell>
-                                            <TableCell className="font-semibold text-sm">{a.userName}</TableCell>
-                                            <TableCell className="text-muted-foreground text-xs">{a.stadiumName}</TableCell>
-                                            <TableCell className="text-right text-[10px] font-mono text-muted-foreground">{formatDateTime(a.timestamp)}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                <TabsContent value="log" className="space-y-4">
+                    <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border border-muted-foreground/10 w-fit">
+                        <Button type="button" size="sm" variant={logView === 'live' ? 'default' : 'ghost'} className="h-8 rounded-lg text-[10px] font-bold uppercase tracking-wider" onClick={() => setLogView('live')}>Live</Button>
+                        <Button type="button" size="sm" variant={logView === 'filtered' ? 'default' : 'ghost'} className="h-8 rounded-lg text-[10px] font-bold uppercase tracking-wider" onClick={() => setLogView('filtered')}>Filtered / Full History</Button>
+                    </div>
 
-                <TabsContent value="history">
-                    <Card className="border-none shadow-md overflow-hidden">
-                        <CardHeader className="bg-muted/5 border-b pb-6">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <CardTitle className="text-lg">Historical Records</CardTitle>
-                                <div className="flex gap-2">
-                                    <Select value={actionFilter} onValueChange={setActionFilter}>
-                                        <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Events</SelectItem>
-                                            <SelectItem value="HandoverSigned">Signing</SelectItem>
-                                            <SelectItem value="CheckedIn">Check-In</SelectItem>
-                                            <SelectItem value="CheckedOut">Check-Out</SelectItem>
-                                            <SelectItem value="HandbackRequested">Handback</SelectItem>
-                                            <SelectItem value="HandbackAccepted">Release</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                    {logView === 'live' ? (
+                        <Card className="border-none shadow-md overflow-hidden">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6 border-b bg-muted/5">
+                                <div>
+                                    <CardTitle className="text-lg">System-wide Activity</CardTitle>
+                                    <CardDescription>Last 50 actions performed across the platform.</CardDescription>
                                 </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Cart #</TableHead>
-                                        <TableHead>User</TableHead>
-                                        <TableHead>Action</TableHead>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Notes</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {histLoading ? (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto opacity-20" /></TableCell></TableRow>
-                                    ) : history.length === 0 ? (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">History is empty</TableCell></TableRow>
-                                    ) : history.map(h => (
-                                        <TableRow key={h.id}>
-                                            <TableCell className="font-bold font-mono">{h.fleet?.carNumber}</TableCell>
-                                            <TableCell className="text-sm">{h.user?.name}</TableCell>
-                                            <TableCell><Badge className={`${actionColors[h.action]} border-none shadow-none text-[9px]`}>{actionLabels[h.action] || h.action}</Badge></TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">{formatDateTime(h.createdAt)}</TableCell>
-                                            <TableCell className="text-xs max-w-[200px] truncate">{h.conditionNotes || '—'}</TableCell>
+                                <div className="relative w-64">
+                                    <Input
+                                        placeholder="Filter activity..."
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        className="rounded-lg h-9"
+                                    />
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableHead className="w-[100px]">Cart #</TableHead>
+                                            <TableHead>Event</TableHead>
+                                            <TableHead>User</TableHead>
+                                            <TableHead>Venue</TableHead>
+                                            <TableHead className="text-right">Timestamp</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                            <div className="p-4 border-t">
-                                <Pagination page={page} totalPages={pagination.totalPages} onPageChange={setPage} total={pagination.total} limit={pagination.limit} />
-                            </div>
-                        </CardContent>
-                    </Card>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {poolLoading ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground/30" /></TableCell></TableRow>
+                                        ) : !filteredActivity || filteredActivity.length === 0 ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic">No activity matching criteria</TableCell></TableRow>
+                                        ) : filteredActivity.slice(0, 15).map(a => (
+                                            <TableRow key={a.id} className="group hover:bg-muted/5 border-muted/50">
+                                                <TableCell className="font-black text-primary font-mono">{a.carNumber}</TableCell>
+                                                <TableCell>
+                                                    <Badge className={`${actionColors[a.action]} shadow-none border-none text-[9px] font-bold px-2 py-0.5`}>{actionLabels[a.action] || a.action}</Badge>
+                                                </TableCell>
+                                                <TableCell className="font-semibold text-sm">{a.userName}</TableCell>
+                                                <TableCell className="text-muted-foreground text-xs">{a.stadiumName}</TableCell>
+                                                <TableCell className="text-right text-[10px] font-mono text-muted-foreground">{formatDateTime(a.timestamp)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <Card className="border-none shadow-md overflow-hidden">
+                            <CardHeader className="bg-muted/5 border-b pb-6">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <CardTitle className="text-lg">Historical Records</CardTitle>
+                                    <div className="flex gap-2">
+                                        <Select value={actionFilter} onValueChange={setActionFilter}>
+                                            <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Events</SelectItem>
+                                                <SelectItem value="HandoverSigned">Signing</SelectItem>
+                                                <SelectItem value="CheckedIn">Check-In</SelectItem>
+                                                <SelectItem value="CheckedOut">Check-Out</SelectItem>
+                                                <SelectItem value="HandbackRequested">Handback</SelectItem>
+                                                <SelectItem value="HandbackAccepted">Release</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Cart #</TableHead>
+                                            <TableHead>User</TableHead>
+                                            <TableHead>Action</TableHead>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Notes</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {histLoading ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto opacity-20" /></TableCell></TableRow>
+                                        ) : history.length === 0 ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">History is empty</TableCell></TableRow>
+                                        ) : history.map(h => (
+                                            <TableRow key={h.id}>
+                                                <TableCell className="font-bold font-mono">{h.fleet?.carNumber}</TableCell>
+                                                <TableCell className="text-sm">{h.user?.name}</TableCell>
+                                                <TableCell><Badge className={`${actionColors[h.action]} border-none shadow-none text-[9px]`}>{actionLabels[h.action] || h.action}</Badge></TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">{formatDateTime(h.createdAt)}</TableCell>
+                                                <TableCell className="text-xs max-w-[200px] truncate">{h.conditionNotes || '—'}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                <div className="p-4 border-t">
+                                    <Pagination page={page} totalPages={pagination.totalPages} onPageChange={setPage} total={pagination.total} limit={pagination.limit} />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
                 </TabsContent>
 
                 <TabsContent value="venues">
@@ -806,9 +814,16 @@ export function HandoverPage() {
                                             <div className="h-full bg-primary" style={{ width: `${s.total > 0 ? (s.dispatched/s.total)*100 : 0}%` }} />
                                         </div>
                                     </div>
+                                    {(s.vlmName || s.vlmPhone || s.vlmEmail) && (
+                                        <div className="text-[10.5px] leading-tight pt-2 border-t">
+                                            <p className="font-bold text-muted-foreground">VLM {s.vlmName ?? '—'}</p>
+                                            <p className="text-muted-foreground">Contact: {s.vlmPhone ?? '—'}</p>
+                                            <p className="text-muted-foreground">Email: {s.vlmEmail ?? '—'}</p>
+                                        </div>
+                                    )}
                                 </CardContent>
                                 <CardFooter className="px-6 py-4 bg-muted/10 border-t">
-                                     <Button variant="ghost" size="sm" className="w-full text-xs font-bold" onClick={() => { setStadiumFilter(s.stadiumId); setActiveTab('history'); }}>Audit Venue Log</Button>
+                                     <Button variant="ghost" size="sm" className="w-full text-xs font-bold" onClick={() => { setStadiumFilter(s.stadiumId); setActiveTab('log'); setLogView('filtered'); }}>Audit Venue Log</Button>
                                 </CardFooter>
                             </Card>
                         ))}

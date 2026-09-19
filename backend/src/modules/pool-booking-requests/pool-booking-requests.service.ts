@@ -4,6 +4,7 @@ import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
 import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
 import { deriveBookingState } from './booking-state';
+import { getVenueVlm } from '../../services/vlm.service';
 
 export interface CreatePoolBookingRequestData {
     stadiumId: string;
@@ -30,6 +31,8 @@ export interface CreateInstantBookingRequestData {
     departmentId: string;
     purpose?: string;
     createdById?: string;
+    /** Requester-chosen usage length; the countdown starts once the key is collected, not at approval. */
+    instantDurationMinutes: number;
 }
 
 export interface BookingSlot {
@@ -383,6 +386,7 @@ export class PoolBookingRequestsService {
                 endDate,
                 startTime,
                 endTime,
+                instantDurationMinutes: data.instantDurationMinutes,
                 purpose: data.purpose,
                 requestToken,
                 createdById: data.createdById,
@@ -481,7 +485,14 @@ export class PoolBookingRequestsService {
         return { recurringGroupId, bookings };
     }
 
-    /** Requester (or venue staff) confirms the key has physically been collected — stops the 10-minute auto-cancel clock. */
+    /**
+     * Requester (or venue staff) confirms the key has physically been collected —
+     * stops the 10-minute auto-cancel clock and starts the usage countdown: the
+     * booking's end window is recomputed to now + instantDurationMinutes, and the
+     * reminder/overdue flags are reset so the existing scanReminders poller (already
+     * running for scheduled bookings) drives the "time's up" follow-up notification
+     * to the venue admin — no separate timer mechanism needed.
+     */
     async markKeyCollected(id: string) {
         const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
         if (!existing) throw new Error('Booking request not found');
@@ -489,9 +500,19 @@ export class PoolBookingRequestsService {
         if (existing.status !== 'Approved') throw new Error('Booking is not in an approved state');
         if (existing.keyCollectedAt) return existing;
 
+        const collectedAt = new Date();
+        const durationMinutes = existing.instantDurationMinutes ?? 60;
+        const endMoment = new Date(collectedAt.getTime() + durationMinutes * 60 * 1000);
+
         return prisma.poolBookingRequest.update({
             where: { id },
-            data: { keyCollectedAt: new Date() },
+            data: {
+                keyCollectedAt: collectedAt,
+                endDate: formatDate(endMoment),
+                endTime: formatTime(endMoment),
+                reminderSentAt: null,
+                overdueNotifiedAt: null,
+            },
             include: BOOKING_INCLUDE,
         });
     }
@@ -820,8 +841,14 @@ export class PoolBookingRequestsService {
             where: { status: 'Approved' },
             include: BOOKING_INCLUDE,
         });
+        const settings = await prisma.systemSettings.findFirst();
+        const notifyInApp = settings?.instantBookingNotifyInApp ?? true;
+        const notifyEmail = settings?.instantBookingNotifyEmail ?? false;
 
         for (const b of approved) {
+            // Instant bookings' notification channel(s) are configurable in Settings;
+            // scheduled (Single/Recurring) bookings keep the unconditional in-app behavior below.
+            if (b.bookingType === 'Instant' && !notifyInApp && !notifyEmail) continue;
             const endAt = new Date(`${b.endDate}T${b.endTime}:00`);
             if (Number.isNaN(endAt.getTime())) continue;
             const msUntilEnd = endAt.getTime() - now.getTime();
@@ -855,21 +882,39 @@ export class PoolBookingRequestsService {
                 });
                 if (claimed.count === 0) continue;
 
-                const message = `${b.fleet.carNumber} was due back at ${b.endDate} ${b.endTime} and has not been returned.`;
+                const isInstant = b.bookingType === 'Instant';
+                const bookerLine = isInstant ? ` Booker: ${b.requesterName} · ${b.requesterPhone} · ${b.requesterEmail}.` : '';
+                const message = `${b.fleet.carNumber} was due back at ${b.endDate} ${b.endTime} and has not been returned.${bookerLine}`;
                 if (b.faUserId) {
                     await notificationService.create({
                         type: 'PoolBookingOverdue', title: 'Pool cart overdue', message,
                         entityType: 'PoolBookingRequest', entityId: b.id, userId: b.faUserId,
                     });
                 }
-                await notificationService.createForRoles(
-                    { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
-                    ['Admin'], b.stadiumId,
-                );
-                await notificationService.createForRoles(
-                    { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
-                    ['SuperAdmin'],
-                );
+                if (!isInstant || notifyInApp) {
+                    await notificationService.createForRoles(
+                        { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
+                        ['Admin'], b.stadiumId,
+                    );
+                    await notificationService.createForRoles(
+                        { type: 'PoolBookingOverdue', title: 'Pool cart overdue', message: `${message} (FA: ${b.faUser?.name ?? '—'})`, entityType: 'PoolBookingRequest', entityId: b.id },
+                        ['SuperAdmin'],
+                    );
+                }
+                if (isInstant && notifyEmail) {
+                    const vlm = await getVenueVlm(b.stadiumId);
+                    if (vlm.email) {
+                        try {
+                            await emailService.send({
+                                to: vlm.email,
+                                subject: `Pool cart overdue — ${b.fleet.carNumber}`,
+                                text: message,
+                            });
+                        } catch (e) {
+                            console.error('Instant booking overdue email failed (non-fatal):', e);
+                        }
+                    }
+                }
             }
         }
     }

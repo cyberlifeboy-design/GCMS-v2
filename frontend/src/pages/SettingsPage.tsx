@@ -59,6 +59,9 @@ interface Settings {
     bookingWindowStart?: string | null;
     bookingWindowEnd?: string | null;
     bookingWindowClosedMessage?: string | null;
+    instantBookingDurationMinutes?: string;
+    instantBookingNotifyInApp?: boolean;
+    instantBookingNotifyEmail?: boolean;
     handoverTcEnTitle?: string;
     handoverTcEnBody?: string;
     handoverTcArTitle?: string;
@@ -84,6 +87,19 @@ interface Department {
     name: string;
     code?: string;
     stadiumId: string;
+}
+
+function parseDurationSlots(s: string): number[] {
+    return s.split(',').map((x) => parseInt(x, 10)).filter((n) => n > 0);
+}
+
+/** 90 -> "1h 30m", 60 -> "1h", 30 -> "30m" */
+function formatDurationSlot(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h && m) return `${h}h ${m}m`;
+    if (h) return `${h}h`;
+    return `${m}m`;
 }
 
 export function SettingsPage() {
@@ -186,6 +202,11 @@ export function SettingsPage() {
     const [bwStart, setBwStart] = useState('');
     const [bwEnd, setBwEnd] = useState('');
     const [bwClosedMessage, setBwClosedMessage] = useState('');
+    const [instantDurations, setInstantDurations] = useState('60,180,300,480');
+    const [slotHours, setSlotHours] = useState(1);
+    const [slotMinutes, setSlotMinutes] = useState(0);
+    const [instantNotifyInApp, setInstantNotifyInApp] = useState(true);
+    const [instantNotifyEmail, setInstantNotifyEmail] = useState(false);
     const [tcEnTitle, setTcEnTitle] = useState('');
     const [tcEnBody, setTcEnBody] = useState('');
     const [tcArTitle, setTcArTitle] = useState('');
@@ -264,6 +285,9 @@ export function SettingsPage() {
                 setBwStart(d.bookingWindowStart ? d.bookingWindowStart.slice(0, 16) : '');
                 setBwEnd(d.bookingWindowEnd ? d.bookingWindowEnd.slice(0, 16) : '');
                 setBwClosedMessage(d.bookingWindowClosedMessage || '');
+                setInstantDurations(d.instantBookingDurationMinutes || '60,180,300,480');
+                setInstantNotifyInApp(d.instantBookingNotifyInApp ?? true);
+                setInstantNotifyEmail(d.instantBookingNotifyEmail ?? false);
                 setTcEnTitle(d.handoverTcEnTitle || '');
                 setTcEnBody(d.handoverTcEnBody || '');
                 setTcArTitle(d.handoverTcArTitle || '');
@@ -345,8 +369,11 @@ export function SettingsPage() {
             const fd = new FormData();
             fd.append('tournamentName', tournamentName);
             if (logoFile) fd.append('logo', logoFile);
+            else if (!logoPrev) fd.append('removeLogo', 'true');
             if (headerFile) fd.append('header', headerFile);
+            else if (!headerPrev) fd.append('removeHeader', 'true');
             if (footerFile) fd.append('footer', footerFile);
+            else if (!footerPrev) fd.append('removeFooter', 'true');
             fd.append('footerText', footerText);
             fd.append('maintenanceNotificationEmails', maintenanceNotificationEmails);
             fd.append('handoverTimeoutMinutes', String(handoverTimeoutDays * 1440 + handoverTimeoutHoursField * 60));
@@ -376,6 +403,9 @@ export function SettingsPage() {
             fd.append('bookingWindowStart', bwMode === 'scheduled' && bwStart ? new Date(bwStart).toISOString() : '');
             fd.append('bookingWindowEnd', bwMode === 'scheduled' && bwEnd ? new Date(bwEnd).toISOString() : '');
             fd.append('bookingWindowClosedMessage', bwMode === 'open' ? '' : bwClosedMessage);
+            fd.append('instantBookingDurationMinutes', instantDurations);
+            fd.append('instantBookingNotifyInApp', String(instantNotifyInApp));
+            fd.append('instantBookingNotifyEmail', String(instantNotifyEmail));
             fd.append('handoverTcEnTitle', tcEnTitle);
             fd.append('handoverTcEnBody', tcEnBody);
             fd.append('handoverTcArTitle', tcArTitle);
@@ -726,6 +756,69 @@ export function SettingsPage() {
                                                     <Input value={bwClosedMessage} onChange={(e) => setBwClosedMessage(e.target.value)}
                                                         placeholder="Bookings open 1 Oct 2026" /></div>
                                             )}
+                                            <div className="pt-4 border-t space-y-4">
+                                                <div>
+                                                    <Label className="text-sm font-bold">Instant Booking Timer</Label>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                        Once the venue admin approves an instant booking and the requester collects the key, this timer starts and the admin is notified when it runs out.
+                                                    </p>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Duration choices offered to requesters</Label>
+                                                    <div className="flex flex-wrap items-end gap-2">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Hours</Label>
+                                                            <Input type="number" min={0} max={99} value={slotHours}
+                                                                onChange={(e) => setSlotHours(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                                                                className="w-20" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Minutes</Label>
+                                                            <Input type="number" min={0} max={59} value={slotMinutes}
+                                                                onChange={(e) => setSlotMinutes(Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0)))}
+                                                                className="w-20" />
+                                                        </div>
+                                                        <Button type="button" size="sm" onClick={() => {
+                                                            const mins = slotHours * 60 + slotMinutes;
+                                                            if (mins <= 0) { toast.error('Set hours and/or minutes first'); return; }
+                                                            const existing = parseDurationSlots(instantDurations);
+                                                            if (existing.includes(mins)) { toast.error('That duration is already in the list'); return; }
+                                                            setInstantDurations([...existing, mins].sort((a, b) => a - b).join(','));
+                                                            setSlotHours(1); setSlotMinutes(0);
+                                                        }}>
+                                                            <Plus className="w-4 h-4 mr-1" /> Add
+                                                        </Button>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2 pt-1">
+                                                        {parseDurationSlots(instantDurations).length === 0 && (
+                                                            <p className="text-xs text-muted-foreground">No durations added yet — add at least one above.</p>
+                                                        )}
+                                                        {parseDurationSlots(instantDurations).map((mins) => (
+                                                            <Badge key={mins} variant="secondary" className="text-sm font-semibold gap-1.5 pr-1">
+                                                                {formatDurationSlot(mins)}
+                                                                <button type="button" className="rounded-full hover:bg-muted-foreground/20 p-0.5"
+                                                                    onClick={() => setInstantDurations(parseDurationSlots(instantDurations).filter((m) => m !== mins).join(','))}>
+                                                                    <Trash2 className="w-3 h-3" />
+                                                                </button>
+                                                            </Badge>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                    <div>
+                                                        <Label className="text-sm font-bold">Notify venue admin — in-app</Label>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">Post an in-app notification to the venue's Admin/SuperAdmin when the timer runs out.</p>
+                                                    </div>
+                                                    <Switch checked={instantNotifyInApp} onCheckedChange={setInstantNotifyInApp} />
+                                                </div>
+                                                <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                    <div>
+                                                        <Label className="text-sm font-bold">Notify venue admin — email</Label>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">Also email the venue's VLM (Logistics focal point) when the timer runs out.</p>
+                                                    </div>
+                                                    <Switch checked={instantNotifyEmail} onCheckedChange={setInstantNotifyEmail} />
+                                                </div>
+                                            </div>
                                         </CardContent>
                                     </Card>
                                     <Card className="border-none shadow-md">

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { FleetFilters, PaginatedResult, PaginationParams } from '../../types';
 import { notificationService } from '../notifications/notification.service';
+import { getVenueVlm } from '../../services/vlm.service';
 
 export class FleetService {
     async getAll(filters: FleetFilters, pagination?: PaginationParams): Promise<PaginatedResult<any>> {
@@ -45,16 +46,24 @@ export class FleetService {
     }
 
     async getById(id: string) {
-        return prisma.fleet.findUnique({
+        const fleet = await prisma.fleet.findUnique({
             where: { id },
             include: {
                 stadium: { select: { id: true, name: true, code: true } },
-                department: { select: { id: true, name: true, code: true } },
+                department: {
+                    select: {
+                        id: true, name: true, code: true, focalPointName: true, focalPointEmail: true, focalPointPhone: true,
+                        focalPoint: { select: { name: true, email: true, phone: true } },
+                    },
+                },
                 assignedUser: {
                     select: { id: true, name: true, phone: true, email: true, role: true, accreditationNumber: true },
                 },
             },
         });
+        if (!fleet) return fleet;
+        const vlm = await getVenueVlm(fleet.stadiumId);
+        return { ...fleet, stadium: fleet.stadium ? { ...fleet.stadium, vlmName: vlm.name, vlmPhone: vlm.phone, vlmEmail: vlm.email } : fleet.stadium };
     }
 
     async create(data: {

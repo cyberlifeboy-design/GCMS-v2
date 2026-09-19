@@ -5,6 +5,7 @@ import { deriveBookingState } from '../pool-booking-requests/booking-state';
 import { summarizePoolBookings, PoolBookingSummary } from './pool-report';
 import { buildPublicBookerRows, PublicBookerRow } from './public-bookers';
 import { possessionMinutes, formatDuration } from './fa-trail-detail';
+import { getVenueVlmMap } from '../../services/vlm.service';
 
 interface ActivityLog {
     action: string;
@@ -352,6 +353,7 @@ export class ReportsService {
             stadiumTypeMap.get(stat.stadiumId)![stat.carType] = stat._count._all;
         });
 
+        const vlmByStadium = await getVenueVlmMap(activeStadiums.map(s => s.id));
         const stadiumsList = activeStadiums.map(stadium => ({
             id: stadium.id,
             name: stadium.name,
@@ -362,6 +364,9 @@ export class ReportsService {
             totalCarts: stadium._count.fleet,
             activeFAs: stadium._count.users,
             fleetBreakdown: stadiumTypeMap.get(stadium.id) || {},
+            vlmName: vlmByStadium[stadium.id]?.name ?? null,
+            vlmPhone: vlmByStadium[stadium.id]?.phone ?? null,
+            vlmEmail: vlmByStadium[stadium.id]?.email ?? null,
         }));
 
         // 8. FA Fleet Overview

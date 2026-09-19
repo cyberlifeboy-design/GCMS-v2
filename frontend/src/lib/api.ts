@@ -530,6 +530,7 @@ export const poolBookingRequestsApi = {
         requesterPhone: string;
         departmentId: string;
         purpose?: string;
+        instantDurationMinutes?: number;
     }) => apiClient.post('/public/pool-booking-requests/instant', data),
     getByTokenPublic: (token: string) =>
         apiClient.get(`/public/pool-booking-requests/${token}`),

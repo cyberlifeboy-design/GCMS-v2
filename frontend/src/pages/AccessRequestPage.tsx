@@ -76,7 +76,7 @@ export function AccessRequestPage() {
     if (loadingInvite) {
         return (
             <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-[#3874ff]" />
+                <Loader2 className="w-8 h-8 animate-spin text-[#143b66]" />
             </div>
         );
     }
@@ -86,7 +86,7 @@ export function AccessRequestPage() {
             <div className="min-h-screen flex items-center justify-center p-4">
                 <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8 text-center">
                     <p className="text-[#67728a]">{inviteError}</p>
-                    <Link to="/login" className="mt-4 inline-block text-sm font-semibold text-[#3874ff] hover:underline">Back to sign in</Link>
+                    <Link to="/login" className="mt-4 inline-block text-sm font-semibold text-[#143b66] hover:underline">Back to sign in</Link>
                 </div>
             </div>
         );
@@ -102,7 +102,7 @@ export function AccessRequestPage() {
                         Your access request (#{submitted.requestNumber}) has been sent to the venue's Admin for review.
                         You'll get an email once it's been reviewed.
                     </p>
-                    <Link to="/login" className="mt-6 inline-block text-sm font-semibold text-[#3874ff] hover:underline">Back to sign in</Link>
+                    <Link to="/login" className="mt-6 inline-block text-sm font-semibold text-[#143b66] hover:underline">Back to sign in</Link>
                 </div>
             </div>
         );

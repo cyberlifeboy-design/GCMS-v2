@@ -13,6 +13,9 @@ export interface VenueMapPoint {
     longitude: number | null;
     totalCarts: number;
     fleetBreakdown: Record<string, number>;
+    vlmName?: string | null;
+    vlmPhone?: string | null;
+    vlmEmail?: string | null;
 }
 
 const QATAR_CENTER: [number, number] = [25.35, 51.3];
@@ -26,7 +29,7 @@ function bubbleIcon(venue: VenueMapPoint): L.DivIcon {
     const size = bubbleSize(venue.totalCarts);
     const fontSize = size < 42 ? 13 : size < 56 ? 15 : 18;
     const background = venue.totalCarts > 0
-        ? 'linear-gradient(135deg, #2f6fd6, #14a3ac)'
+        ? 'linear-gradient(135deg, #143b66, #1787b5)'
         : 'linear-gradient(135deg, #9aa2b5, #67728a)';
     return L.divIcon({
         className: '',
@@ -96,8 +99,8 @@ export function VenueMap({ venues, onViewFleet }: Props) {
                         attributionControl={true}
                     >
                         <TileLayer
-                            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+                            attribution="Tiles &copy; Esri"
                             maxZoom={19}
                         />
                         <FitToVenues points={points} />
@@ -105,11 +108,18 @@ export function VenueMap({ venues, onViewFleet }: Props) {
                             <Marker key={venue.id} position={[venue.latitude, venue.longitude]} icon={bubbleIcon(venue)}>
                                 <Popup>
                                     <div>
-                                        <div className="bg-gradient-to-br from-[#5b2a9e] to-[#2f6fd6] px-4 py-3 text-white">
+                                        <div className="bg-gradient-to-br from-[#143b66] to-[#1787b5] px-4 py-3 text-white">
                                             <p className="text-[11px] font-bold tracking-wide opacity-85">{venue.code}</p>
                                             <p className="text-sm font-extrabold leading-tight">{venue.name}</p>
                                         </div>
                                         <div className="px-4 py-3 space-y-3">
+                                            {(venue.vlmName || venue.vlmPhone || venue.vlmEmail) && (
+                                                <div className="text-[10.5px] leading-tight border-b pb-2">
+                                                    <p className="font-bold text-slate-700">VLM {venue.vlmName ?? '—'}</p>
+                                                    <p className="text-slate-500">Contact: {venue.vlmPhone ?? '—'}</p>
+                                                    <p className="text-slate-500">Email: {venue.vlmEmail ?? '—'}</p>
+                                                </div>
+                                            )}
                                             <div className="flex items-baseline gap-1.5">
                                                 <span className="text-2xl font-black text-slate-800">{venue.totalCarts}</span>
                                                 <span className="text-xs text-slate-500">cart{venue.totalCarts === 1 ? '' : 's'} on site</span>
@@ -128,13 +138,13 @@ export function VenueMap({ venues, onViewFleet }: Props) {
                                                     href={venue.location}
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="text-xs font-semibold text-[#3874ff] hover:underline flex items-center gap-1"
+                                                    className="text-xs font-semibold text-[#143b66] hover:underline flex items-center gap-1"
                                                 >
                                                     View on Google Maps <ExternalLink className="w-3 h-3" />
                                                 </a>
                                                 <button
                                                     onClick={() => onViewFleet(venue.id)}
-                                                    className="text-xs font-semibold text-[#14a3ac] hover:underline flex items-center gap-1"
+                                                    className="text-xs font-semibold text-[#1787b5] hover:underline flex items-center gap-1"
                                                 >
                                                     View fleet <ArrowRight className="w-3 h-3" />
                                                 </button>

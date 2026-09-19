@@ -190,9 +190,9 @@ export function PublicRequestPage() {
                         <p className="text-muted-foreground mb-4">
                             Logistics team will review your request and respond to you shortly.
                         </p>
-                        <div className="bg-[#eef4ff] border border-[#3874ff]/20 rounded-lg py-3 px-4 mb-4">
-                            <p className="text-xs uppercase tracking-wide text-[#3874ff]/80 font-bold">Request Number</p>
-                            <p className="text-2xl font-extrabold text-[#3874ff]">#{requestNumber}</p>
+                        <div className="bg-[#eef4ff] border border-[#143b66]/20 rounded-lg py-3 px-4 mb-4">
+                            <p className="text-xs uppercase tracking-wide text-[#143b66]/80 font-bold">Request Number</p>
+                            <p className="text-2xl font-extrabold text-[#143b66]">#{requestNumber}</p>
                         </div>
                         <p className="text-sm text-muted-foreground mb-4">
                             A confirmation email has been sent to <strong>{formData.requesterEmail}</strong>
@@ -243,14 +243,15 @@ export function PublicRequestPage() {
                 </div>
             ) : (
                 <div
-                    className="w-full py-4 px-6 flex items-center gap-3"
-                    style={{ background: 'linear-gradient(135deg, #5b2a9e 0%, #4a4fc4 38%, #2f6fd6 62%, #14a3ac 100%)' }}
+                    className="w-full py-6 px-6 flex items-center gap-3"
+                    style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
                 >
-                    <Link to="/login" aria-label="Back to login">
+                    <Link to="/login" aria-label="Back to login" className="inline-block">
                         <img
                             src={branding.logoUrl || '/branding/sc-logo.png'}
                             alt="Logo"
-                            className="h-10 object-contain cursor-pointer"
+                            className="h-16 object-contain cursor-pointer"
+                            style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' }}
                             onError={(e) => {
                                 const img = e.target as HTMLImageElement;
                                 if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';

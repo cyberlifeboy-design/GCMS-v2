@@ -1,6 +1,6 @@
-import PDFDocument from 'pdfkit';
 import { prisma } from '../config/database';
 import { getFileBuffer } from '../config/storage';
+import { htmlToPdf, reportShell, section, kv as kvRow, sigBlock, esc } from './html-pdf.service';
 
 export interface PdfMeta {
   title: string;
@@ -8,23 +8,85 @@ export interface PdfMeta {
   subtitle?: string;
 }
 
-/** Human-readable document reference, e.g. BKH-2026-1A2B3C (last 6 of the id, upper). */
-export function makeReference(prefix: string, id: string): string {
-  const year = new Date().getFullYear();
-  const tail = id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || 'NONE00';
-  return `${prefix}-${year}-${tail}`;
+/** Cleans a code to reference-safe uppercase alnum, or null when blank. */
+function refPart(value: string | null | undefined): string | null {
+  const cleaned = (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return cleaned || null;
 }
 
-/** Decode a "data:image/png;base64,AAAA" string to a Buffer, or null if it isn't one. */
-function dataUriToBuffer(uri: string | null | undefined): Buffer | null {
-  if (!uri || typeof uri !== 'string') return null;
-  const m = uri.match(/^data:image\/[a-zA-Z+]+;base64,(.+)$/);
-  if (!m) return null;
-  try {
-    return Buffer.from(m[1], 'base64');
-  } catch {
-    return null;
+/**
+ * Appends -02, -03... only if `base` would collide with an existing reference,
+ * so the common case keeps the plain readable shape and only pathological
+ * same-venue/cart/month collisions grow a disambiguating suffix.
+ */
+export async function dedupeReference(base: string, exists: (candidate: string) => Promise<boolean>): Promise<string> {
+  if (!(await exists(base))) return base;
+  for (let n = 2; n < 100; n++) {
+    const candidate = `${base}-${String(n).padStart(2, '0')}`;
+    if (!(await exists(candidate))) return candidate;
   }
+  return `${base}-${Date.now()}`; // pathological fallback, never expected in practice
+}
+
+/** Handover-{venue}-{cart}-{dept}-{MM-DD} (or Handback-...) — persisted once per phase, never recomputed. */
+export function buildHandoverReference(
+  kind: 'Handover' | 'Handback',
+  venueCode: string | null | undefined,
+  cartNumber: string | null | undefined,
+  deptCode: string | null | undefined,
+  at: Date = new Date(),
+): string {
+  const mmdd = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+  return [kind, refPart(venueCode) ?? 'VEN', refPart(cartNumber) ?? 'CAR', refPart(deptCode) ?? 'DEPT', mmdd].join('-');
+}
+
+/** INC-{venue}-{cart?}-{YYYY}-{MM}-{dept} — cart segment omitted when the incident has no linked cart. */
+export function buildIncidentReference(
+  venueCode: string | null | undefined,
+  cartNumber: string | null | undefined,
+  deptCode: string | null | undefined,
+  at: Date = new Date(),
+): string {
+  const parts = ['INC', refPart(venueCode) ?? 'VEN'];
+  const cart = refPart(cartNumber);
+  if (cart) parts.push(cart);
+  parts.push(String(at.getFullYear()), String(at.getMonth() + 1).padStart(2, '0'), refPart(deptCode) ?? 'DEPT');
+  return parts.join('-');
+}
+
+/** WRN-{venue}-{dept}-{YYYY}-{MM} — a warning is issued to a person, not a cart, so no cart segment. */
+export function buildWarningReference(
+  venueCode: string | null | undefined,
+  deptCode: string | null | undefined,
+  at: Date = new Date(),
+): string {
+  return ['WRN', refPart(venueCode) ?? 'VEN', refPart(deptCode) ?? 'DEPT', String(at.getFullYear()), String(at.getMonth() + 1).padStart(2, '0')].join('-');
+}
+
+/** MNT-{venue}-{cart}-{dept}-{YYYY}-{MM} */
+export function buildMaintenanceReference(
+  venueCode: string | null | undefined,
+  cartNumber: string | null | undefined,
+  deptCode: string | null | undefined,
+  at: Date = new Date(),
+): string {
+  return ['MNT', refPart(venueCode) ?? 'VEN', refPart(cartNumber) ?? 'CAR', refPart(deptCode) ?? 'DEPT', String(at.getFullYear()), String(at.getMonth() + 1).padStart(2, '0')].join('-');
+}
+
+/** {TYPE}-{venue|ALL}-{dept|ALL}-{YYYY}-{MM} — aggregate/multi-row exports spanning many venues/carts; computed fresh each time, never persisted (no single row to store it on). */
+export function buildAggregateReference(
+  prefix: string,
+  venueCode: string | null | undefined,
+  deptCode: string | null | undefined,
+  at: Date = new Date(),
+): string {
+  return [prefix, refPart(venueCode) ?? 'ALL', refPart(deptCode) ?? 'ALL', String(at.getFullYear()), String(at.getMonth() + 1).padStart(2, '0')].join('-');
+}
+
+/** PNG magic-byte check; anything else attached is a photo so JPEG is a safe default. */
+function bufferToDataUri(buf: Buffer): string {
+  const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  return `data:${isPng ? 'image/png' : 'image/jpeg'};base64,${buf.toString('base64')}`;
 }
 
 /** Fetch a stored photo (internal `/api/v1/storage/<bucket>/<file>` path or an external URL) as a Buffer for embedding. */
@@ -54,45 +116,17 @@ async function loadBranding() {
   };
 }
 
-/**
- * Render a PDF with a common header (tournament name + title + reference) and a
- * footer (footer text + "Page X of Y" + generated timestamp). `body` draws the
- * content between them.
- */
-export async function renderPdf(
-  meta: PdfMeta,
-  body: (doc: PDFKit.PDFDocument) => void,
-): Promise<Buffer> {
+/** Render a styled, branded, one-page-oriented PDF from a body of pre-built HTML sections. */
+export async function renderPdf(meta: PdfMeta, bodyHtml: string, accent?: string): Promise<Buffer> {
   const brand = await loadBranding();
-  const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
-  const chunks: Buffer[] = [];
-  doc.on('data', (c: Buffer) => chunks.push(c));
-  const done = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
-
-  doc.fontSize(9).fillColor('#666').text(brand.tournamentName, { align: 'right' });
-  doc.moveDown(0.3);
-  doc.fontSize(18).fillColor('#000').font('Helvetica-Bold').text(meta.title);
-  if (meta.subtitle) doc.fontSize(10).font('Helvetica').fillColor('#444').text(meta.subtitle);
-  doc.fontSize(9).fillColor('#666').text(`Ref: ${meta.reference}    Generated: ${new Date().toLocaleString()}`);
-  doc.moveDown();
-  doc.fillColor('#000').font('Helvetica').fontSize(10);
-
-  body(doc);
-
-  const footer = brand.footerText ? `${brand.footerText}  ·  ` : '';
-  const range = doc.bufferedPageRange();
-  for (let i = 0; i < range.count; i++) {
-    doc.switchToPage(range.start + i);
-    doc.fontSize(8).fillColor('#888').text(
-      `${footer}Page ${i + 1} of ${range.count}`,
-      40,
-      doc.page.height - 30,
-      { align: 'center', width: doc.page.width - 80 },
-    );
-  }
-
-  doc.end();
-  return done;
+  const html = reportShell({
+    title: meta.title,
+    subtitle: meta.subtitle,
+    reference: meta.reference,
+    bodyHtml,
+    accent,
+  }).replace('Golf Cart Management System', esc(brand.tournamentName) + (brand.footerText ? ` · ${esc(brand.footerText)}` : ''));
+  return htmlToPdf(html);
 }
 
 export async function bookingHistoryPdf(args: {
@@ -100,27 +134,21 @@ export async function bookingHistoryPdf(args: {
   filterSummary: string;
   reference: string;
 }): Promise<Buffer> {
+  const rowsHtml = args.rows.length === 0
+    ? '<p>No bookings match the selected filters.</p>'
+    : `<table><thead><tr><th>Car</th><th>Venue</th><th>State</th><th>Requester</th><th>Contact</th><th>Window</th><th>Returned</th></tr></thead><tbody>${args.rows.map((r) => `
+        <tr>
+          <td>${esc(r.fleet?.carNumber)} <span style="color:#888">(${esc(r.fleet?.carType)})</span></td>
+          <td>${esc(r.stadium?.name)}</td>
+          <td>${esc(r.derivedState ?? r.status)}</td>
+          <td>${esc(r.requesterName)} <span style="color:#888">· FA ${esc(r.faUser?.accreditationNumber)}</span></td>
+          <td>${esc(r.requesterPhone)}<br/>${esc(r.requesterEmail)}</td>
+          <td>${esc(r.bookingType)}<br/>${esc(r.startDate)} ${esc(r.startTime)} → ${esc(r.endDate)} ${esc(r.endTime)}</td>
+          <td>${r.returnedAt ? `${new Date(r.returnedAt).toLocaleString()}<br/>${esc(r.returnedBy?.name)}` : '—'}</td>
+        </tr>`).join('')}</tbody></table>`;
   return renderPdf(
     { title: 'Pool Booking History', subtitle: args.filterSummary, reference: args.reference },
-    (doc) => {
-      if (args.rows.length === 0) {
-        doc.text('No bookings match the selected filters.');
-        return;
-      }
-      args.rows.forEach((r, idx) => {
-        if (idx > 0) doc.moveDown(0.6);
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#000')
-          .text(`${r.fleet?.carNumber ?? '—'}  (${r.fleet?.carType ?? '—'})`);
-        doc.font('Helvetica').fontSize(9).fillColor('#333');
-        doc.text(`Venue: ${r.stadium?.name ?? '—'}    State: ${r.derivedState ?? r.status}`);
-        doc.text(`Requester: ${r.requesterName}  ·  FA: ${r.faUser?.accreditationNumber ?? '—'}  ·  ${r.requesterPhone}  ·  ${r.requesterEmail}`);
-        doc.text(`Type: ${r.bookingType}    Window: ${r.startDate} ${r.startTime} -> ${r.endDate} ${r.endTime}`);
-        if (r.returnedAt) {
-          doc.text(`Returned: ${new Date(r.returnedAt).toLocaleString()} by ${r.returnedBy?.name ?? '—'}`);
-        }
-        doc.fillColor('#000');
-      });
-    },
+    section('Bookings', rowsHtml),
   );
 }
 
@@ -151,42 +179,35 @@ export interface PoolReportPdfData {
  */
 export async function poolReportPdf(args: { data: PoolReportPdfData; reference: string }): Promise<Buffer> {
   const { data } = args;
-  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
-    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
-  };
-  const heading = (doc: PDFKit.PDFDocument, t: string) => {
-    doc.moveDown(0.6).font('Helvetica-Bold').fontSize(12).fillColor('#000').text(t).moveDown(0.2);
-    doc.font('Helvetica').fontSize(10);
-  };
   const dict = (o: Record<string, number>) =>
-    Object.keys(o).length ? Object.entries(o).map(([k, v]) => `${k}: ${v}`).join('   ') : '—';
+    Object.keys(o).length ? Object.entries(o).map(([k, v]) => `${k}: ${v}`).join(', ') : '—';
+
+  const fleetHtml = [
+    kvRow('Total pool cars', data.fleet.total),
+    kvRow('By status', dict(data.fleet.byStatus)),
+    kvRow('By type', dict(data.fleet.byType)),
+    kvRow('Utilization', data.utilizationPct == null ? '—' : `${data.utilizationPct}%`),
+    ...data.fleet.byVenue.map(v => kvRow(v.stadiumName, `${v.total} cars (${v.inUse} in use)`)),
+  ].join('');
+  const bookingsHtml = [
+    kvRow('Total', data.bookings.total),
+    kvRow('By state', dict(data.bookings.byState)),
+    kvRow('Overdue now', data.bookings.overdueCount),
+    kvRow('Completed', data.bookings.completedCount),
+    kvRow('Avg duration (h)', data.bookings.avgDurationHours ?? '—'),
+    ...data.bookings.byCar.slice(0, 15).map(c => kvRow(`Car ${c.carNumber}`, `${c.count} bookings`)),
+  ].join('');
+  const requestsHtml = [
+    kvRow('Pending', data.requests.pending),
+    kvRow('Approved', data.requests.approved),
+    kvRow('Rejected', data.requests.rejected),
+    kvRow('Pool-shared', data.requests.poolShared),
+    kvRow('Dedicated', data.requests.dedicated),
+  ].join('');
 
   return renderPdf(
     { title: 'Pool Car Report', subtitle: data.scope.stadiumId ? 'Venue-scoped' : 'All venues', reference: args.reference },
-    (doc) => {
-      heading(doc, 'Pool fleet');
-      kv(doc, 'Total pool cars', data.fleet.total);
-      kv(doc, 'By status', dict(data.fleet.byStatus));
-      kv(doc, 'By type', dict(data.fleet.byType));
-      kv(doc, 'Utilization', data.utilizationPct == null ? '—' : `${data.utilizationPct}%`);
-      data.fleet.byVenue.forEach(v => kv(doc, `  ${v.stadiumName}`, `${v.total} cars (${v.inUse} in use)`));
-
-      heading(doc, 'Bookings');
-      kv(doc, 'Total', data.bookings.total);
-      kv(doc, 'By state', dict(data.bookings.byState));
-      kv(doc, 'Overdue now', data.bookings.overdueCount);
-      kv(doc, 'Completed', data.bookings.completedCount);
-      kv(doc, 'Avg duration (h)', data.bookings.avgDurationHours ?? '—');
-      data.bookings.byCar.slice(0, 15).forEach(c => kv(doc, `  Car ${c.carNumber}`, `${c.count} bookings`));
-
-      heading(doc, 'Requests');
-      kv(doc, 'Pending', data.requests.pending);
-      kv(doc, 'Approved', data.requests.approved);
-      kv(doc, 'Rejected', data.requests.rejected);
-      kv(doc, 'Pool-shared', data.requests.poolShared);
-      kv(doc, 'Dedicated', data.requests.dedicated);
-    },
+    section('Pool fleet', fleetHtml) + section('Bookings', bookingsHtml) + section('Requests', requestsHtml),
   );
 }
 
@@ -217,24 +238,37 @@ export interface MaintenanceReportPdfData {
  */
 export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfData; reference: string }): Promise<Buffer> {
   const { data } = args;
-  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
-    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
-  };
-  const heading = (doc: PDFKit.PDFDocument, t: string) => {
-    doc.moveDown(0.6);
-    const y = doc.y;
-    doc.rect(40, y, doc.page.width - 80, 18).fill('#1f2937');
-    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(11).text(t, 46, y + 4);
-    doc.fillColor('#000').font('Helvetica').fontSize(10).moveDown(1);
-  };
 
-  // Photos are fetched up front (async) so the synchronous pdfkit drawing
-  // callback below can just place already-resolved image buffers.
   const photoUrls = data.photoUrls ?? [];
   const photoBuffers = (
     await Promise.all(photoUrls.map((url) => fetchPhotoBuffer(url)))
   ).filter((b): b is Buffer => !!b);
+
+  const cartHtml = [
+    kvRow('Cart number', data.carNumber),
+    kvRow('Cart type', data.carType),
+    kvRow('Venue', `${data.stadiumName ?? '—'}${data.stadiumCode ? ` (${data.stadiumCode})` : ''}`),
+    kvRow('Current status', data.status),
+    kvRow('Quotation status', data.quotationStatus),
+    kvRow('Fix cost', data.fixCost == null ? '—' : `QAR ${data.fixCost.toFixed(2)}`),
+    kvRow('Photos attached', data.photoCount),
+  ].join('');
+  const reporterHtml = [
+    kvRow('Name', data.reporterName),
+    kvRow('Role', data.reporterRole),
+    kvRow('Contact', data.reporterPhone),
+  ].join('');
+  const timelineHtml = data.timeline.length === 0
+    ? '<p>No timeline events.</p>'
+    : data.timeline.map(e => `<div style="margin-bottom:4px;">
+        <b>${esc(e.label)}</b>
+        <span style="color:#666;font-size:9px;"> — ${e.at ? new Date(e.at).toLocaleString() : 'date not recorded'}${e.by ? ` · ${esc(e.by)}` : ''}</span>
+        ${e.detail ? `<div style="color:#333;">${esc(e.detail)}</div>` : ''}
+      </div>`).join('');
+  const photosHtml = photoBuffers.length === 0 ? '' : section('Attached photos',
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">${photoBuffers.map(buf =>
+      `<div style="border:1px solid #ddd;border-radius:4px;height:150px;display:flex;align-items:center;justify-content:center;overflow:hidden;"><img src="${bufferToDataUri(buf)}" style="max-width:100%;max-height:100%;" /></div>`
+    ).join('')}</div>`);
 
   return renderPdf(
     {
@@ -242,61 +276,12 @@ export async function maintenanceReportPdf(args: { data: MaintenanceReportPdfDat
       subtitle: `Cart ${data.carNumber ?? '—'} · ${data.stadiumName ?? '—'}`,
       reference: args.reference,
     },
-    (doc) => {
-      heading(doc, 'Cart & venue');
-      kv(doc, 'Cart number', data.carNumber);
-      kv(doc, 'Cart type', data.carType);
-      kv(doc, 'Venue', `${data.stadiumName ?? '—'}${data.stadiumCode ? ` (${data.stadiumCode})` : ''}`);
-      kv(doc, 'Current status', data.status);
-      kv(doc, 'Quotation status', data.quotationStatus);
-      kv(doc, 'Fix cost', data.fixCost == null ? '—' : `QAR ${data.fixCost.toFixed(2)}`);
-      kv(doc, 'Photos attached', data.photoCount);
-
-      heading(doc, 'Reporter');
-      kv(doc, 'Name', data.reporterName);
-      kv(doc, 'Role', data.reporterRole);
-      kv(doc, 'Contact', data.reporterPhone);
-
-      if (data.issueDescription) {
-        heading(doc, 'Reported issue');
-        doc.font('Helvetica').fontSize(10).fillColor('#000').text(data.issueDescription);
-      }
-
-      heading(doc, 'Workflow timeline');
-      if (data.timeline.length === 0) {
-        doc.text('No timeline events.');
-      } else {
-        data.timeline.forEach((e, i) => {
-          if (i > 0) doc.moveDown(0.35);
-          doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text(e.label, { continued: true });
-          doc.font('Helvetica').fontSize(9).fillColor('#666')
-            .text(`   ${e.at ? new Date(e.at).toLocaleString() : 'date not recorded'}${e.by ? `  ·  ${e.by}` : ''}`);
-          if (e.detail) doc.font('Helvetica').fontSize(9).fillColor('#333').text(e.detail);
-          doc.fillColor('#000');
-        });
-      }
-
-      if (photoBuffers.length > 0) {
-        heading(doc, 'Attached photos');
-        const gap = 10;
-        const cols = 2;
-        const cellW = (doc.page.width - 80 - gap * (cols - 1)) / cols;
-        const cellH = 150;
-        photoBuffers.forEach((buf, i) => {
-          const col = i % cols;
-          if (col === 0 && i > 0) doc.moveDown(0);
-          const x = 40 + col * (cellW + gap);
-          // Start a new page if this row won't fit in the remaining space.
-          if (doc.y + cellH > doc.page.height - 60) doc.addPage();
-          const y = doc.y;
-          try {
-            doc.rect(x, y, cellW, cellH).stroke('#ddd');
-            doc.image(buf, x + 2, y + 2, { fit: [cellW - 4, cellH - 4] });
-          } catch { /* skip an unreadable image rather than fail the whole report */ }
-          if (col === cols - 1 || i === photoBuffers.length - 1) doc.y = y + cellH + gap;
-        });
-      }
-    },
+    section('Cart & venue', cartHtml)
+    + section('Reporter', reporterHtml)
+    + (data.issueDescription ? section('Reported issue', `<p>${esc(data.issueDescription)}</p>`) : '')
+    + section('Workflow timeline', timelineHtml)
+    + photosHtml,
+    '#d97706',
   );
 }
 
@@ -366,94 +351,88 @@ const CHECKLIST_LABELS: Record<string, string> = {
 export async function incidentReportPdf(args: { data: IncidentReportPdfData }): Promise<Buffer> {
   const { data } = args;
   const f = data.formData ?? null;
-  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
-    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
-  };
-  const heading = (doc: PDFKit.PDFDocument, t: string) => {
-    doc.moveDown(0.6).font('Helvetica-Bold').fontSize(12).fillColor('#000').text(t).moveDown(0.2);
-    doc.font('Helvetica').fontSize(10);
-  };
+
+  const incidentHtml = [
+    kvRow('Title', data.title),
+    kvRow('Status', data.status),
+    kvRow('Incident type', f?.incidentTypes?.length ? f.incidentTypes.join(', ') : '—'),
+    kvRow('Occurred at', new Date(data.occurredAt).toLocaleString()),
+    kvRow('Venue / location / address', f?.venueLocationAddress || data.stadiumName),
+    kvRow('Cart', data.carNumber),
+    kvRow('Photos attached', data.photoCount),
+  ].join('') + `<p style="margin-top:4px;">${esc(data.description)}</p>`;
+
+  const userHtml = [
+    kvRow('Full name and function', f?.userFullNameFunction || data.subjectName),
+    kvRow('Contact number', f?.userContact),
+  ].join('');
+  const witnessHtml = [
+    kvRow('Full name and function', f?.witnessFullNameFunction),
+    kvRow('Contact number', f?.witnessContact),
+  ].join('');
+
+  const hasInjury = f?.injury && (f.injury.firstName || f.injury.lastName || f.injury.descriptionInjury);
+  const injuryHtml = !hasInjury ? '' : section('Injury / illness and treatment details', [
+    kvRow('Name', `${f!.injury!.prefix ?? ''} ${f!.injury!.firstName ?? ''} ${f!.injury!.lastName ?? ''}`.trim()),
+    kvRow('DOB', f!.injury!.dob),
+    kvRow('Contact number', f!.injury!.contact),
+    kvRow('Designation', f!.injury!.designation === 'Other' ? f!.injury!.designationOther : f!.injury!.designation),
+    kvRow('Description of injury/illness', f!.injury!.descriptionInjury),
+    kvRow('Treatment received', f!.injury!.treatmentReceived),
+    kvRow('Treatment provided by', f!.injury!.treatmentProvidedBy),
+  ].join(''));
+
+  const reportingHtml = [
+    kvRow('Incident reported to', f?.incidentReportedTo?.length ? f.incidentReportedTo.join(', ') : '—'),
+    kvRow('Report completed by', f?.reportCompletedBy === 'Other' ? f.reportCompletedByOther : f?.reportCompletedBy),
+    kvRow('Name', f?.reporterName || data.reporterName),
+    kvRow('Job title', f?.reporterJobTitle),
+    kvRow('Contact no.', f?.reporterContact),
+    f?.otherInfo ? kvRow('Other relevant information', f.otherInfo) : '',
+  ].join('');
+
+  const hasChecklist = f?.checklist && Object.keys(f.checklist).length;
+  const checklistHtml = !hasChecklist ? '' : section('Golf Cart/UTV investigation checklist after incident',
+    Object.entries(CHECKLIST_LABELS).map(([key, label]) => {
+      const v = f!.checklist?.[key];
+      return v ? kvRow(label, v === 'yes' ? 'Yes' : v === 'no' ? 'No' : v) : '';
+    }).join('') + (f!.checklist!.roadTestAbnormalities ? kvRow('Road test — abnormalities noted', f!.checklist!.roadTestAbnormalities) : ''));
+
+  const signOffHtml = !data.formSignedByName ? '' : section('Sign-off', [
+    kvRow('Signed by', data.formSignedByName),
+    kvRow('Signed at', data.formSignedAt ? new Date(data.formSignedAt).toLocaleString() : '—'),
+  ].join(''));
+
+  const escalationHtml = !(data.escalatedToContracts || data.escalatedToMaintenance) ? '' : section('Escalation', [
+    kvRow('Escalated to Contracts', data.escalatedToContracts ? 'Yes' : 'No'),
+    kvRow('Escalated to Maintenance', data.escalatedToMaintenance ? 'Yes' : 'No'),
+  ].join(''));
+
+  const peopleHtml = [
+    kvRow('Subject', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`),
+    kvRow('Reported by', data.reporterName),
+  ].join('');
+
+  const warningsHtml = data.warnings.length === 0 ? '<p>None.</p>' : data.warnings.map(w => `
+    <div style="margin-bottom:4px;">
+      <b style="color:${w.revoked ? '#999' : '#000'};">${esc(w.reference)} — Level ${w.level}${w.revoked ? ' (revoked)' : ''}</b>
+      <div style="color:#666;font-size:9px;">${new Date(w.issuedAt).toLocaleString()}${w.issuedBy ? ` · ${esc(w.issuedBy)}` : ''}</div>
+      <div style="color:#333;">${esc(w.reason)}</div>
+    </div>`).join('');
+
   return renderPdf(
     { title: 'Golf Cart/Utility Vehicle Incident Report Form', subtitle: data.subjectName ? `Subject: ${data.subjectName}` : undefined, reference: data.reference },
-    (doc) => {
-      heading(doc, 'Incident');
-      kv(doc, 'Title', data.title);
-      kv(doc, 'Status', data.status);
-      kv(doc, 'Incident type', f?.incidentTypes?.length ? f.incidentTypes.join(', ') : '—');
-      kv(doc, 'Occurred at', new Date(data.occurredAt).toLocaleString());
-      kv(doc, 'Venue / location / address', f?.venueLocationAddress || data.stadiumName);
-      kv(doc, 'Cart', data.carNumber);
-      kv(doc, 'Photos attached', data.photoCount);
-      doc.moveDown(0.3).font('Helvetica').fontSize(10).fillColor('#000').text(data.description);
-
-      heading(doc, 'User of the golf cart / UTV when the incident happened');
-      kv(doc, 'Full name and function', f?.userFullNameFunction || data.subjectName);
-      kv(doc, 'Contact number', f?.userContact);
-
-      heading(doc, 'Witness');
-      kv(doc, 'Full name and function', f?.witnessFullNameFunction);
-      kv(doc, 'Contact number', f?.witnessContact);
-
-      if (f?.injury && (f.injury.firstName || f.injury.lastName || f.injury.descriptionInjury)) {
-        heading(doc, 'Injury / illness and treatment details');
-        kv(doc, 'Name', `${f.injury.prefix ?? ''} ${f.injury.firstName ?? ''} ${f.injury.lastName ?? ''}`.trim());
-        kv(doc, 'DOB', f.injury.dob);
-        kv(doc, 'Contact number', f.injury.contact);
-        kv(doc, 'Designation', f.injury.designation === 'Other' ? f.injury.designationOther : f.injury.designation);
-        kv(doc, 'Description of injury/illness', f.injury.descriptionInjury);
-        kv(doc, 'Treatment received', f.injury.treatmentReceived);
-        kv(doc, 'Treatment provided by', f.injury.treatmentProvidedBy);
-      }
-
-      heading(doc, 'Reporting');
-      kv(doc, 'Incident reported to', f?.incidentReportedTo?.length ? f.incidentReportedTo.join(', ') : '—');
-      kv(doc, 'Report completed by', f?.reportCompletedBy === 'Other' ? f.reportCompletedByOther : f?.reportCompletedBy);
-      kv(doc, 'Name', f?.reporterName || data.reporterName);
-      kv(doc, 'Job title', f?.reporterJobTitle);
-      kv(doc, 'Contact no.', f?.reporterContact);
-      if (f?.otherInfo) kv(doc, 'Other relevant information', f.otherInfo);
-
-      if (f?.checklist && Object.keys(f.checklist).length) {
-        heading(doc, 'Golf Cart/UTV investigation checklist after incident');
-        Object.entries(CHECKLIST_LABELS).forEach(([key, label]) => {
-          const v = f.checklist?.[key];
-          if (v) kv(doc, label, v === 'yes' ? 'Yes' : v === 'no' ? 'No' : v);
-        });
-        if (f.checklist.roadTestAbnormalities) kv(doc, 'Road test — abnormalities noted', f.checklist.roadTestAbnormalities);
-      }
-
-      if (data.formSignedByName) {
-        heading(doc, 'Sign-off');
-        kv(doc, 'Signed by', data.formSignedByName);
-        kv(doc, 'Signed at', data.formSignedAt ? new Date(data.formSignedAt).toLocaleString() : '—');
-      }
-
-      if (data.escalatedToContracts || data.escalatedToMaintenance) {
-        heading(doc, 'Escalation');
-        kv(doc, 'Escalated to Contracts', data.escalatedToContracts ? 'Yes' : 'No');
-        kv(doc, 'Escalated to Maintenance', data.escalatedToMaintenance ? 'Yes' : 'No');
-      }
-
-      heading(doc, 'People');
-      kv(doc, 'Subject', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`);
-      kv(doc, 'Reported by', data.reporterName);
-
-      heading(doc, 'Warnings / tickets issued');
-      if (data.warnings.length === 0) {
-        doc.text('None.');
-      } else {
-        data.warnings.forEach((w, i) => {
-          if (i > 0) doc.moveDown(0.3);
-          doc.font('Helvetica-Bold').fontSize(10).fillColor(w.revoked ? '#999' : '#000')
-            .text(`${w.reference} — Level ${w.level}${w.revoked ? ' (revoked)' : ''}`);
-          doc.font('Helvetica').fontSize(9).fillColor('#666')
-            .text(`${new Date(w.issuedAt).toLocaleString()}${w.issuedBy ? `  ·  ${w.issuedBy}` : ''}`);
-          doc.font('Helvetica').fontSize(9).fillColor('#333').text(w.reason);
-          doc.fillColor('#000');
-        });
-      }
-    },
+    section('Incident', incidentHtml)
+    + section('User of the golf cart / UTV when the incident happened', userHtml)
+    + section('Witness', witnessHtml)
+    + injuryHtml
+    + section('Reporting', reportingHtml)
+    + checklistHtml
+    + signOffHtml
+    + escalationHtml
+    + section('People', peopleHtml)
+    + section('Warnings / tickets issued', warningsHtml),
+    '#dc2626',
   );
 }
 
@@ -473,61 +452,33 @@ export interface WarningLetterPdfData {
 /** Standalone warning letter (used when no incident is linked). */
 export async function warningLetterPdf(args: { data: WarningLetterPdfData }): Promise<Buffer> {
   const { data } = args;
-  const kv = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
-    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
-  };
   const levelLabel = data.level === 1 ? 'Level 1 — soft warning'
     : data.level === 2 ? 'Level 2 — formal warning'
     : 'Level 3 — final warning (account blocked)';
-  return renderPdf(
-    { title: 'Warning Notice', subtitle: levelLabel, reference: data.reference },
-    (doc) => {
-      kv(doc, 'Issued to', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`);
-      kv(doc, 'Issued by', data.issuedBy);
-      kv(doc, 'Issued at', new Date(data.issuedAt).toLocaleString());
-      kv(doc, 'Warning level', data.level);
-      kv(doc, 'Cumulative active warnings', data.activeWarningCount);
-      kv(doc, 'Related incident', data.incidentReference);
-      kv(doc, 'Account status', data.blocked ? 'BLOCKED — contact the administrator' : 'Active');
-      doc.moveDown(0.5).font('Helvetica-Bold').fontSize(10).fillColor('#000').text('Reason');
-      doc.font('Helvetica').fontSize(10).text(data.reason);
-      doc.moveDown(0.8).font('Helvetica').fontSize(9).fillColor('#666').text(
-        data.level >= 3
-          ? 'This is a final warning. Your access to the system has been blocked. Contact the administrator to discuss reinstatement.'
-          : 'Continued breaches may lead to further warnings and, at level 3, a block on your system access.',
-      );
-    },
-  );
-}
-
-/**
- * Full handover & return form as a branded PDF. Takes the already-loaded form
- * (with `fleet`, `assignedUser`, signer relations) — the caller fetches it so
- * this module stays leaf-level.
- */
-/** Filename-safe code: uppercased, non-alphanumerics stripped, falls back to a generic tag. */
-function safeCode(value: string | null | undefined, fallback: string): string {
-  const cleaned = (value ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  return cleaned || fallback;
+  const body = section('Notice', [
+    kvRow('Issued to', `${data.subjectName ?? '—'}${data.subjectFaCode ? ` (FA ${data.subjectFaCode})` : ''}`),
+    kvRow('Issued by', data.issuedBy),
+    kvRow('Issued at', new Date(data.issuedAt).toLocaleString()),
+    kvRow('Warning level', data.level),
+    kvRow('Cumulative active warnings', data.activeWarningCount),
+    kvRow('Related incident', data.incidentReference),
+    kvRow('Account status', data.blocked ? 'BLOCKED — contact the administrator' : 'Active'),
+  ].join('') + `<p><b>Reason</b><br/>${esc(data.reason)}</p>
+    <p style="color:#666;font-size:9px;">${esc(
+      data.level >= 3
+        ? 'This is a final warning. Your access to the system has been blocked. Contact the administrator to discuss reinstatement.'
+        : 'Continued breaches may lead to further warnings and, at level 3, a block on your system access.',
+    )}</p>`);
+  return renderPdf({ title: 'Warning Notice', subtitle: levelLabel, reference: data.reference }, body, '#b45309');
 }
 
 /** `{venueCode}-{deptCode}-{carNumber}handover.pdf` / `...handback.pdf`, per the requested naming convention. */
 export function handoverFilename(form: any, variant: 'handover' | 'handback'): string {
   const fleet = form.fleet ?? {};
-  const venue = safeCode(fleet.stadium?.code, 'VEN');
-  const dept = safeCode(fleet.department?.code, 'DEPT');
-  const car = safeCode(fleet.carNumber, 'CAR');
+  const venue = refPart(fleet.stadium?.code) ?? 'VEN';
+  const dept = refPart(fleet.department?.code) ?? 'DEPT';
+  const car = refPart(fleet.carNumber) ?? 'CAR';
   return `${venue}-${dept}-${car}${variant}.pdf`;
-}
-
-function sectionBox(doc: PDFKit.PDFDocument, title: string, draw: () => void) {
-  doc.moveDown(0.5);
-  const startY = doc.y;
-  doc.rect(40, startY, doc.page.width - 80, 20).fill('#1f2937');
-  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(11).text(title, 46, startY + 5);
-  doc.fillColor('#000').moveDown(1.2);
-  draw();
 }
 
 /**
@@ -535,91 +486,80 @@ function sectionBox(doc: PDFKit.PDFDocument, title: string, draw: () => void) {
  * requested — `variant: 'handover'` covers the pre-use inspection + admin/
  * receiver sign-off; `'handback'` covers the after-use inspection + return
  * sign-off — so the two are downloadable (and nameable) as separate documents
- * even though both live on one HandoverForm record.
+ * even though both live on one HandoverForm record. The reference is stamped
+ * once (persisted on the form) the first time each phase is generated.
  */
 export async function handoverFormPdf(
   form: any,
   variant: 'handover' | 'handback' = 'handover',
 ): Promise<{ buffer: Buffer; reference: string }> {
-  const reference = makeReference(variant === 'handback' ? 'HBK' : 'HOF', form.id);
   const fleet = form.fleet ?? {};
-  const fa = fleet.assignedUser ?? {};
+  const dept = fleet.department ?? {};
+  const faName = dept.focalPoint?.name ?? dept.focalPointName;
+  const faPhone = dept.focalPoint?.phone ?? dept.focalPointPhone;
 
-  const line = (doc: PDFKit.PDFDocument, label: string, value: unknown) => {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(`${label}: `, { continued: true });
-    doc.font('Helvetica').fillColor('#000').text(value != null && value !== '' ? String(value) : '—');
-  };
-  const sig = (doc: PDFKit.PDFDocument, label: string, uri: string | null | undefined, at?: string, by?: string) => {
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#444').text(label);
-    const buf = dataUriToBuffer(uri);
-    const boxY = doc.y;
-    doc.rect(40, boxY, 200, 64).stroke('#ccc');
-    if (buf) {
-      try { doc.image(buf, 44, boxY + 2, { fit: [192, 60] }); } catch { doc.font('Helvetica').fillColor('#000').text('[signature on file]', 46, boxY + 25); }
-    } else {
-      doc.font('Helvetica').fillColor('#999').text('[not signed]', 46, boxY + 25);
+  const refField = variant === 'handback' ? 'handbackReference' : 'handoverReference';
+  let reference: string = form[refField];
+  if (!reference) {
+    const base = buildHandoverReference(variant === 'handback' ? 'Handback' : 'Handover', fleet.stadium?.code, fleet.carNumber, dept.code);
+    reference = await dedupeReference(base, async (candidate) =>
+      (await prisma.handoverForm.count({ where: { [refField]: candidate } })) > 0);
+    await prisma.handoverForm.update({ where: { id: form.id }, data: { [refField]: reference } });
+  }
+
+  const systemRecordHtml = [
+    kvRow('Car number', fleet.carNumber),
+    kvRow('Car type', fleet.carType),
+    kvRow('Venue', `${fleet.stadium?.name ?? '—'}${fleet.stadium?.code ? ` (${fleet.stadium.code})` : ''}`),
+    kvRow('Department', `${dept.name ?? '—'}${dept.code ? ` (${dept.code})` : ''}`),
+    kvRow('Assigned FA', faName),
+    kvRow('FA phone', faPhone),
+    kvRow('Status', form.status),
+  ].join('');
+
+  let bodyHtml = section('System record', systemRecordHtml);
+
+  if (variant === 'handover') {
+    bodyHtml += section('Handover details', [
+      kvRow('Handover date', form.handoverDate),
+      kvRow('Approved return date', form.approvedReturnDate),
+      kvRow('Handover location', form.handoverLocation),
+      kvRow('Handover by (Venue Logistics Rep)', form.handoverBy),
+      kvRow('Contact number (Logistics Rep)', form.handoverByContact),
+      kvRow('Handed over to', form.handedOverTo),
+      kvRow('Receiver contact', form.receiverContact),
+      kvRow('Receiver licence no', form.receiverLicenseNo),
+      kvRow('Issues / notes', form.issuesNotes),
+    ].join(''));
+    bodyHtml += section('Pre-use inspection sign-off',
+      sigBlock('Admin signature (handover)', form.adminSignatureData, form.adminSignedAt, form.adminSignedByUser?.name)
+      + sigBlock('Receiver signature (handover)', form.userSignatureData, form.userSignedAt, form.userSignedByUser?.name));
+    if (form.finalSignatureData || form.finalName) {
+      bodyHtml += section('Terms acknowledgement',
+        kvRow('Name', form.finalName) + kvRow('Date', form.finalDate) + sigBlock('Signature', form.finalSignatureData));
     }
-    doc.y = boxY + 68;
-    if (at || by) doc.font('Helvetica').fontSize(8).fillColor('#666').text(`${by ?? ''}${at ? `  ·  ${new Date(at).toLocaleString()}` : ''}`);
-    doc.fillColor('#000');
-  };
+  } else {
+    bodyHtml += section('Handback / return details', [
+      kvRow('Inspection done', form.inspectionDone),
+      kvRow('Return date', form.returnDate),
+      kvRow('Received by', form.receivedBy),
+      kvRow('Returned by', form.returnedBy),
+      form.returnNotes ? kvRow('Return notes', form.returnNotes) : '',
+    ].join(''));
+    bodyHtml += section('After-use inspection sign-off',
+      sigBlock('After-use signature (FA)', form.afteruseSignatureData, form.afteruseSignedAt, form.afteruseSignedByUser?.name)
+      + sigBlock('Admin signature (return)', form.returnAdminSigData)
+      + sigBlock('Receiver signature (return)', form.returnUserSigData));
+  }
 
   const buffer = await renderPdf(
     {
       title: variant === 'handback' ? 'Golf Cart Handback (Return) Form' : 'Golf Cart Handover Form',
-      subtitle: `Cart ${fleet.carNumber ?? '—'} · ${fleet.stadium?.name ?? '—'} (${fleet.stadium?.code ?? '—'}) · ${fleet.department?.name ?? '—'}`,
+      subtitle: `Cart ${fleet.carNumber ?? '—'} · ${fleet.stadium?.name ?? '—'} (${fleet.stadium?.code ?? '—'}) · ${dept.name ?? '—'}`,
       reference,
     },
-    (doc) => {
-      sectionBox(doc, 'System record', () => {
-        line(doc, 'Car number', fleet.carNumber);
-        line(doc, 'Car type', fleet.carType);
-        line(doc, 'Venue', `${fleet.stadium?.name ?? '—'}${fleet.stadium?.code ? ` (${fleet.stadium.code})` : ''}`);
-        line(doc, 'Department', `${fleet.department?.name ?? '—'}${fleet.department?.code ? ` (${fleet.department.code})` : ''}`);
-        line(doc, 'Assigned FA', fa.name);
-        line(doc, 'FA code', fa.accreditationNumber);
-        line(doc, 'FA phone', fa.phone);
-        line(doc, 'Status', form.status);
-      });
-
-      if (variant === 'handover') {
-        sectionBox(doc, 'Handover details', () => {
-          line(doc, 'Handover date', form.handoverDate);
-          line(doc, 'Approved return date', form.approvedReturnDate);
-          line(doc, 'Handover location', form.handoverLocation);
-          line(doc, 'Handed over to', form.handedOverTo);
-          line(doc, 'Receiver contact', form.receiverContact);
-          line(doc, 'Receiver licence no', form.receiverLicenseNo);
-          line(doc, 'Issues / notes', form.issuesNotes);
-        });
-        sectionBox(doc, 'Pre-use inspection sign-off', () => {
-          sig(doc, 'Admin signature (handover)', form.adminSignatureData, form.adminSignedAt, form.adminSignedByUser?.name);
-          sig(doc, 'Receiver signature (handover)', form.userSignatureData, form.userSignedAt, form.userSignedByUser?.name);
-        });
-
-        if (form.finalSignatureData || form.finalName) {
-          sectionBox(doc, 'Terms acknowledgement', () => {
-            line(doc, 'Name', form.finalName);
-            line(doc, 'Date', form.finalDate);
-            sig(doc, 'Signature', form.finalSignatureData);
-          });
-        }
-      } else {
-        sectionBox(doc, 'Handback / return details', () => {
-          line(doc, 'Inspection done', form.inspectionDone);
-          line(doc, 'Return date', form.returnDate);
-          line(doc, 'Received by', form.receivedBy);
-          line(doc, 'Returned by', form.returnedBy);
-          if (form.returnNotes) line(doc, 'Return notes', form.returnNotes);
-        });
-        sectionBox(doc, 'After-use inspection sign-off', () => {
-          sig(doc, 'After-use signature (FA)', form.afteruseSignatureData, form.afteruseSignedAt, form.afteruseSignedByUser?.name);
-          sig(doc, 'Admin signature (return)', form.returnAdminSigData);
-          sig(doc, 'Receiver signature (return)', form.returnUserSigData);
-        });
-      }
-    },
+    bodyHtml,
+    '#14a3ac',
   );
   return { buffer, reference };
 }

@@ -8,8 +8,7 @@ import { Document, Packer, Paragraph, TextRun, Header, Footer, PageOrientation, 
 import PptxGenJS from 'pptxgenjs';
 import { prisma } from '../../config/database';
 import { getFileBuffer } from '../../config/storage';
-import { poolReportPdf, makeReference } from '../../services/pdf.service';
-import { randomUUID } from 'crypto';
+import { poolReportPdf, buildAggregateReference } from '../../services/pdf.service';
 import { possessionMinutes, formatDuration } from './fa-trail-detail';
 import { labelCarFontSize } from './label-layout';
 
@@ -906,7 +905,8 @@ export class ReportsController {
         try {
             const stadiumId = resolveStadiumScope(req.user, req.query.stadiumId);
             const report = await reportsService.getPoolReport({ stadiumId });
-            const buffer = await poolReportPdf({ data: report, reference: makeReference('POOL', randomUUID()) });
+            const venueCode = stadiumId ? (await prisma.stadium.findUnique({ where: { id: stadiumId }, select: { code: true } }))?.code : null;
+            const buffer = await poolReportPdf({ data: report, reference: buildAggregateReference('POOL', venueCode, null) });
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'attachment; filename=pool_report.pdf');
             res.send(buffer);

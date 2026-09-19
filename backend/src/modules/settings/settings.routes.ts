@@ -28,6 +28,7 @@ router.get('/public', async (_req: Request, res: Response) => {
             requestWindow,
             enableBookings: settings?.enableBookings ?? true,
             bookingWindow,
+            instantBookingDurationMinutes: settings?.instantBookingDurationMinutes || '60,180,300,480',
         });
     } catch {
         // A settings read failure must never block submissions — default to open.
@@ -37,6 +38,7 @@ router.get('/public', async (_req: Request, res: Response) => {
             requestWindow: { isOpen: true, opensAt: null, closesAt: null, message: null },
             enableBookings: true,
             bookingWindow: { isOpen: true, opensAt: null, closesAt: null, message: null },
+            instantBookingDurationMinutes: '60,180,300,480',
         });
     }
 });

@@ -43,7 +43,7 @@ export function ForceChangePasswordPage() {
     return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-[#f5f7fa]">
             <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8">
-                <Lock className="w-10 h-10 text-[#3874ff] mx-auto mb-2" />
+                <Lock className="w-10 h-10 text-[#143b66] mx-auto mb-2" />
                 <h1 className="text-xl font-bold text-[#222834] text-center">Set a new password</h1>
                 <p className="text-sm text-[#67728a] text-center mt-1">
                     Hi {user?.name || ''}, please set a new password before continuing.

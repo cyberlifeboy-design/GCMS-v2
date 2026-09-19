@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../../config/database';
-import { makeReference, incidentReportPdf } from '../../services/pdf.service';
+import { buildIncidentReference, dedupeReference, incidentReportPdf } from '../../services/pdf.service';
 import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
 import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
@@ -43,9 +43,22 @@ export class IncidentsService {
         photosUrls: JSON.stringify(data.photosUrls ?? []),
       },
     });
+    const withParts = await prisma.incident.findUniqueOrThrow({
+      where: { id: row.id },
+      select: {
+        fleet: { select: { carNumber: true, stadium: { select: { code: true } }, department: { select: { code: true } } } },
+        stadium: { select: { code: true } },
+        subjectUser: { select: { department: { select: { code: true } } } },
+      },
+    });
+    const venueCode = withParts.fleet?.stadium?.code ?? withParts.stadium?.code;
+    const deptCode = withParts.fleet?.department?.code ?? withParts.subjectUser?.department?.code;
+    const base = buildIncidentReference(venueCode, withParts.fleet?.carNumber, deptCode, data.occurredAt);
+    const reference = await dedupeReference(base, async (candidate) => (await prisma.incident.count({ where: { reference: candidate } })) > 0);
+
     return prisma.incident.update({
       where: { id: row.id },
-      data: { reference: makeReference('INC', row.id) },
+      data: { reference },
       include: INCIDENT_INCLUDE,
     });
   }

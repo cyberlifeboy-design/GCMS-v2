@@ -2,60 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brand palette sourced from the SC (Supreme Committee for Delivery & Legacy) generic
+   deck (MKTG_200427_SCGenericPPT_Option3): deep navy + gold/amber, teal from the "S"
+   logo mark. Kept as HSL triples so shadcn's `hsl(var(--x))` usage keeps working. */
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 211.5 30% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 211.5 30% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 211.5 30% 12%;
+    --primary: 211.5 67.2% 23.9%; /* SC navy #143B66 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 35.2 49.2% 92%; /* soft gold tint */
+    --secondary-foreground: 211.5 67.2% 23.9%;
+    --muted: 30 15% 95.5%;
+    --muted-foreground: 215 15% 40%;
+    --accent: 37.8 46.5% 69.2%; /* SC gold #D5BA8C */
+    --accent-foreground: 211.5 67.2% 18%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 30 15% 88%;
+    --input: 30 15% 88%;
+    --ring: 197.5 77.5% 40%; /* logo teal #1787B5 */
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-1: 211.5 67.2% 23.9%;
+    --chart-2: 197.5 77.5% 40%;
+    --chart-3: 37.8 46.5% 69.2%;
+    --chart-4: 35.3 95.9% 61.8%;
+    --chart-5: 240 2.1% 45%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --background: 211.5 30% 8%;
+    --foreground: 35.2 49.2% 92%;
+    --card: 211.5 30% 10%;
+    --card-foreground: 35.2 49.2% 92%;
+    --popover: 211.5 30% 10%;
+    --popover-foreground: 35.2 49.2% 92%;
+    --primary: 37.8 46.5% 69.2%; /* SC gold */
+    --primary-foreground: 211.5 67.2% 14%;
+    --secondary: 211.5 30% 18%;
+    --secondary-foreground: 35.2 49.2% 92%;
+    --muted: 211.5 30% 18%;
+    --muted-foreground: 30 10% 65%;
+    --accent: 211.5 40% 22%;
+    --accent-foreground: 35.2 49.2% 92%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --border: 211.5 30% 20%;
+    --input: 211.5 30% 20%;
+    --ring: 197.5 77.5% 45%;
+    --chart-1: 37.8 46.5% 69.2%;
+    --chart-2: 197.5 77.5% 45%;
+    --chart-3: 35.3 95.9% 61.8%;
+    --chart-4: 211.5 67.2% 40%;
+    --chart-5: 30 10% 65%;
   }
 }
 
@@ -98,12 +101,12 @@
 }
 .venue-map .leaflet-control-zoom {
   border: none !important;
-  box-shadow: 0 2px 10px rgba(30, 27, 75, 0.14) !important;
+  box-shadow: 0 2px 10px rgba(20, 59, 102, 0.14) !important;
 }
 .venue-map .leaflet-control-zoom a {
   background: #fff !important;
-  color: #3b2f7a !important;
-  border-color: rgba(59, 47, 122, 0.1) !important;
+  color: #143b66 !important;
+  border-color: rgba(20, 59, 102, 0.1) !important;
 }
 .venue-map .leaflet-control-zoom a:hover {
   background: #f4f2fb !important;
@@ -133,7 +136,7 @@
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  border: 2px solid #14a3ac;
+  border: 2px solid #1787b5;
   opacity: 0.55;
   animation: venue-pulse 2.4s ease-out infinite;
 }
@@ -150,14 +153,14 @@
   padding: 0;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 12px 32px rgba(30, 27, 75, 0.24);
+  box-shadow: 0 12px 32px rgba(20, 59, 102, 0.24);
 }
 .venue-map .leaflet-popup-content {
   margin: 0;
   width: 240px !important;
 }
 .venue-map .leaflet-popup-tip {
-  box-shadow: 0 4px 10px rgba(30, 27, 75, 0.15);
+  box-shadow: 0 4px 10px rgba(20, 59, 102, 0.15);
 }
 .venue-map .leaflet-popup-close-button {
   color: rgba(255, 255, 255, 0.85) !important;

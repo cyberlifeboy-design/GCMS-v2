@@ -38,6 +38,13 @@ interface Branding {
     footerUrl: string | null;
     footerText: string | null;
     bookingWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
+    instantBookingDurationMinutes?: string;
+}
+
+/** "60" -> "1 hour", "180" -> "3 hours" */
+function durationLabel(minutes: number): string {
+    const hours = minutes / 60;
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
 }
 
 let slotIdCounter = 0;
@@ -255,6 +262,7 @@ function NewPoolBookingRequestView() {
         endTime: '',
         fleetId: '',
         purpose: '',
+        instantDurationMinutes: 60,
     });
 
     useEffect(() => {
@@ -262,10 +270,16 @@ function NewPoolBookingRequestView() {
             .then(([stadiumsRes, brandingRes]) => {
                 setStadiums(stadiumsRes.data.data || []);
                 setBranding(brandingRes.data);
+                const opts = (brandingRes.data.instantBookingDurationMinutes || '60,180,300,480')
+                    .split(',').map((s: string) => parseInt(s, 10)).filter((n: number) => n > 0);
+                if (opts.length > 0) setFormData((prev) => ({ ...prev, instantDurationMinutes: opts[0] }));
             })
             .catch((err) => console.error('Failed to load initial data:', err))
             .finally(() => setLoadingInitial(false));
     }, []);
+
+    const durationOptions = (branding.instantBookingDurationMinutes || '60,180,300,480')
+        .split(',').map((s) => parseInt(s, 10)).filter((n) => n > 0);
 
     useEffect(() => {
         if (!formData.stadiumId) {
@@ -372,6 +386,7 @@ function NewPoolBookingRequestView() {
                     requesterPhone: formData.requesterPhone,
                     departmentId: formData.departmentId,
                     purpose: formData.purpose || undefined,
+                    instantDurationMinutes: formData.instantDurationMinutes,
                 });
                 setRequestTokens([res.data.data.requestToken]);
                 setSubmittedMode('instant');
@@ -485,6 +500,7 @@ function NewPoolBookingRequestView() {
                                         stadiumId: '', requesterName: '', requesterEmail: '', requesterPhone: '',
                                         departmentId: '', bookingType: 'Single', startDate: '', endDate: '',
                                         startTime: '', endTime: '', fleetId: '', purpose: '',
+                                        instantDurationMinutes: durationOptions[0] ?? 60,
                                     });
                                 }}
                             >
@@ -505,14 +521,15 @@ function NewPoolBookingRequestView() {
                 </div>
             ) : (
                 <div
-                    className="w-full py-4 px-6 flex items-center gap-3"
-                    style={{ background: 'linear-gradient(135deg, #5b2a9e 0%, #4a4fc4 38%, #2f6fd6 62%, #14a3ac 100%)' }}
+                    className="w-full py-6 px-6 flex items-center gap-3"
+                    style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
                 >
-                    <Link to="/login" aria-label="Back to login">
+                    <Link to="/login" aria-label="Back to login" className="inline-block">
                         <img
                             src={branding.logoUrl || '/branding/sc-logo.png'}
                             alt="Logo"
-                            className="h-10 object-contain cursor-pointer"
+                            className="h-16 object-contain cursor-pointer"
+                            style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' }}
                             onError={(e) => {
                                 const img = e.target as HTMLImageElement;
                                 if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
@@ -915,6 +932,28 @@ function NewPoolBookingRequestView() {
                                                 </>
                                             )}
                                         </div>
+                                        )}
+
+                                        {mode === 'instant' && (
+                                            <div className="space-y-2">
+                                                <Label>How Long Do You Need It? *</Label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {durationOptions.map((mins) => (
+                                                        <button
+                                                            type="button"
+                                                            key={mins}
+                                                            onClick={() => setFormData({ ...formData, instantDurationMinutes: mins })}
+                                                            className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition ${
+                                                                formData.instantDurationMinutes === mins
+                                                                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                                                                    : 'bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100'
+                                                            }`}
+                                                        >
+                                                            {durationLabel(mins)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         )}
 
                                         <div className="space-y-2">

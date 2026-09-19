@@ -15,6 +15,13 @@ COPY sshd_config /etc/ssh/sshd_config
 COPY init.sh /usr/local/bin/init.sh
 RUN chmod +x /usr/local/bin/init.sh
 
+# System Chromium for report PDF rendering (puppeteer-core drives it — no bundled
+# Chromium download, keeps the image smaller and the build reliable behind firewalls).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium \
+    && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 COPY package*.json ./
 RUN npm install
 RUN npm install -g tsx

@@ -42,6 +42,7 @@
     "nodemailer": "^8.0.2",
     "pdfkit": "^0.17.2",
     "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^25.11.0",
     "resend": "^6.9.3",
     "winston": "^3.17.0",
     "xlsx": "^0.18.5",

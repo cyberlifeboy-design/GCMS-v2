@@ -80,6 +80,20 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
   the one form — Pre-Use inspection is only editable while creating the handover,
   After-Use only while doing the handback. Filenames follow
   `{venueCode}-{deptCode}-{carNumber}handover.pdf` / `...handback.pdf`.
+- **Pixel-Match PDF Rendering**: reports are rendered server-side with headless Chromium
+  (Puppeteer) from the same HTML/CSS as the on-screen form, so the downloaded PDF is a
+  visual match — layout, colors, signatures — not a plain-text reconstruction.
+- **Unique Reference Numbers**: every Handover/Handback, Incident, Warning, and
+  Maintenance report gets a reference persisted at creation —
+  `Handover-{venueCode}-{cartNumber}-{deptCode}-{MM-DD}` (and `Handback-...`),
+  `Inc-{venueCode}-{cartNumber}-{year}-{month}-{deptCode}` for incidents, the same
+  venue/department/date scheme for the rest — with a `-02`, `-03` suffix on collision.
+- **Print as soon as any signature exists**: the Handover Management report table and
+  the form itself expose "Print Handover"/"Print Handback" as soon as either party has
+  signed, not only once the whole cycle is complete.
+- **VLM (Venue Logistics Manager) Contact**: each venue's Admin doubles as the VLM —
+  the Logistics ("LOG") department's focal point — and their name/phone/email surface
+  on the Dashboard map, the Active Stadiums card, and the Handover form/PDF.
 
 ### 🏊 Pool Booking
 
@@ -101,9 +115,15 @@ live availability — designed for short-duration shared use across departments.
   can approve the extension
 - **Reminders**: an in-process poller notifies the FA + venue Admin as a booking's return
   time approaches, and again if it's overdue
-- **Bookings Page** (`/bookings`): Review queue, Active & Overdue, Upcoming, Available
-  cars (green = available, gray = booked — with the current FA/return time), and a
+- **Bookings Page** (`/bookings`): Available cars is pinned at the top of the page
+  (visible at a glance, not tucked in a tab) — green = available, gray = booked with the
+  current FA/return time — above the Review queue, Active & Overdue, Upcoming, and a
   filterable History tab exportable to PDF/Excel
+- **Instant Booking Timer**: FA-initiated instant bookings run for a configurable
+  duration (SuperAdmin sets the available slots — e.g. 1h/3h/5h/8h — in Settings); the
+  countdown starts the moment the key is collected, shows a live "time remaining"
+  chip + progress bar on the booking card, and notifies the admin (in-app and/or email,
+  per Settings) when time is up, including the booker's contact details
 - **Roles**: SuperAdmin, Admin, FA, Observer can access the Bookings page; only Admin/SuperAdmin review, approve, reject, or amend requests
 
 ### 🔧 Maintenance Management
@@ -205,7 +225,14 @@ cumulative warnings — distinct from the standalone print-form above.
 
 ### ⚙️ System Settings (SuperAdmin)
 
-- **Tournament Branding**: Upload logo, header, and footer images
+- **Tournament Branding**: Upload logo, header, and footer images, with a "Remove" action
+  per asset that actually clears it (not just the preview); defaults to the real SC
+  (Supreme Committee for Delivery &amp; Legacy) logo and navy/gold theme when unset —
+  `frontend/public/branding/sc-logo.png` plus the app-wide CSS theme tokens in
+  `frontend/src/styles/globals.css`
+- **Instant Booking**: define the duration slots FAs can choose (hours + minutes, add as
+  many as needed) and which channels (in-app/email) notify the venue admin when an
+  instant booking's time is up
 - **Email (SMTP)**: Configure the corporate SMTP server (host/port/TLS/user/password/from) used for all system emails and notifications, with a "Send Test Email" action to verify delivery. Takes effect immediately — no redeploy needed.
 - **Notifications**: Configure maintenance alert emails
 - **Handover Settings**: Timeout thresholds, default stadium
@@ -370,6 +397,16 @@ into the JS bundle — an App Service setting alone does nothing there), and day
 design that was **not** what got built — it's kept only for historical reference and is
 marked superseded at the top of that file.
 
+> **Not the same server as `gcms.mehaisi.com`.** That's a separate, older production
+> deployment (PostgreSQL, real data, provisioned outside Azure App Service) that this
+> project's `docker-compose.yml` targets via its Traefik labels — it is untouched by the
+> Azure App Service work above and must never be redeployed with this repo's current
+> MySQL-based compose file (see the warning comment at the top of `docker-compose.yml`).
+> When "Azure production" is meant, it refers to the `rg-gcms-dev-qc-001` App Services
+> above, deployed via `az acr build` from the Azure Portal's Cloud Shell — see the runbook
+> for exact commands. This repo does not have Azure credentials and cannot trigger that
+> rebuild itself; a human with PIM-activated access must run it.
+
 ### Default Users (after seed)
 
 | Role | Email | Password |
@@ -380,6 +417,12 @@ marked superseded at the top of that file.
 | Observer | observer@gcms.com | Observer@2024! |
 | Contracts | contracts@gcms.com | Contracts@2024! |
 | MaintenanceTeam | maintenance@gcms.com | Maint@2024! |
+
+> **Security note:** the passwords above are local-development fallbacks only — they're public in this
+> repo's history. `backend/prisma/seed.ts` reads `SEED_SUPERADMIN_PASSWORD`, `SEED_ADMIN_PASSWORD`,
+> `SEED_FA_PASSWORD`, and `SEED_OBSERVER_PASSWORD` env vars and uses them instead when set; every account
+> seeded with a fallback password is flagged `mustChangePassword` so first login forces a change. **Any
+> shared/staging/production seed run must set these env vars first.**
 
 ## Project Structure
 
@@ -711,6 +754,11 @@ AuditLog
 | `SMTP_USER` | SMTP username | No |
 | `SMTP_PASS` | SMTP password | No |
 | `SMTP_FROM` | From email address | Yes |
+| `PUPPETEER_EXECUTABLE_PATH` | Path to system Chromium, used to render pixel-match PDF reports (Handover/Handback, Incident, Warning, Maintenance, etc.) | Yes — `/usr/bin/chromium` in both `backend/Dockerfile` and the local dev container |
+
+> `docker-compose.yml` (the Traefik/production-style compose file) requires `DB_PASSWORD`, `DB_ROOT_PASSWORD`,
+> `MINIO_USER`, and `MINIO_PASSWORD` to be set — there are no insecure built-in defaults. For local dev via
+> `docker-compose.dev-live.yml`, put these in a local, gitignored `.env` at the repo root.
 
 #### Frontend
 

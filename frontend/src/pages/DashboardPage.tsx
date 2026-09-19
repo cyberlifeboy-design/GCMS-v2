@@ -238,6 +238,9 @@ interface StadiumInfo {
     totalCarts: number;
     activeFAs: number;
     fleetBreakdown: Record<string, number>;
+    vlmName: string | null;
+    vlmPhone: string | null;
+    vlmEmail: string | null;
 }
 
 interface FAFleetInfo {
@@ -611,6 +614,11 @@ export function DashboardPage() {
                                             <div>
                                                 <p className="font-semibold">{stadium.name}</p>
                                                 <p className="text-sm text-muted-foreground">{stadium.location}</p>
+                                                {(stadium.vlmName || stadium.vlmPhone || stadium.vlmEmail) && (
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                        VLM {stadium.vlmName ?? '—'} · {stadium.vlmPhone ?? '—'} · {stadium.vlmEmail ?? '—'}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="text-right">

@@ -134,6 +134,19 @@ export function ReportsPage() {
         }
     };
 
+    const downloadHandoverPdf = async (fleetId: string, carNumber: string | undefined, variant: 'handover' | 'handback') => {
+        try {
+            const res = await handoverApi.downloadFormPdf(fleetId, variant);
+            const serverName = /filename="?([^";]+)"?/.exec(res.headers?.['content-disposition'] || '')?.[1];
+            const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = url; a.download = serverName || `${variant}_${carNumber || 'cart'}.pdf`; a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error('Download failed');
+        }
+    };
+
     // FA Audit Trail state
     const [faTrailLogs, setFaTrailLogs] = useState<any[]>([]);
     const [faTrailTotal, setFaTrailTotal] = useState(0);
@@ -1135,10 +1148,24 @@ export function ReportsPage() {
                                                 <TableCell className="text-xs text-muted-foreground">{f.adminSignedAt ? formatDateTime(f.adminSignedAt) : '—'}</TableCell>
                                                 <TableCell className="text-xs text-muted-foreground">{f.userSignedAt ? formatDateTime(f.userSignedAt) : '—'}</TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button size="sm" variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                                                        onClick={() => setFormModal({ open: true, fleetId: f.fleetId })}>
-                                                        <Download className="w-3 h-3 mr-1" /> View &amp; PDF
-                                                    </Button>
+                                                    <div className="flex justify-end gap-1.5 flex-wrap">
+                                                        <Button size="sm" variant="ghost"
+                                                            onClick={() => setFormModal({ open: true, fleetId: f.fleetId })}>
+                                                            View
+                                                        </Button>
+                                                        {f.status !== 'PENDING' && (
+                                                            <Button size="sm" variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                                                onClick={() => downloadHandoverPdf(f.fleetId, f.fleet?.carNumber, 'handover')}>
+                                                                <Download className="w-3 h-3 mr-1" /> Print Handover
+                                                            </Button>
+                                                        )}
+                                                        {(f.status === 'HANDBACK_PENDING' || f.status === 'RETURNED') && (
+                                                            <Button size="sm" variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                                                onClick={() => downloadHandoverPdf(f.fleetId, f.fleet?.carNumber, 'handback')}>
+                                                                <Download className="w-3 h-3 mr-1" /> Print Handback
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
