@@ -389,7 +389,7 @@ export function ReportsPage() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="stadiums" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-7">
+                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                     <TabsTrigger value="stadiums" className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Stadium Reports

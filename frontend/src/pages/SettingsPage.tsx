@@ -482,7 +482,7 @@ export function SettingsPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col lg:flex-row lg:items-start gap-6">
-                <TabsList className="lg:sticky lg:top-6 lg:flex-col h-auto lg:w-60 shrink-0 bg-muted/40 rounded-2xl gap-0.5 p-2.5 border">
+                <TabsList className="flex-wrap lg:flex-nowrap lg:sticky lg:top-6 lg:flex-col h-auto lg:w-60 shrink-0 bg-muted/40 rounded-2xl gap-0.5 p-2.5 border">
                     <TabsTrigger value="profile" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
                         <User className="w-4 h-4 mr-2.5" /> My Profile
                     </TabsTrigger>

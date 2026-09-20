@@ -82,7 +82,7 @@ export function VenueMap({ venues, onViewFleet }: Props) {
     const points: [number, number][] = placed.map(v => [v.latitude, v.longitude]);
 
     return (
-        <div className="venue-map space-y-2">
+        <div className="venue-map isolate space-y-2">
             <div className="rounded-xl overflow-hidden border h-[420px]">
                 {placed.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-2 text-center bg-muted/30 text-muted-foreground px-6">
