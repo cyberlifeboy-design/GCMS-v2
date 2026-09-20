@@ -25,6 +25,12 @@
 >   repeatable steps (PIM activation → Access Restriction → SSH → set `DATABASE_URL`
 >   manually → run Prisma) — this is now the standard path for any future Azure dev DB
 >   push or one-off backend command, not a one-time workaround.
+> - **Notification templates seeded (2026-09-20, later same session):** were empty right
+>   after the `db push` above because the app-boot seeding only runs once at startup and
+>   the running process predated the schema fix. Fixed with a plain backend **Restart**
+>   (Overview → Restart) — no redeploy needed. SMTP itself (Settings → Email,
+>   `smtp.office365.com`) was already working correctly. See the second "2026-09-20"
+>   entry below.
 
 > **2026-09-12 — Dev environment note:** the actual `rg-gcms-dev-qc-001` environment SC IT
 > provisioned does **not** match this runbook's shape. It uses two Azure **App Services**
@@ -508,6 +514,34 @@
 > firing every ~30s, had zero recurrences from db-push time through 30+ minutes later
 > (server time checked via `/api/v1/health/ready`'s `timestamp` field both before and
 > after). Both App Services confirmed Healthy throughout.
+
+> **2026-09-20 (later same session) — Notification templates were empty; fixed with a
+> plain backend restart, no redeploy needed.** User compared against the local Docker
+> version (working SMTP + notification templates) and asked why Azure didn't match.
+>
+> - **SMTP itself was not broken.** Settings → Email on Azure has its own DB-stored
+>   config (`smtp.office365.com` / `notifications@sc.qa` / from `gcms-noreply@sc.qa`) —
+>   different from, but independent of, the `smtp.azurecomm.net` values set as App
+>   Service env vars on 2026-09-14. `email.service.ts` prefers DB-stored SMTP settings
+>   over env vars by design. A live "Send Test Email" succeeded (confirmed in the Log
+>   stream: `Email sent via SMTP: <...@sc.qa>`) — this config is real and working.
+> - **Real bug:** `GET /api/v1/notification-templates` returned `{"data":[]}` — the
+>   table existed (from the `db push` above) but had zero rows, so the admin page
+>   correctly rendered nothing. `notificationTemplatesService.seedDefaults()` (19
+>   default templates, idempotent) only runs once at server boot; the backend process
+>   had been running since *before* the `db push`, so its one seed attempt happened
+>   against the old incomplete schema, failed, and was silently swallowed by the
+>   2026-09-19 try/catch fix. It never got a second chance until the process restarted.
+>   `prisma db seed` (the CLI script) does **not** cover notification templates at all —
+>   only stadiums/departments/demo accounts — so it can't fill this gap either.
+> - **Fix:** Portal → `app-gcms-be-dev-qc-001` → Overview → **Restart**. That's the
+>   whole fix — `seedDefaults()` reruns on every boot. Verified: 19 templates now
+>   present via the API, and the admin UI renders the full categorized list.
+> - **Gotcha:** an already-open Kudu WebSSH tab keeps talking to the old container after
+>   a restart (same-looking prompt, commands still respond) instead of erroring — it does
+>   **not** auto-reconnect. Re-navigate to the same `webssh/host` URL to force a fresh
+>   connection (confirmed by a new container hostname) before trusting anything
+>   process-state-related (e.g. `ps` uptime) after a restart.
 
 ---
 
