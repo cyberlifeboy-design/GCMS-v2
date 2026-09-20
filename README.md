@@ -223,6 +223,14 @@ cumulative warnings — distinct from the standalone print-form above.
 - **Request Tracking**: Each request gets a short human-friendly request number in addition to its tracking token; `/request/track` looks a request up by number + the requester's own email
 - **Report Export**: Download the (filtered) request list as Excel, PDF, or Word — full cart types, departments, and justification
 
+### 📚 Trainings & Policy & Procedures
+
+- **Two library tabs** (`/trainings`, `/policies`), visible to every logged-in role — browse and download PowerPoint/PDF/Word reference material
+- **View or download**: View opens the file inline in a new tab (PDFs render directly in the browser); Download saves a copy under its original filename
+- **SuperAdmin-only management**: upload (one file or up to 10 at once — multi-file uploads auto-title each document from its own filename), and delete. Admins and all other roles are view/download only
+- **Settings → "Trainings & Policies"**: SuperAdmin toggles each tab's visibility in the main nav, toggles whether non-admin users may download at all (View always still works), and manages both libraries' documents from one place
+- Files live in their own private storage bucket, not the public unauthenticated storage proxy used for branding/incident images — every read requires a logged-in session
+
 ### ⚙️ System Settings (SuperAdmin)
 
 - **Tournament Branding**: Upload logo, header, and footer images, with a "Remove" action
@@ -637,6 +645,15 @@ GCMS-v2/
 | `/settings` | GET | Get system settings |
 | `/settings` | PUT | Update settings (SuperAdmin) |
 | `/settings/public` | GET | Get public branding/T&C (no auth) |
+
+### Documents (`/documents`) — Trainings & Policy & Procedures library
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/documents?category=training\|policy` | GET | List documents in a library (any logged-in user) |
+| `/documents/:id/file` | GET | View inline; add `?download=1` to download (any logged-in user, blocked by `allowDocumentDownloads` unless SuperAdmin) |
+| `/documents` | POST | Upload 1–10 files at once (SuperAdmin) |
+| `/documents/:id` | DELETE | Delete a document (SuperAdmin) |
 
 ### Stadiums (`/stadiums`)
 

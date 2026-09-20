@@ -2,12 +2,23 @@
 
 **Prepared:** 2026-09-11 | **Updated:** 2026-09-20 | **Branch:** `main` | **Target:** Azure App Service (containers) — see below
 
-> ## ✅ Current status (2026-09-20): schema drift fixed, both App Services Healthy — no open blockers
+> ## ✅ Current status (2026-09-20, evening): Trainings/Policy library + UX round deployed — both App Services Healthy, no open blockers
 >
-> Skip straight to the **"2026-09-20"** entry near the end of this file for the full
-> reusable how-to for future DB pushes and hotfix deploys. Everything above it (including
-> the old Container Apps / Postgres plan in the sections below this banner) is superseded
-> history, kept for context only. Quick facts:
+> Latest commit live on both images: `1df63d8` (backend rebuilt ACR run `nac`, frontend
+> `nad`). Skip straight to the **"2026-09-20 (evening) — GitHub push + Trainings/Policy
+> library deploy"** entry near the end of the addendum log for the full command log.
+> Everything above it (including the old Container Apps / Postgres plan in the sections
+> below this banner) is superseded history, kept for context only. Quick facts:
+> - New feature live: **"GCMS Trainings" and "Policy & Procedures"** nav tabs (PPT/PDF/Word
+>   library, SuperAdmin-only upload/delete, multi-file upload, a Settings-driven
+>   download-allow toggle) plus a consolidated **Settings → "Trainings & Policies"** tab.
+> - `ResourceDocument` table and three new `SystemSettings` columns
+>   (`enableTrainings`/`enablePolicies`/`allowDocumentDownloads`) pushed to the Azure
+>   MySQL DB via `npx prisma db push` (same SSH procedure as the 2026-09-20 entry below).
+> - Also carries this session's earlier UX round (account-menu bubble replacing the
+>   sidebar footer, a consolidated Settings "Bookings" tab, richer System Push
+>   Announcement targeting) and the layout fixes (dashboard map no longer covers the
+>   mobile sidebar drawer; Settings/Reports tab ribbons wrap instead of overflowing).
 > - Backend: `acrgcmsdevqc001.../gcms-backend:latest` (commit `b6bcb1f`), Runtime status **Healthy**.
 > - Frontend: `acrgcmsdevqc001.../gcms-frontend:latest` (commit `11f0b9c`), Runtime status **Healthy**.
 > - `GET /api/v1/health/ready` → `{"status":"ok","db":"ok","storage":"ok"}`.
@@ -542,6 +553,57 @@
 >   **not** auto-reconnect. Re-navigate to the same `webssh/host` URL to force a fresh
 >   connection (confirmed by a new container hostname) before trusting anything
 >   process-state-related (e.g. `ps` uptime) after a restart.
+
+> **2026-09-20 (evening) — GitHub push + Trainings/Policy library deploy.** Six local
+> commits (`f1e4414` layout fixes, `55ce1d8` account-menu/Bookings-tab/announcements UX,
+> `f3b26c0` GCMS Trainings + Policy & Procedures tabs, `1df63d8` dedicated Settings tab +
+> multi-file upload + download control) pushed to `origin/main` (`39f5404..1df63d8`) —
+> `git push` worked directly this session, no Cloud-Shell workaround needed.
+>
+> **What shipped:**
+> - **"GCMS Trainings" / "Policy & Procedures"** — two new nav tabs (visible to every
+>   role) listing PPT/PDF/Word documents. View opens inline (new tab, PDF renders in the
+>   browser); Download saves a copy. Upload (single or up to 10 files at once, auto-titled
+>   from filename when uploading more than one) and Delete are **SuperAdmin-only** — this
+>   was deliberately kept narrower than Admin after the user reconsidered mid-build.
+> - New Settings → **"Trainings & Policies"** tab consolidates: enable/disable each nav
+>   tab, an "Allow users to download files" toggle (SuperAdmin/View always works
+>   regardless), and the upload/delete document manager for both libraries in one place.
+> - Backend: new `documents` module + `ResourceDocument` Prisma model, a private
+>   `documents` storage bucket (deliberately **not** added to the public, unauthenticated
+>   `/api/v1/storage/:bucket/:filename` proxy — these files need a login), and three new
+>   `SystemSettings` booleans. The download-block is enforced server-side too (a direct
+>   `?download=1` request 403s when disabled for non-SuperAdmin), not just hidden in the UI.
+>
+> **Deploy steps (all via this same SSH/Cloud-Shell procedure, PIM role was already
+> active from a prior session, no reactivation needed):**
+> 1. Cloud Shell: `git clone --depth 1` the repo (fresh dir), then two `az acr build`
+>    runs — backend (`gcms-backend:1df63d8`/`:latest`, ~3m) and frontend
+>    (`gcms-frontend:1df63d8`/`:latest`, ~1m25s). **The frontend build still needs the
+>    same two `--build-arg VITE_MSAL_TENANT_ID=...`/`VITE_MSAL_CLIENT_ID=...` values from
+>    the 2026-09-15 SSO rollout on every rebuild** — `ARG ... =""` defaults to blank in
+>    the Dockerfile if omitted, which would silently break the SSO button again.
+> 2. `az webapp restart` on both App Services (typed directly into Cloud Shell this
+>    session — not blocked, unlike some prior sessions).
+> 3. SSH into `app-gcms-be-dev-qc-001` (Development Tools → SSH → Go), confirmed a fresh
+>    container hostname. **The DB password (`export DATABASE_URL=...`) and the schema
+>    push itself (`npx prisma db push`) both had to be typed by the user directly in the
+>    live terminal** — the harness's own classifier declined to type the password at all
+>    (a hard, non-negotiable boundary) and separately blocked `npx prisma db push` as a
+>    live-DB-schema-change action even though it's the exact same terminal already used
+>    for the password. Give the user the command, have them run it, confirm the output.
+>    Push succeeded: `🚀 Your database is now in sync with your Prisma schema. Done in
+>    788ms`, Prisma Client regenerated in 8.65s.
+>
+> **Verified live, not just green output:** authenticated `GET /api/v1/documents` and
+> `GET /api/v1/settings` (via a real SuperAdmin login token, curled from Cloud Shell
+> through the public frontend URL) confirm `enableTrainings`/`enablePolicies`/
+> `allowDocumentDownloads` all present and `true`, and the documents route returns
+> `{"data":[]}` rather than a 500 — the new table genuinely exists. Then a real browser
+> login as SuperAdmin against the live frontend URL: both new nav tabs render, `/trainings`
+> shows the empty-state + Upload button, and the new Settings tab renders correctly.
+> Running `db push` (not `db seed`) this time means **demo account passwords were not
+> reset** — unlike some earlier sessions' entries, no rotation warning needed here.
 
 ---
 
