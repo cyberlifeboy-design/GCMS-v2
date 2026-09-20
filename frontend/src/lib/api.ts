@@ -457,6 +457,8 @@ export const announcementsApi = {
         targetUserIds?: string[];
         targetRole?: string;
         stadiumId?: string;
+        notifyInApp?: boolean;
+        notifyEmail?: boolean;
         scheduledAt?: string;
         expiresAt?: string;
         sendNow?: boolean;

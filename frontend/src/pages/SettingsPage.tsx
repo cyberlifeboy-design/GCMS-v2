@@ -9,7 +9,7 @@ import {
     File, Link as LinkIcon, Copy, Check, Bell, Clock,
     Megaphone, Sun, Moon, Monitor,
     ChevronDown, ChevronUp, User, Plus, Trash2, GripVertical,
-    Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send
+    Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send, Layers
 } from 'lucide-react';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { NotificationTemplatesPanel } from '@/components/settings/NotificationTemplatesPanel';
@@ -184,7 +184,10 @@ export function SettingsPage() {
     const [enableAssignmentMatrix, setEnableAssignmentMatrix] = useState(true);
     const [systemAnnouncement, setSystemAnnouncement] = useState('');
     const [announcementExpiry, setAnnouncementExpiry] = useState('');
-    const [announcementTarget, setAnnouncementTarget] = useState<'all' | 'system' | 'fa'>('all');
+    const [announcementRole, setAnnouncementRole] = useState('all');
+    const [announcementStadiumId, setAnnouncementStadiumId] = useState('');
+    const [announcementNotifyInApp, setAnnouncementNotifyInApp] = useState(true);
+    const [announcementNotifyEmail, setAnnouncementNotifyEmail] = useState(false);
     const [pushingAnnouncement, setPushingAnnouncement] = useState(false);
     const [handoverDefaultDurationDays, setHandoverDefaultDurationDays] = useState(1);
     const [handoverEventStartDate, setHandoverEventStartDate] = useState('');
@@ -498,6 +501,9 @@ export function SettingsPage() {
                             <TabsTrigger value="system" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
                                 <Globe className="w-4 h-4 mr-2.5" /> System Settings
                             </TabsTrigger>
+                            <TabsTrigger value="bookings" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <Layers className="w-4 h-4 mr-2.5" /> Bookings
+                            </TabsTrigger>
                             <TabsTrigger value="branding" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
                                 <Image className="w-4 h-4 mr-2.5" /> Branding
                             </TabsTrigger>
@@ -515,9 +521,6 @@ export function SettingsPage() {
                             </TabsTrigger>
                             <TabsTrigger value="access" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
                                 <ShieldCheck className="w-4 h-4 mr-2.5" /> Access Control
-                            </TabsTrigger>
-                            <TabsTrigger value="tools" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
-                                <Wrench className="w-4 h-4 mr-2.5" /> Tools
                             </TabsTrigger>
                         </>
                     )}
@@ -672,6 +675,70 @@ export function SettingsPage() {
                             <TabsContent value="system" className="mt-0 space-y-8">
                                 <form onSubmit={handleSaveSystem} className="space-y-8">
                                     <Card className="border-none shadow-md">
+                                        <CardHeader><CardTitle className="text-2xl">System Identity</CardTitle></CardHeader>
+                                        <CardContent className="p-8 space-y-6">
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Tournament Name</Label>
+                                                <Input value={tournamentName} onChange={e => setTournamentName(e.target.value)} className="h-12 rounded-xl text-lg font-medium" placeholder="Enter tournament name" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Global Timezone</Label>
+                                                <Select value={timezone} onValueChange={setTimezone}>
+                                                    <SelectTrigger className="h-12 rounded-xl">
+                                                        <SelectValue placeholder="Select timezone" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="UTC">UTC (Universal Time Coordinated)</SelectItem>
+                                                        <SelectItem value="Asia/Qatar">Asia/Qatar (UTC+3)</SelectItem>
+                                                        <SelectItem value="Asia/Dubai">Asia/Dubai (UTC+4)</SelectItem>
+                                                        <SelectItem value="Europe/London">Europe/London (GMT/BST)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card className="border-none shadow-md overflow-hidden">
+                                        <CardHeader className="bg-muted/10">
+                                            <CardTitle className="text-2xl">Module Configuration</CardTitle>
+                                            <CardDescription>Enable or disable major features across the platform.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="p-8">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {[
+                                                    { label: 'Fleet Management', val: enableFleetManagement, set: setEnableFleetManagement, icon: Wrench },
+                                                    { label: 'Handover Photos', val: enableHandoverPhotos, set: setEnableHandoverPhotos, icon: Image },
+                                                    { label: 'Maintenance Reports', val: enableMaintenanceReports, set: setEnableMaintenanceReports, icon: Bell },
+                                                    { label: 'User Import', val: enableUserImport, set: setEnableUserImport, icon: User },
+                                                    { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations, icon: Check },
+                                                    { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports, icon: FileSpreadsheet },
+                                                    { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix, icon: ShieldCheck },
+                                                ].map((f, i, arr) => (
+                                                    <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all ${i === arr.length - 1 && arr.length % 2 === 1 ? 'md:col-span-2' : ''}`}>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-background text-muted-foreground">
+                                                                <f.icon className="w-4 h-4" />
+                                                            </div>
+                                                            <Label className="text-sm font-bold">{f.label}</Label>
+                                                        </div>
+                                                        <Switch checked={f.val} onCheckedChange={f.set} />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                        <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                            <Button type="submit" disabled={saving} className="rounded-xl px-8 h-12">
+                                                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                                Update Global Settings
+                                            </Button>
+                                        </CardFooter>
+                                    </Card>
+                                </form>
+                            </TabsContent>
+
+                            <TabsContent value="bookings" className="mt-0 space-y-8">
+                                <form onSubmit={handleSaveSystem} className="space-y-8">
+                                    <Card className="border-none shadow-md">
                                         <CardHeader>
                                             <CardTitle className="text-2xl">Submit a Request</CardTitle>
                                             <CardDescription>Controls the public “Submit a Request” channel on the login page. Save to apply.</CardDescription>
@@ -820,67 +887,16 @@ export function SettingsPage() {
                                                 </div>
                                             </div>
                                         </CardContent>
-                                    </Card>
-                                    <Card className="border-none shadow-md">
-                                        <CardHeader><CardTitle className="text-2xl">System Identity</CardTitle></CardHeader>
-                                        <CardContent className="p-8 space-y-6">
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Tournament Name</Label>
-                                                <Input value={tournamentName} onChange={e => setTournamentName(e.target.value)} className="h-12 rounded-xl text-lg font-medium" placeholder="Enter tournament name" />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Global Timezone</Label>
-                                                <Select value={timezone} onValueChange={setTimezone}>
-                                                    <SelectTrigger className="h-12 rounded-xl">
-                                                        <SelectValue placeholder="Select timezone" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="UTC">UTC (Universal Time Coordinated)</SelectItem>
-                                                        <SelectItem value="Asia/Qatar">Asia/Qatar (UTC+3)</SelectItem>
-                                                        <SelectItem value="Asia/Dubai">Asia/Dubai (UTC+4)</SelectItem>
-                                                        <SelectItem value="Europe/London">Europe/London (GMT/BST)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-
-                                    <Card className="border-none shadow-md overflow-hidden">
-                                        <CardHeader className="bg-muted/10">
-                                            <CardTitle className="text-2xl">Module Configuration</CardTitle>
-                                            <CardDescription>Enable or disable major features across the platform.</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="p-8">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {[
-                                                    { label: 'Fleet Management', val: enableFleetManagement, set: setEnableFleetManagement, icon: Wrench },
-                                                    { label: 'Handover Photos', val: enableHandoverPhotos, set: setEnableHandoverPhotos, icon: Image },
-                                                    { label: 'Maintenance Reports', val: enableMaintenanceReports, set: setEnableMaintenanceReports, icon: Bell },
-                                                    { label: 'User Import', val: enableUserImport, set: setEnableUserImport, icon: User },
-                                                    { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations, icon: Check },
-                                                    { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports, icon: FileSpreadsheet },
-                                                    { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix, icon: ShieldCheck },
-                                                ].map((f, i, arr) => (
-                                                    <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all ${i === arr.length - 1 && arr.length % 2 === 1 ? 'md:col-span-2' : ''}`}>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="p-2 rounded-lg bg-background text-muted-foreground">
-                                                                <f.icon className="w-4 h-4" />
-                                                            </div>
-                                                            <Label className="text-sm font-bold">{f.label}</Label>
-                                                        </div>
-                                                        <Switch checked={f.val} onCheckedChange={f.set} />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </CardContent>
                                         <CardFooter className="justify-end border-t p-5 bg-muted/5">
                                             <Button type="submit" disabled={saving} className="rounded-xl px-8 h-12">
                                                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                                                Update Global Settings
+                                                Save Booking Settings
                                             </Button>
                                         </CardFooter>
                                     </Card>
                                 </form>
+
+                                <RequestLinkGenerator stadiums={stadiums} />
                             </TabsContent>
 
                             <TabsContent value="branding" className="mt-0">
@@ -1165,15 +1181,7 @@ export function SettingsPage() {
                                     </p>
                                 </div>
                                 <NotificationTemplatesPanel />
-                            </TabsContent>
 
-                            <TabsContent value="access" className="mt-0">
-                                <UserAccessControl />
-                            </TabsContent>
-
-                            <TabsContent value="tools" className="mt-0 space-y-8">
-                                <RequestLinkGenerator stadiums={stadiums} />
-                                
                                 <Card className="border-none shadow-md overflow-hidden bg-gradient-to-br from-indigo-50/50 to-blue-50/50 dark:from-indigo-950/10 dark:to-blue-950/10">
                                     <CardHeader className="bg-indigo-500/10 border-b border-indigo-500/10">
                                         <CardTitle className="text-2xl text-indigo-700 dark:text-indigo-300 flex items-center gap-3">
@@ -1184,53 +1192,90 @@ export function SettingsPage() {
                                     <CardContent className="p-8 space-y-6">
                                         <div className="space-y-2">
                                             <Label className="text-sm font-bold uppercase tracking-wider text-indigo-700/80 dark:text-indigo-300/80">Announcement Message</Label>
-                                            <Textarea 
-                                                value={systemAnnouncement} 
-                                                onChange={e => setSystemAnnouncement(e.target.value)} 
-                                                placeholder="Enter the alert message here..." 
-                                                className="rounded-2xl p-4 bg-background/80 min-h-[120px] text-lg border-indigo-200 dark:border-indigo-800 focus:ring-indigo-500" 
+                                            <Textarea
+                                                value={systemAnnouncement}
+                                                onChange={e => setSystemAnnouncement(e.target.value)}
+                                                placeholder="Enter the alert message here..."
+                                                className="rounded-2xl p-4 bg-background/80 min-h-[120px] text-lg border-indigo-200 dark:border-indigo-800 focus:ring-indigo-500"
                                             />
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div className="space-y-2">
-                                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target Audience</Label>
-                                                <Select value={announcementTarget} onValueChange={v => setAnnouncementTarget(v as any)}>
+                                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target Venue</Label>
+                                                <Select value={announcementStadiumId || '__all__'} onValueChange={v => setAnnouncementStadiumId(v === '__all__' ? '' : v)}>
                                                     <SelectTrigger className="h-12 rounded-xl bg-background/80 border-indigo-200 dark:border-indigo-800">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="all">Global (All Users)</SelectItem>
-                                                        <SelectItem value="system">Administrative (Admins Only)</SelectItem>
-                                                        <SelectItem value="fa">Operational (FA Team)</SelectItem>
+                                                        <SelectItem value="__all__">All Venues</SelectItem>
+                                                        {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target User Type</Label>
+                                                <Select value={announcementRole} onValueChange={setAnnouncementRole}>
+                                                    <SelectTrigger className="h-12 rounded-xl bg-background/80 border-indigo-200 dark:border-indigo-800">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">All Users</SelectItem>
+                                                        <SelectItem value="SuperAdmin">Super Admin</SelectItem>
+                                                        <SelectItem value="Admin">Admin</SelectItem>
+                                                        <SelectItem value="Observer">Observer</SelectItem>
+                                                        <SelectItem value="FA">Fleet Attendant (FA)</SelectItem>
+                                                        <SelectItem value="Contracts">Contracts</SelectItem>
+                                                        <SelectItem value="MaintenanceTeam">Maintenance Team</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
                                             <div className="space-y-2">
                                                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Auto-Expiry Date & Time</Label>
-                                                <Input 
-                                                    type="datetime-local" 
-                                                    value={announcementExpiry} 
-                                                    onChange={e => setAnnouncementExpiry(e.target.value)} 
-                                                    className="h-12 rounded-xl bg-background/80 border-indigo-200 dark:border-indigo-800" 
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={announcementExpiry}
+                                                    onChange={e => setAnnouncementExpiry(e.target.value)}
+                                                    className="h-12 rounded-xl bg-background/80 border-indigo-200 dark:border-indigo-800"
                                                 />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notification Type</Label>
+                                            <div className="flex flex-wrap gap-6 p-4 rounded-2xl border bg-background/50 border-indigo-100 dark:border-indigo-900">
+                                                <label className="flex items-center gap-2 text-sm font-medium">
+                                                    <Checkbox checked={announcementNotifyInApp} onCheckedChange={v => setAnnouncementNotifyInApp(v === true)} />
+                                                    System notification (in-app)
+                                                </label>
+                                                <label className="flex items-center gap-2 text-sm font-medium">
+                                                    <Checkbox checked={announcementNotifyEmail} onCheckedChange={v => setAnnouncementNotifyEmail(v === true)} />
+                                                    Email notification
+                                                </label>
                                             </div>
                                         </div>
                                     </CardContent>
                                     <CardFooter className="justify-end border-t border-indigo-500/10 p-6 bg-indigo-500/5">
-                                        <Button 
-                                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-10 h-12 font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95" 
+                                        <Button
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-10 h-12 font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95"
                                             disabled={!systemAnnouncement.trim() || pushingAnnouncement}
                                             onClick={async () => {
+                                                if (!announcementNotifyInApp && !announcementNotifyEmail) {
+                                                    toast.error('Pick at least one notification type (system or email)');
+                                                    return;
+                                                }
                                                 setPushingAnnouncement(true);
                                                 try {
-                                                    const res = await announcementsApi.create({
+                                                    await announcementsApi.create({
                                                         title: 'System Alert',
                                                         message: systemAnnouncement,
                                                         type: 'warning',
-                                                        targetType: announcementTarget === 'system' ? 'users' : announcementTarget === 'fa' ? 'fas' : 'all',
+                                                        targetType: announcementRole === 'all' ? 'all' : 'users',
+                                                        targetRole: announcementRole === 'all' ? undefined : announcementRole,
+                                                        stadiumId: announcementStadiumId || undefined,
+                                                        notifyInApp: announcementNotifyInApp,
+                                                        notifyEmail: announcementNotifyEmail,
                                                         expiresAt: announcementExpiry ? new Date(announcementExpiry).toISOString() : undefined,
+                                                        sendNow: true,
                                                     });
-                                                    await announcementsApi.sendNow(res.data.data.id);
                                                     setSystemAnnouncement('');
                                                     toast.success('Announcement broadcasted successfully!');
                                                 } catch (err: any) {
@@ -1245,6 +1290,10 @@ export function SettingsPage() {
                                         </Button>
                                     </CardFooter>
                                 </Card>
+                            </TabsContent>
+
+                            <TabsContent value="access" className="mt-0">
+                                <UserAccessControl />
                             </TabsContent>
                         </>
                     )}

@@ -1,12 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { settingsApi } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle, Layers, ShieldAlert, UserPlus } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle, Layers, ShieldAlert, UserPlus, LogOut } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { formatDate } from '@/lib/dateUtils';
+
+function UserMenu() {
+    const { user, logout } = useAuthStore();
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const onClick = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, [open]);
+
+    if (!user) return null;
+    const initials = user.name
+        ? user.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join('').toUpperCase()
+        : '?';
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                onClick={() => setOpen(o => !o)}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 transition-opacity"
+                title={user.name}
+            >
+                {initials}
+            </button>
+            {open && (
+                <div className="absolute right-0 mt-2 w-56 rounded-xl border bg-card shadow-lg z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    <div className="p-4 border-b">
+                        <p className="font-medium truncate">{user.name}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <p className="text-xs text-muted-foreground">{user.role}</p>
+                            {user.stadiumId && (
+                                <p className="text-[10px] px-1 bg-muted rounded text-muted-foreground">Stadium ID: {user.stadiumId.slice(0, 8)}</p>
+                            )}
+                        </div>
+                    </div>
+                    <Link
+                        to="/profile"
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+                    >
+                        <UserCircle className="w-4 h-4" /> Account Settings
+                    </Link>
+                    <button
+                        onClick={logout}
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm font-medium text-left text-destructive hover:bg-accent transition-colors"
+                    >
+                        <LogOut className="w-4 h-4" /> Logout
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
 
 function DateTimeDisplay() {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -56,7 +113,7 @@ const navItems = [
 ];
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-    const { user, logout } = useAuthStore();
+    const { user } = useAuthStore();
     const location = useLocation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
@@ -168,29 +225,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         })}
                     </nav>
 
-                    {/* User section */}
-                    <div className="p-4 border-t">
-                        <div className="mb-4">
-                            <p className="font-medium truncate">{user?.name}</p>
-                            <div className="flex items-center gap-2">
-                                <p className="text-xs text-muted-foreground">{user?.role}</p>
-                                {user?.stadiumId && (
-                                    <p className="text-[10px] px-1 bg-muted rounded text-muted-foreground">Stadium ID: {user.stadiumId.slice(0, 8)}</p>
-                                )}
-                            </div>
-                        </div>
-                        <Link
-                            to="/profile"
-                            onClick={handleNavClick}
-                            className={`flex items-center gap-3 px-4 py-2 mb-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === '/profile' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
-                        >
-                            <UserCircle className="w-5 h-5 flex-shrink-0" />
-                            Account Settings
-                        </Link>
-                        <Button onClick={logout} variant="outline" className="w-full">
-                            Logout
-                        </Button>
-                    </div>
                 </aside>
 
                 {/* Main content area */}
@@ -216,13 +250,17 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                         <div className="flex items-center gap-2">
                             <DateTimeDisplay />
                             <NotificationCenter />
+                            <UserMenu />
                         </div>
                     </header>
 
                     {/* Desktop top bar */}
                     <header className="hidden lg:flex items-center justify-between px-6 py-3 border-b bg-card">
                         <DateTimeDisplay />
-                        <NotificationCenter />
+                        <div className="flex items-center gap-2">
+                            <NotificationCenter />
+                            <UserMenu />
+                        </div>
                     </header>
 
                     {/* Page content */}

@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { notificationService } from '../notifications/notification.service';
+import { emailService } from '../../services/email.service';
 
 export interface CreateAnnouncementData {
     title: string;
@@ -9,6 +10,8 @@ export interface CreateAnnouncementData {
     targetUserIds?: string[];
     targetRole?: string;
     stadiumId?: string;
+    notifyInApp?: boolean;
+    notifyEmail?: boolean;
     createdBy?: string;
     scheduledAt?: Date;
     expiresAt?: Date;
@@ -28,6 +31,8 @@ export class AnnouncementService {
                 targetUserIds: JSON.stringify(data.targetUserIds || []),
                 targetRole: data.targetRole,
                 stadiumId: data.stadiumId,
+                notifyInApp: data.notifyInApp ?? true,
+                notifyEmail: data.notifyEmail ?? false,
                 createdBy: data.createdBy,
                 scheduledAt: data.scheduledAt,
                 expiresAt: data.expiresAt,
@@ -102,6 +107,8 @@ export class AnnouncementService {
                 ...(data.targetUserIds && { targetUserIds: JSON.stringify(data.targetUserIds) }),
                 ...(data.targetRole !== undefined && { targetRole: data.targetRole }),
                 ...(data.stadiumId !== undefined && { stadiumId: data.stadiumId }),
+                ...(data.notifyInApp !== undefined && { notifyInApp: data.notifyInApp }),
+                ...(data.notifyEmail !== undefined && { notifyEmail: data.notifyEmail }),
                 ...(data.scheduledAt && { scheduledAt: data.scheduledAt }),
                 ...(data.expiresAt !== undefined && { expiresAt: data.expiresAt }),
             },
@@ -246,8 +253,10 @@ export class AnnouncementService {
                 userIds = stadiumUsers.map(u => u.id);
             }
 
-            // Create notifications for each user
-            if (userIds.length > 0) {
+            if (userIds.length === 0) return;
+
+            // In-app/system notification
+            if (announcement.notifyInApp !== false) {
                 await notificationService.createForUsers(
                     {
                         type: 'SystemAnnouncement',
@@ -258,6 +267,25 @@ export class AnnouncementService {
                     },
                     userIds
                 );
+            }
+
+            // Email, one at a time so a single bad address doesn't drop the rest
+            if (announcement.notifyEmail) {
+                const recipients = await prisma.user.findMany({
+                    where: { id: { in: userIds } },
+                    select: { email: true },
+                });
+                for (const r of recipients) {
+                    try {
+                        await emailService.send({
+                            to: r.email,
+                            subject: announcement.title,
+                            text: announcement.message,
+                        });
+                    } catch (e) {
+                        console.error('Announcement email failed:', r.email, e);
+                    }
+                }
             }
         } catch (error) {
             console.error('Failed to send announcement notifications:', error);

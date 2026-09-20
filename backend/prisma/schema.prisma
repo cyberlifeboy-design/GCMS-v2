@@ -359,6 +359,8 @@ model Announcement {
   targetUserIds String?   @db.Text // SQLite fallback: Store as JSON string
   targetRole    String? // For role-based targeting (FA, Admin, etc.)
   stadiumId     String? // Optional stadium filter
+  notifyInApp   Boolean   @default(true) // Post as an in-app/system notification
+  notifyEmail   Boolean   @default(false) // Also email every targeted user
   createdBy     String? // User ID who created the announcement
   scheduledAt   DateTime? // For scheduled announcements
   sentAt        DateTime? // When actually sent

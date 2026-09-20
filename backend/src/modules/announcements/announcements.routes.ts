@@ -12,22 +12,22 @@ router.use(authenticate);
 router.get('/active', announcementController.getActiveForUser.bind(announcementController));
 
 // GET /api/v1/announcements — list all announcements (Admin+)
-router.get('/', requireRole('Admin'), announcementController.getAll.bind(announcementController));
+router.get('/', requireRole('SuperAdmin', 'Admin'), announcementController.getAll.bind(announcementController));
 
 // GET /api/v1/announcements/:id — get announcement by ID (Admin+)
-router.get('/:id', requireRole('Admin'), announcementController.getById.bind(announcementController));
+router.get('/:id', requireRole('SuperAdmin', 'Admin'), announcementController.getById.bind(announcementController));
 
 // POST /api/v1/announcements — create announcement (Admin+)
-router.post('/', requireRole('Admin'), announcementController.create.bind(announcementController));
+router.post('/', requireRole('SuperAdmin', 'Admin'), announcementController.create.bind(announcementController));
 
 // PUT /api/v1/announcements/:id — update announcement (Admin+)
-router.put('/:id', requireRole('Admin'), announcementController.update.bind(announcementController));
+router.put('/:id', requireRole('SuperAdmin', 'Admin'), announcementController.update.bind(announcementController));
 
 // POST /api/v1/announcements/:id/send — send scheduled announcement now (Admin+)
-router.post('/:id/send', requireRole('Admin'), announcementController.sendNow.bind(announcementController));
+router.post('/:id/send', requireRole('SuperAdmin', 'Admin'), announcementController.sendNow.bind(announcementController));
 
 // POST /api/v1/announcements/:id/deactivate — deactivate announcement (Admin+)
-router.post('/:id/deactivate', requireRole('Admin'), announcementController.deactivate.bind(announcementController));
+router.post('/:id/deactivate', requireRole('SuperAdmin', 'Admin'), announcementController.deactivate.bind(announcementController));
 
 // DELETE /api/v1/announcements/:id — delete announcement (SuperAdmin only)
 router.delete('/:id', requireRole('SuperAdmin'), announcementController.delete.bind(announcementController));
