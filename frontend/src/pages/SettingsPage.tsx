@@ -10,10 +10,11 @@ import {
     Megaphone, Sun, Moon, Monitor,
     ChevronDown, ChevronUp, User, Plus, Trash2, GripVertical,
     Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send, Layers,
-    GraduationCap, BookOpen
+    GraduationCap, BookOpen, Download
 } from 'lucide-react';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { NotificationTemplatesPanel } from '@/components/settings/NotificationTemplatesPanel';
+import { DocumentsLibraryPage } from '@/pages/DocumentsLibraryPage';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -44,6 +45,7 @@ interface Settings {
     enableAssignmentMatrix?: boolean;
     enableTrainings?: boolean;
     enablePolicies?: boolean;
+    allowDocumentDownloads?: boolean;
     systemAnnouncement?: string;
     announcementExpiry?: string;
     theme?: 'light' | 'dark' | 'system';
@@ -187,6 +189,7 @@ export function SettingsPage() {
     const [enableAssignmentMatrix, setEnableAssignmentMatrix] = useState(true);
     const [enableTrainings, setEnableTrainings] = useState(true);
     const [enablePolicies, setEnablePolicies] = useState(true);
+    const [allowDocumentDownloads, setAllowDocumentDownloads] = useState(true);
     const [systemAnnouncement, setSystemAnnouncement] = useState('');
     const [announcementExpiry, setAnnouncementExpiry] = useState('');
     const [announcementRole, setAnnouncementRole] = useState('all');
@@ -278,6 +281,7 @@ export function SettingsPage() {
                 setEnableAssignmentMatrix(d.enableAssignmentMatrix ?? true);
                 setEnableTrainings(d.enableTrainings ?? true);
                 setEnablePolicies(d.enablePolicies ?? true);
+                setAllowDocumentDownloads(d.allowDocumentDownloads ?? true);
                 setSystemAnnouncement(d.systemAnnouncement || '');
                 setAnnouncementExpiry(d.announcementExpiry ? d.announcementExpiry.slice(0, 16) : '');
                 setHandoverDefaultDurationDays(d.handoverDefaultDurationDays ?? 1);
@@ -398,6 +402,7 @@ export function SettingsPage() {
             fd.append('enableAssignmentMatrix', String(enableAssignmentMatrix));
             fd.append('enableTrainings', String(enableTrainings));
             fd.append('enablePolicies', String(enablePolicies));
+            fd.append('allowDocumentDownloads', String(allowDocumentDownloads));
             fd.append('systemAnnouncement', systemAnnouncement);
             fd.append('announcementExpiry', announcementExpiry ? new Date(announcementExpiry).toISOString() : '');
             fd.append('handoverDefaultDurationDays', String(handoverDefaultDurationDays));
@@ -512,6 +517,9 @@ export function SettingsPage() {
                             </TabsTrigger>
                             <TabsTrigger value="bookings" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
                                 <Layers className="w-4 h-4 mr-2.5" /> Bookings
+                            </TabsTrigger>
+                            <TabsTrigger value="documents" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
+                                <GraduationCap className="w-4 h-4 mr-2.5" /> Trainings &amp; Policies
                             </TabsTrigger>
                             <TabsTrigger value="branding" className="w-full justify-start rounded-lg px-3.5 py-2.5 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent transition-all font-medium text-sm">
                                 <Image className="w-4 h-4 mr-2.5" /> Branding
@@ -722,8 +730,6 @@ export function SettingsPage() {
                                                     { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations, icon: Check },
                                                     { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports, icon: FileSpreadsheet },
                                                     { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix, icon: ShieldCheck },
-                                                    { label: 'GCMS Trainings', val: enableTrainings, set: setEnableTrainings, icon: GraduationCap },
-                                                    { label: 'Policy & Procedures', val: enablePolicies, set: setEnablePolicies, icon: BookOpen },
                                                 ].map((f, i, arr) => (
                                                     <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all ${i === arr.length - 1 && arr.length % 2 === 1 ? 'md:col-span-2' : ''}`}>
                                                         <div className="flex items-center gap-3">
@@ -908,6 +914,61 @@ export function SettingsPage() {
                                 </form>
 
                                 <RequestLinkGenerator stadiums={stadiums} />
+                            </TabsContent>
+
+                            <TabsContent value="documents" className="mt-0 space-y-8">
+                                <form onSubmit={handleSaveSystem} className="space-y-8">
+                                    <Card className="border-none shadow-md">
+                                        <CardHeader>
+                                            <CardTitle className="text-2xl">Tab Visibility &amp; Access</CardTitle>
+                                            <CardDescription>Controls whether the “GCMS Trainings” and “Policy &amp; Procedures” tabs appear in the main navigation, and whether non-admin users may download files. Only SuperAdmin can upload/delete or change these settings — everyone else can only view (and download, if allowed below). Save to apply.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="p-8 space-y-4">
+                                            <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 rounded-lg bg-background text-muted-foreground"><GraduationCap className="w-4 h-4" /></div>
+                                                    <Label className="text-sm font-bold">Enable GCMS Trainings</Label>
+                                                </div>
+                                                <Switch checked={enableTrainings} onCheckedChange={setEnableTrainings} />
+                                            </div>
+                                            <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 rounded-lg bg-background text-muted-foreground"><BookOpen className="w-4 h-4" /></div>
+                                                    <Label className="text-sm font-bold">Enable Policy &amp; Procedures</Label>
+                                                </div>
+                                                <Switch checked={enablePolicies} onCheckedChange={setEnablePolicies} />
+                                            </div>
+                                            <div className="flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 rounded-lg bg-background text-muted-foreground"><Download className="w-4 h-4" /></div>
+                                                    <div>
+                                                        <Label className="text-sm font-bold">Allow users to download files</Label>
+                                                        <p className="text-xs text-muted-foreground mt-0.5">Off: everyone except SuperAdmin can only View — the Download button is hidden and blocked.</p>
+                                                    </div>
+                                                </div>
+                                                <Switch checked={allowDocumentDownloads} onCheckedChange={setAllowDocumentDownloads} />
+                                            </div>
+                                        </CardContent>
+                                        <CardFooter className="justify-end border-t p-5 bg-muted/5">
+                                            <Button type="submit" disabled={saving} className="rounded-xl px-8 h-12">
+                                                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                                Save
+                                            </Button>
+                                        </CardFooter>
+                                    </Card>
+                                </form>
+
+                                <Card className="border-none shadow-md">
+                                    <CardHeader>
+                                        <CardTitle className="text-2xl">Manage Documents</CardTitle>
+                                        <CardDescription>SuperAdmin only. Upload one or several files at once (auto-titled from filename when uploading more than one), view, download, or delete.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 space-y-8">
+                                        <DocumentsLibraryPage category="training" title="GCMS Trainings" description="Presentations, guides, and reference documents." compact />
+                                        <Separator />
+                                        <DocumentsLibraryPage category="policy" title="Policy & Procedures" description="Official policy and procedure documents." compact />
+                                    </CardContent>
+                                </Card>
                             </TabsContent>
 
                             <TabsContent value="branding" className="mt-0">

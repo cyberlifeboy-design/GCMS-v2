@@ -34,6 +34,7 @@ export class SettingsService {
         enableAssignmentMatrix: boolean;
         enableTrainings: boolean;
         enablePolicies: boolean;
+        allowDocumentDownloads: boolean;
         // System announcement (legacy)
         systemAnnouncement: string | null;
         announcementExpiry: Date | null;

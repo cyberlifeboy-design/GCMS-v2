@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { documentsApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,16 +36,20 @@ interface DocumentsLibraryPageProps {
     category: 'training' | 'policy';
     title: string;
     description: string;
+    /** Renders a smaller heading with no outer page spacing — for embedding inside another page (e.g. Settings). */
+    compact?: boolean;
 }
 
-export function DocumentsLibraryPage({ category, title, description }: DocumentsLibraryPageProps) {
+export function DocumentsLibraryPage({ category, title, description, compact = false }: DocumentsLibraryPageProps) {
     const { user } = useAuthStore();
     const isSuperAdmin = user?.role === 'SuperAdmin';
+    const allowDownloads = useSettingsStore(s => s.allowDocumentDownloads);
+    const canDownload = isSuperAdmin || allowDownloads;
     const [docs, setDocs] = useState<ResourceDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [form, setForm] = useState<{ title: string; description: string; file: File | null }>({ title: '', description: '', file: null });
+    const [form, setForm] = useState<{ title: string; description: string; files: File[] }>({ title: '', description: '', files: [] });
 
     const load = async () => {
         setLoading(true);
@@ -62,21 +67,21 @@ export function DocumentsLibraryPage({ category, title, description }: Documents
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.file || !form.title.trim()) {
-            toast.error('Title and file are required');
+        if (form.files.length === 0 || (form.files.length === 1 && !form.title.trim())) {
+            toast.error(form.files.length === 0 ? 'At least one file is required' : 'Title is required');
             return;
         }
         setUploading(true);
         try {
             const fd = new FormData();
             fd.append('category', category);
-            fd.append('title', form.title);
+            if (form.files.length === 1) fd.append('title', form.title);
             fd.append('description', form.description);
-            fd.append('file', form.file);
+            form.files.forEach(f => fd.append('files', f));
             await documentsApi.upload(fd);
-            toast.success('Document uploaded');
+            toast.success(form.files.length > 1 ? `${form.files.length} documents uploaded` : 'Document uploaded');
             setUploadOpen(false);
-            setForm({ title: '', description: '', file: null });
+            setForm({ title: '', description: '', files: [] });
             load();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Upload failed');
@@ -110,16 +115,26 @@ export function DocumentsLibraryPage({ category, title, description }: Documents
             a.download = doc.originalName;
             a.click();
             URL.revokeObjectURL(url);
-        } catch {
-            toast.error('Download failed');
+        } catch (err: any) {
+            // responseType: 'blob' means an error body also arrives as a Blob, not parsed JSON.
+            let message = 'Download failed';
+            const data = err?.response?.data;
+            if (data instanceof Blob) {
+                try { message = JSON.parse(await data.text()).error || message; } catch { /* non-JSON error body */ }
+            } else if (data?.error) {
+                message = data.error;
+            }
+            toast.error(message);
         }
     };
 
     return (
-        <div className="space-y-6">
+        <div className={compact ? 'space-y-4' : 'space-y-6'}>
             <div className="flex flex-wrap justify-between items-center gap-3">
                 <div>
-                    <h1 className="text-3xl font-bold">{title}</h1>
+                    {compact
+                        ? <h3 className="text-lg font-bold">{title}</h3>
+                        : <h1 className="text-3xl font-bold">{title}</h1>}
                     <p className="text-muted-foreground text-sm mt-1">{description}</p>
                 </div>
                 {isSuperAdmin && (
@@ -128,24 +143,32 @@ export function DocumentsLibraryPage({ category, title, description }: Documents
                             <Button><Plus className="w-4 h-4 mr-2" />Upload Document</Button>
                         </DialogTrigger>
                         <DialogContent>
-                            <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
+                            <DialogHeader><DialogTitle>Upload Document{form.files.length > 1 ? 's' : ''}</DialogTitle></DialogHeader>
                             <form onSubmit={handleUpload} className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label>Title</Label>
-                                    <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Description (optional)</Label>
-                                    <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>File (PowerPoint, PDF, or Word — up to 25MB)</Label>
+                                    <Label>Files (PowerPoint, PDF, or Word — up to 25MB each, up to 10 at once)</Label>
                                     <Input
                                         type="file"
                                         accept=".pdf,.ppt,.pptx,.doc,.docx"
-                                        onChange={e => setForm(f => ({ ...f, file: e.target.files?.[0] || null }))}
+                                        multiple
+                                        onChange={e => setForm(f => ({ ...f, files: Array.from(e.target.files || []) }))}
                                         required
                                     />
+                                    {form.files.length > 1 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            {form.files.length} files selected — each will be titled from its own filename.
+                                        </p>
+                                    )}
+                                </div>
+                                {form.files.length <= 1 && (
+                                    <div className="space-y-2">
+                                        <Label>Title</Label>
+                                        <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    <Label>Description (optional)</Label>
+                                    <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
                                 </div>
                                 <DialogFooter>
                                     <Button type="submit" disabled={uploading}>
@@ -169,7 +192,7 @@ export function DocumentsLibraryPage({ category, title, description }: Documents
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${compact ? '' : 'lg:grid-cols-3'}`}>
                     {docs.map(doc => {
                         const Icon = iconFor(doc.mimeType);
                         return (
@@ -189,7 +212,9 @@ export function DocumentsLibraryPage({ category, title, description }: Documents
                                     {doc.description && <p className="text-sm text-muted-foreground line-clamp-2">{doc.description}</p>}
                                     <div className="flex flex-wrap gap-2">
                                         <Button size="sm" variant="outline" onClick={() => handleView(doc)}><Eye className="w-3.5 h-3.5 mr-1.5" />View</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleDownload(doc)}><Download className="w-3.5 h-3.5 mr-1.5" />Download</Button>
+                                        {canDownload && (
+                                            <Button size="sm" variant="outline" onClick={() => handleDownload(doc)}><Download className="w-3.5 h-3.5 mr-1.5" />Download</Button>
+                                        )}
                                         {isSuperAdmin && (
                                             <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => handleDelete(doc.id)}>
                                                 <Trash2 className="w-3.5 h-3.5" />

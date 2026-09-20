@@ -6,6 +6,7 @@ interface SettingsState {
     tournamentName: string;
     enableTrainings: boolean;
     enablePolicies: boolean;
+    allowDocumentDownloads: boolean;
     isLoading: boolean;
     fetchSettings: () => Promise<void>;
 }
@@ -15,6 +16,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     tournamentName: 'GCMS',
     enableTrainings: true,
     enablePolicies: true,
+    allowDocumentDownloads: true,
     isLoading: false,
     fetchSettings: async () => {
         set({ isLoading: true });
@@ -26,6 +28,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
                 tournamentName: settings.tournamentName || 'GCMS',
                 enableTrainings: settings.enableTrainings ?? true,
                 enablePolicies: settings.enablePolicies ?? true,
+                allowDocumentDownloads: settings.allowDocumentDownloads ?? true,
             });
         } catch (error) {
             console.error('Failed to fetch system settings:', error);

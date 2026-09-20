@@ -270,6 +270,9 @@ model SystemSettings {
   enableAssignmentMatrix        Boolean   @default(true)
   enableTrainings               Boolean   @default(true)
   enablePolicies                Boolean   @default(true)
+  // Off: Download is hidden/blocked for everyone except SuperAdmin/Admin on the
+  // Trainings and Policy & Procedures libraries — View still works either way.
+  allowDocumentDownloads        Boolean   @default(true)
   // Request window control (public "Submit a Request" channel)
   requestWindowMode             String    @default("open") // open | closed | scheduled
   requestWindowStart            DateTime?
