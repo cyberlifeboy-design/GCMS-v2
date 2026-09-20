@@ -268,6 +268,8 @@ model SystemSettings {
   enableBulkOperations          Boolean   @default(true)
   enableAdvancedReports         Boolean   @default(true)
   enableAssignmentMatrix        Boolean   @default(true)
+  enableTrainings               Boolean   @default(true)
+  enablePolicies                Boolean   @default(true)
   // Request window control (public "Submit a Request" channel)
   requestWindowMode             String    @default("open") // open | closed | scheduled
   requestWindowStart            DateTime?
@@ -767,4 +769,22 @@ model Warning {
 
   @@index([userId])
   @@index([level])
+}
+
+// Uploaded reference files (PPT/PDF/Word) shown in the "GCMS Trainings" and
+// "Policy & Procedures" nav tabs — browsable and downloadable by every logged-in
+// user; upload/delete is SuperAdmin-only (enforced at the route level).
+model ResourceDocument {
+  id           String   @id @default(cuid())
+  category     String // 'training' | 'policy'
+  title        String
+  description  String?  @db.Text
+  fileName     String // stored object key in the 'documents' bucket
+  originalName String // original upload filename, used for the download's Content-Disposition
+  mimeType     String
+  fileSize     Int
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([category])
 }

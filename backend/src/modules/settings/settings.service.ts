@@ -32,6 +32,8 @@ export class SettingsService {
         enableBulkOperations: boolean;
         enableAdvancedReports: boolean;
         enableAssignmentMatrix: boolean;
+        enableTrainings: boolean;
+        enablePolicies: boolean;
         // System announcement (legacy)
         systemAnnouncement: string | null;
         announcementExpiry: Date | null;

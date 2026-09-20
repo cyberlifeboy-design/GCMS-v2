@@ -4,6 +4,8 @@ import { settingsApi } from '@/lib/api';
 interface SettingsState {
     timezone: string;
     tournamentName: string;
+    enableTrainings: boolean;
+    enablePolicies: boolean;
     isLoading: boolean;
     fetchSettings: () => Promise<void>;
 }
@@ -11,6 +13,8 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set) => ({
     timezone: 'UTC',
     tournamentName: 'GCMS',
+    enableTrainings: true,
+    enablePolicies: true,
     isLoading: false,
     fetchSettings: async () => {
         set({ isLoading: true });
@@ -20,6 +24,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
             set({
                 timezone: settings.timezone || 'UTC',
                 tournamentName: settings.tournamentName || 'GCMS',
+                enableTrainings: settings.enableTrainings ?? true,
+                enablePolicies: settings.enablePolicies ?? true,
             });
         } catch (error) {
             console.error('Failed to fetch system settings:', error);

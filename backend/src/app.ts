@@ -22,6 +22,7 @@ import poolBookingRequestsRoutes from './modules/pool-booking-requests/pool-book
 import incidentsRoutes from './modules/incidents/incidents.routes';
 import warningsRoutes from './modules/incidents/warnings.routes';
 import notificationTemplatesRoutes from './modules/notification-templates/notification-templates.routes';
+import documentsRoutes from './modules/documents/documents.routes';
 import { auditLog } from './middleware/audit.middleware';
 import { sanitizeInput } from './middleware/sanitize.middleware';
 import { apiLimiter } from './middleware/rateLimit.middleware';
@@ -181,6 +182,7 @@ app.use('/api/v1/announcements', announcementRoutes);
 app.use('/api/v1/pool-bookings', poolBookingsRoutes);
 app.use('/api/v1/incidents', incidentsRoutes);
 app.use('/api/v1/warnings', warningsRoutes);
+app.use('/api/v1/documents', documentsRoutes);
 
 // In production, the built frontend ships inside this image; serve it as static
 // files with an SPA fallback so client-side routes resolve. Local dev keeps using

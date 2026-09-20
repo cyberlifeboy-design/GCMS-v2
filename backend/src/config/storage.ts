@@ -33,12 +33,18 @@ export const minioClient = new Minio.Client({
 // directory shallower than src, which broke a fixed "../../../uploads" offset.
 export const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 
-// Bucket names
+// Bucket names — served unauthenticated through the /api/v1/storage/:bucket/:filename proxy in app.ts.
 export const BUCKETS = {
     SIGNATURES: 'signatures',
     INCIDENT_PHOTOS: 'incident-photos',
     MAINTENANCE_PHOTOS: 'maintenance-photos',
     BRANDING: 'branding',
+};
+
+// Training/policy documents — kept out of BUCKETS so the public storage proxy never
+// serves them; they're only readable through documents.routes.ts's authenticated route.
+export const DOCUMENT_BUCKETS = {
+    DOCUMENTS: 'documents',
 };
 
 // Azure Blob: a single container, buckets become path prefixes ("<bucket>/<fileName>")
@@ -79,14 +85,16 @@ async function localRead(bucket: string, fileName: string): Promise<Buffer> {
  * Azure container only when that driver is selected (STORAGE_DRIVER).
  */
 export async function initializeStorage(): Promise<void> {
+    const allBuckets = [...Object.values(BUCKETS), ...Object.values(DOCUMENT_BUCKETS)];
+
     // Always create local fallback dirs
-    for (const bucket of Object.values(BUCKETS)) {
+    for (const bucket of allBuckets) {
         await fs.promises.mkdir(path.join(UPLOADS_DIR, bucket), { recursive: true });
     }
 
     if (DRIVER === 'minio') {
         try {
-            for (const bucket of Object.values(BUCKETS)) {
+            for (const bucket of allBuckets) {
                 const exists = await minioClient.bucketExists(bucket);
                 if (!exists) {
                     await minioClient.makeBucket(bucket, 'us-east-1');

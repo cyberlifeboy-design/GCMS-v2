@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { settingsApi } from '@/lib/api';
-import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle, Layers, ShieldAlert, UserPlus, LogOut } from 'lucide-react';
+import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle, Layers, ShieldAlert, UserPlus, LogOut, GraduationCap, BookOpen } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { formatDate } from '@/lib/dateUtils';
 
@@ -108,6 +108,8 @@ const navItems = [
     { name: 'Stadiums', href: '/stadiums', icon: MapPin, roles: ['SuperAdmin'], pageKey: 'stadiums' },
     { name: 'Reports', href: '/reports', icon: FileText, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'reports' },
     { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam', 'FA'], pageKey: 'notifications' },
+    { name: 'GCMS Trainings', href: '/trainings', icon: GraduationCap, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA', 'Contracts', 'MaintenanceTeam'], pageKey: 'trainings' },
+    { name: 'Policy & Procedures', href: '/policies', icon: BookOpen, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA', 'Contracts', 'MaintenanceTeam'], pageKey: 'policies' },
     { name: 'Users', href: '/users', icon: Users, roles: ['SuperAdmin', 'Admin'], pageKey: 'users' },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['SuperAdmin', 'Admin'], pageKey: 'settings' },
 ];
@@ -118,7 +120,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
 
-    const { fetchSettings } = useSettingsStore();
+    const { fetchSettings, enableTrainings, enablePolicies } = useSettingsStore();
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -139,6 +141,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
     const filteredNavItems = navItems.filter(item => {
         if (!user || !item.roles.includes(user.role)) return false;
+        // SuperAdmin can always see & manage these tabs, even when toggled off for everyone else
+        if (item.pageKey === 'trainings' && !enableTrainings && user.role !== 'SuperAdmin') return false;
+        if (item.pageKey === 'policies' && !enablePolicies && user.role !== 'SuperAdmin') return false;
         // SuperAdmin, FA, Contracts, and MaintenanceTeam are never page-restricted
         if (user.role === 'SuperAdmin' || user.role === 'FA' || user.role === 'Contracts' || user.role === 'MaintenanceTeam') return true;
         // Dashboard and Account Settings are always accessible

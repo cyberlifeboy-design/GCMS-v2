@@ -473,6 +473,19 @@ export const announcementsApi = {
         apiClient.delete(`/announcements/${id}`),
 };
 
+export const documentsApi = {
+    list: (category: 'training' | 'policy') =>
+        apiClient.get('/documents', { params: { category } }),
+    upload: (data: FormData) =>
+        apiClient.post('/documents', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    delete: (id: string) =>
+        apiClient.delete(`/documents/${id}`),
+    download: (id: string) =>
+        apiClient.get(`/documents/${id}/file`, { params: { download: 1 }, responseType: 'blob' }),
+    getViewUrl: (id: string) =>
+        `${(import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:3005/api/v1'}/documents/${id}/file`,
+};
+
 export const poolBookingsApi = {
     getPoolFleet: (params?: { stadiumId?: string }) =>
         apiClient.get('/pool-bookings/fleet', { params }),

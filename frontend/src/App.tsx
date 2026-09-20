@@ -32,6 +32,8 @@ const MyReportsPage = lazy(() => import('@/pages/MyReportsPage').then(m => ({ de
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const PoolBookingRequestPage = lazy(() => import('@/pages/PoolBookingRequestPage').then(m => ({ default: m.PoolBookingRequestPage })));
 const BookingsPage = lazy(() => import('@/pages/BookingsPage').then(m => ({ default: m.BookingsPage })));
+const TrainingsPage = lazy(() => import('@/pages/TrainingsPage').then(m => ({ default: m.TrainingsPage })));
+const PolicyProceduresPage = lazy(() => import('@/pages/PolicyProceduresPage').then(m => ({ default: m.PolicyProceduresPage })));
 
 function HomeRedirect() {
     const { user } = useAuthStore();
@@ -93,6 +95,8 @@ function AppContent() {
                                     <Route path="/access-requests" element={<PageGuard pageKey="access-requests"><AccessRequestsManagementPage /></PageGuard>} />
                                     <Route path="/incidents" element={<PageGuard pageKey="incidents"><IncidentsPage /></PageGuard>} />
                                     <Route path="/bookings" element={<PageGuard pageKey="bookings"><BookingsPage /></PageGuard>} />
+                                    <Route path="/trainings" element={<PageGuard pageKey="trainings"><TrainingsPage /></PageGuard>} />
+                                    <Route path="/policies" element={<PageGuard pageKey="policies"><PolicyProceduresPage /></PageGuard>} />
                                     <Route path="/usage-history" element={<UsageHistoryPage />} />
                                     <Route path="/my-reports" element={<MyReportsPage />} />
                                     <Route path="/profile" element={<ProfilePage />} />

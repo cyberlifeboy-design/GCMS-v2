@@ -9,7 +9,8 @@ import {
     File, Link as LinkIcon, Copy, Check, Bell, Clock,
     Megaphone, Sun, Moon, Monitor,
     ChevronDown, ChevronUp, User, Plus, Trash2, GripVertical,
-    Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send, Layers
+    Palette, ShieldCheck, Wrench, Globe, Users, Mail, Send, Layers,
+    GraduationCap, BookOpen
 } from 'lucide-react';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { NotificationTemplatesPanel } from '@/components/settings/NotificationTemplatesPanel';
@@ -41,6 +42,8 @@ interface Settings {
     enableBulkOperations?: boolean;
     enableAdvancedReports?: boolean;
     enableAssignmentMatrix?: boolean;
+    enableTrainings?: boolean;
+    enablePolicies?: boolean;
     systemAnnouncement?: string;
     announcementExpiry?: string;
     theme?: 'light' | 'dark' | 'system';
@@ -182,6 +185,8 @@ export function SettingsPage() {
     const [enableBulkOperations, setEnableBulkOperations] = useState(true);
     const [enableAdvancedReports, setEnableAdvancedReports] = useState(true);
     const [enableAssignmentMatrix, setEnableAssignmentMatrix] = useState(true);
+    const [enableTrainings, setEnableTrainings] = useState(true);
+    const [enablePolicies, setEnablePolicies] = useState(true);
     const [systemAnnouncement, setSystemAnnouncement] = useState('');
     const [announcementExpiry, setAnnouncementExpiry] = useState('');
     const [announcementRole, setAnnouncementRole] = useState('all');
@@ -271,6 +276,8 @@ export function SettingsPage() {
                 setEnableBulkOperations(d.enableBulkOperations ?? true);
                 setEnableAdvancedReports(d.enableAdvancedReports ?? true);
                 setEnableAssignmentMatrix(d.enableAssignmentMatrix ?? true);
+                setEnableTrainings(d.enableTrainings ?? true);
+                setEnablePolicies(d.enablePolicies ?? true);
                 setSystemAnnouncement(d.systemAnnouncement || '');
                 setAnnouncementExpiry(d.announcementExpiry ? d.announcementExpiry.slice(0, 16) : '');
                 setHandoverDefaultDurationDays(d.handoverDefaultDurationDays ?? 1);
@@ -389,6 +396,8 @@ export function SettingsPage() {
             fd.append('enableBulkOperations', String(enableBulkOperations));
             fd.append('enableAdvancedReports', String(enableAdvancedReports));
             fd.append('enableAssignmentMatrix', String(enableAssignmentMatrix));
+            fd.append('enableTrainings', String(enableTrainings));
+            fd.append('enablePolicies', String(enablePolicies));
             fd.append('systemAnnouncement', systemAnnouncement);
             fd.append('announcementExpiry', announcementExpiry ? new Date(announcementExpiry).toISOString() : '');
             fd.append('handoverDefaultDurationDays', String(handoverDefaultDurationDays));
@@ -713,6 +722,8 @@ export function SettingsPage() {
                                                     { label: 'Bulk Operations', val: enableBulkOperations, set: setEnableBulkOperations, icon: Check },
                                                     { label: 'Advanced Reports', val: enableAdvancedReports, set: setEnableAdvancedReports, icon: FileSpreadsheet },
                                                     { label: 'Assignment Matrix', val: enableAssignmentMatrix, set: setEnableAssignmentMatrix, icon: ShieldCheck },
+                                                    { label: 'GCMS Trainings', val: enableTrainings, set: setEnableTrainings, icon: GraduationCap },
+                                                    { label: 'Policy & Procedures', val: enablePolicies, set: setEnablePolicies, icon: BookOpen },
                                                 ].map((f, i, arr) => (
                                                     <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border bg-muted/10 border-muted/50 hover:bg-muted/20 transition-all ${i === arr.length - 1 && arr.length % 2 === 1 ? 'md:col-span-2' : ''}`}>
                                                         <div className="flex items-center gap-3">

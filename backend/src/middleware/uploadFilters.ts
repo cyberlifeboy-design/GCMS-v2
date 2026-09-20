@@ -46,3 +46,24 @@ export const spreadsheetFileFilter = (
         cb(new UnsupportedFileTypeError('Only .xlsx, .xls, or .csv spreadsheet files are allowed'));
     }
 };
+
+const DOCUMENT_MIME_TYPES = new Set([
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+    'application/vnd.ms-powerpoint', // .ppt
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+    'application/msword', // .doc
+]);
+
+/** For the Trainings/Policy & Procedures library — accepts PowerPoint, PDF, or Word files only. */
+export const documentFileFilter = (
+    _req: Request,
+    file: Express.Multer.File,
+    cb: FileFilterCallback
+): void => {
+    if (DOCUMENT_MIME_TYPES.has(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new UnsupportedFileTypeError('Only PowerPoint, PDF, or Word files are allowed'));
+    }
+};

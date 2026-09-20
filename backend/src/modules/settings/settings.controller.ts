@@ -62,6 +62,8 @@ const updateSettingsSchema = z.object({
     enableBulkOperations: coerceBoolean.optional(),
     enableAdvancedReports: coerceBoolean.optional(),
     enableAssignmentMatrix: coerceBoolean.optional(),
+    enableTrainings: coerceBoolean.optional(),
+    enablePolicies: coerceBoolean.optional(),
     // System announcement (legacy)
     systemAnnouncement: z.string().optional().nullable(),
     announcementExpiry: coerceDate,
