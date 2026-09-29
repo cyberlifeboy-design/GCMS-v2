@@ -72,6 +72,15 @@ router.get('/pool-booking-requests/history', authenticate, requireRole('SuperAdm
 router.get('/pool-booking-requests/history/export', authenticate, requireRole('SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'), (req: Request, res: Response) =>
     PoolBookingRequestsController.exportHistory(req as any, res),
 );
+router.get('/pool-booking-requests/attention', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.attention(req as any, res),
+);
+router.patch('/pool-booking-requests/:id/release', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.release(req as any, res),
+);
+router.post('/pool-booking-requests/:id/extend', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
+    PoolBookingRequestsController.extendByAdmin(req as any, res),
+);
 router.patch('/pool-booking-requests/:id/approve', authenticate, requireRole('SuperAdmin', 'Admin'), (req: Request, res: Response) =>
     PoolBookingRequestsController.approve(req as any, res),
 );

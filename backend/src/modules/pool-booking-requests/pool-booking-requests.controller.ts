@@ -53,8 +53,17 @@ const createRecurringSchema = z.object({
         .max(62, 'A recurring booking can cover at most 62 dates'),
 });
 
-/** The signed-in account is the requester — never trust a name/email from the body. */
-function requesterIdentity(req: AuthRequest) {
+/**
+ * The signed-in account is the requester — never trust a name/email from the body.
+ * Everyone except SuperAdmin books at their own venue (and department, when the
+ * account has one); a mismatch throws a plain Error, which the callers return as 400.
+ */
+function requesterIdentity(req: AuthRequest, data: { stadiumId: string; departmentId: string }) {
+    const u = req.user!;
+    if (u.role !== 'SuperAdmin') {
+        if (u.stadiumId && data.stadiumId !== u.stadiumId) throw new Error('You can only book at your assigned venue.');
+        if (u.departmentId && data.departmentId !== u.departmentId) throw new Error('You can only book for your own department.');
+    }
     return {
         requesterName: req.user!.name || req.user!.email,
         requesterEmail: req.user!.email,
@@ -145,7 +154,7 @@ export class PoolBookingRequestsController {
                 res.status(400).json({ error: hoursError });
                 return;
             }
-            const booking = await poolBookingRequestsService.create({ ...data, ...requesterIdentity(req) });
+            const booking = await poolBookingRequestsService.create({ ...data, ...requesterIdentity(req, data) });
             res.status(201).json({ message: 'Booking request submitted', data: booking });
         } catch (error) {
             const err = error as Error & { code?: string; status?: number; conflict?: unknown };
@@ -180,7 +189,7 @@ export class PoolBookingRequestsController {
             if (!(await PoolBookingRequestsController.assertBookingsOpen(res))) return;
 
             const data = createInstantSchema.parse(req.body);
-            const booking = await poolBookingRequestsService.createInstant({ ...data, ...requesterIdentity(req) });
+            const booking = await poolBookingRequestsService.createInstant({ ...data, ...requesterIdentity(req, data) });
             res.status(201).json({ message: 'Instant booking request submitted', data: booking });
         } catch (error) {
             const err = error as Error & { code?: string; status?: number };
@@ -217,7 +226,7 @@ export class PoolBookingRequestsController {
                     return;
                 }
             }
-            const result = await poolBookingRequestsService.createRecurring({ ...data, ...requesterIdentity(req) });
+            const result = await poolBookingRequestsService.createRecurring({ ...data, ...requesterIdentity(req, data) });
             res.status(201).json({ message: 'Recurring booking request submitted', data: result });
         } catch (error) {
             const err = error as Error & { code?: string; status?: number; conflict?: unknown };
@@ -286,6 +295,61 @@ export class PoolBookingRequestsController {
             const err = error as Error;
             console.error('Mark key collected (public) error:', error);
             res.status(400).json({ error: err.message || 'Failed to confirm key collection' });
+        }
+    }
+
+    /** GET /api/v1/pool-booking-requests/attention — what the Admin key-check / overdue popups must ask now */
+    static async attention(req: AuthRequest, res: Response) {
+        try {
+            const stadiumId = req.user?.role === 'Admin' ? req.user.stadiumId : undefined;
+            res.json({ data: await poolBookingRequestsService.getAttention(stadiumId) });
+        } catch (error) {
+            console.error('Booking attention error:', error);
+            res.status(500).json({ error: 'Failed to load bookings needing attention' });
+        }
+    }
+
+    /** Admin may only act on bookings at their own venue. Sends the response and returns false when denied. */
+    private static async ownVenue(req: AuthRequest, res: Response): Promise<boolean> {
+        const existing = await poolBookingRequestsService.getById(req.params.id as string);
+        if (!existing) {
+            res.status(404).json({ error: 'Booking request not found' });
+            return false;
+        }
+        if (req.user?.role === 'Admin' && existing.stadiumId !== req.user.stadiumId) {
+            res.status(403).json({ error: 'Access denied' });
+            return false;
+        }
+        return true;
+    }
+
+    /** PATCH /api/v1/pool-booking-requests/:id/release — Admin answered "key NOT collected" */
+    static async release(req: AuthRequest, res: Response) {
+        try {
+            if (!(await PoolBookingRequestsController.ownVenue(req, res))) return;
+            const data = await poolBookingRequestsService.releaseUncollected(req.params.id as string, req.user!.userId);
+            res.json({ message: 'Car released back to the pool', data });
+        } catch (error) {
+            res.status(400).json({ error: (error as Error).message || 'Failed to release booking' });
+        }
+    }
+
+    /** POST /api/v1/pool-booking-requests/:id/extend — Admin/SuperAdmin sets a new return time */
+    static async extendByAdmin(req: AuthRequest, res: Response) {
+        try {
+            const { endDate, endTime } = z.object({
+                endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be YYYY-MM-DD'),
+                endTime: z.string().regex(/^\d{2}:\d{2}$/, 'endTime must be HH:mm'),
+            }).parse(req.body);
+            if (!(await PoolBookingRequestsController.ownVenue(req, res))) return;
+            const data = await poolBookingRequestsService.extendByAdmin(req.params.id as string, endDate, endTime);
+            res.json({ message: 'Booking extended', data });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: 'Validation error', details: error.errors });
+                return;
+            }
+            res.status(400).json({ error: (error as Error).message || 'Failed to extend booking' });
         }
     }
 

@@ -2,6 +2,11 @@
 FROM node:20-bookworm
 WORKDIR /app
 
+# Booking dates/times are stored as local wall-clock strings ("2026-11-21" + "09:00") and
+# the server derives Active/Overdue, reminders and key-collection deadlines from them, so
+# the process must run in venue time — Azure's containers default to UTC (3h off).
+ENV TZ=Asia/Qatar
+
 # Azure App Service (custom Linux container) SSH support — the portal's "SSH"
 # console proxies through Kudu into this container on port 2222, authenticating
 # with the fixed root login Microsoft's own tooling expects for this feature

@@ -371,11 +371,11 @@ export function HandoverPage() {
     );
 
     return (
-        <div className="container mx-auto py-6 max-w-7xl space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-4xl font-extrabold tracking-tight">Handover Cycle</h1>
-                    <p className="text-muted-foreground mt-1 text-lg">Manage car assignments, usage, and returns.</p>
+                    <h1 className="text-3xl font-bold">Handover Cycle</h1>
+                    <p className="text-muted-foreground mt-1">Manage car assignments, usage, and returns.</p>
                 </div>
                 {isAdmin && (
                     <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border border-muted-foreground/10">
@@ -415,11 +415,11 @@ export function HandoverPage() {
                                                 <CardDescription className="font-medium">{cart.carType} · {cart.stadiumName}</CardDescription>
                                             </div>
                                             <div className="flex flex-col items-end gap-1">
-                                                <Badge className={`${statusColors[cart.status]} border shadow-none px-3 py-1 text-[10px] font-bold uppercase tracking-wider`}>
+                                                <Badge className={`${statusColors[cart.status]} border shadow-none px-3 py-1 text-xs font-bold uppercase tracking-wider`}>
                                                     {cart.status}
                                                 </Badge>
                                                 {!handoverComplete && (
-                                                    <Badge variant="outline" className="text-amber-700 border-amber-400 text-[9px] px-2">
+                                                    <Badge variant="outline" className="text-amber-700 border-amber-400 text-xs px-2">
                                                         <Lock className="w-2.5 h-2.5 mr-1" /> Handover Pending
                                                     </Badge>
                                                 )}
@@ -432,14 +432,14 @@ export function HandoverPage() {
                                                 <p className="font-bold flex items-center gap-1"><Lock className="w-3 h-3" /> Cart locked until handover form is signed</p>
                                                 {awaitingAdminSign && <p>Waiting for Admin to create &amp; sign the handover form</p>}
                                                 {readyForUserSign && <p className="text-purple-700 font-semibold">Admin signed ✓ — your signature required</p>}
-                                                <p className="text-[10px] opacity-70">You cannot check-in, add drivers, or report issues until both parties sign</p>
+                                                <p className="text-xs opacity-70">You cannot check-in, add drivers, or report issues until both parties sign</p>
                                             </div>
                                         )}
                                         {handoverComplete && (
                                             <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-green-50 border border-green-200">
                                                 <div className="flex justify-between text-xs">
                                                     <span className="text-green-700 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Handover Signed</span>
-                                                    {cart.handoverSignedAt && <span className="text-muted-foreground text-[10px]">{formatDateTime(cart.handoverSignedAt)}</span>}
+                                                    {cart.handoverSignedAt && <span className="text-muted-foreground text-xs">{formatDateTime(cart.handoverSignedAt)}</span>}
                                                 </div>
                                             </div>
                                         )}
@@ -466,7 +466,7 @@ export function HandoverPage() {
                                                     disabled={submitting || cart.status === 'Dispatched'}
                                                 >
                                                     <span className="flex items-center gap-1"><LogIn className="w-3.5 h-3.5" /> Check In</span>
-                                                    <span className="text-[9px] font-normal opacity-80">Start Using</span>
+                                                    <span className="text-xs font-normal opacity-80">Start Using</span>
                                                 </Button>
                                                 <Button
                                                     className={`h-11 rounded-xl font-bold text-xs flex-col gap-0.5 text-white ${cart.status === 'Dispatched' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-muted text-muted-foreground cursor-not-allowed'}`}
@@ -474,7 +474,7 @@ export function HandoverPage() {
                                                     disabled={submitting || cart.status === 'Active'}
                                                 >
                                                     <span className="flex items-center gap-1"><LogOut className="w-3.5 h-3.5" /> Check Out</span>
-                                                    <span className="text-[9px] font-normal opacity-80">Stop Using</span>
+                                                    <span className="text-xs font-normal opacity-80">Stop Using</span>
                                                 </Button>
                                             </div>
                                         )}
@@ -575,15 +575,15 @@ export function HandoverPage() {
 
             {/* TABS: Admin operational views */}
             {isAdmin && <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/50 p-1 rounded-xl flex-wrap">
-                    <TabsTrigger value="pending" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <TabsList className="flex-wrap h-auto">
+                    <TabsTrigger value="pending" className="px-4">
                         <ClipboardList className="w-3 h-3 mr-1" /> Pending Handovers
                         {pendingHandovers && (pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length) > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
+                            <span className="ml-1.5 bg-amber-500 text-white text-xs font-black rounded-full px-1.5 py-0.5">{pendingHandovers.formsInProgress.length + pendingHandovers.cartsWithoutForm.length}</span>
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="log" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Activity Log</TabsTrigger>
-                    <TabsTrigger value="venues" className="rounded-lg px-5 font-bold uppercase tracking-wider text-[10px] data-[state=active]:bg-background data-[state=active]:shadow-sm">Venue Status</TabsTrigger>
+                    <TabsTrigger value="log" className="px-4">Activity Log</TabsTrigger>
+                    <TabsTrigger value="venues" className="px-4">Venue Status</TabsTrigger>
                 </TabsList>
 
                 {/* ── Pending Handovers (Admin) ── */}
@@ -617,10 +617,10 @@ export function HandoverPage() {
                                             <TableCell className="text-sm">{cart.carType}</TableCell>
                                             <TableCell>
                                                 <div className="text-sm font-medium">{cart.assignedUser?.name ?? '—'}</div>
-                                                <div className="text-[10px] text-muted-foreground">{cart.assignedUser?.email}</div>
+                                                <div className="text-xs text-muted-foreground">{cart.assignedUser?.email}</div>
                                             </TableCell>
                                             <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium.code}</Badge></TableCell>
-                                            <TableCell><Badge className="bg-red-100 text-red-800 border-red-200 text-[9px]">No Form Created</Badge></TableCell>
+                                            <TableCell><Badge className="bg-red-100 text-red-800 border-red-200 text-xs">No Form Created</Badge></TableCell>
                                             <TableCell className="text-right">
                                                 <Button size="sm" className="bg-red-900 hover:bg-red-800 text-white"
                                                     onClick={() => setFormModal({ open: true, fleetId: cart.id, mode: 'admin' })}>
@@ -636,12 +636,12 @@ export function HandoverPage() {
                                             <TableCell className="text-sm">{record.fleet.carType}</TableCell>
                                             <TableCell>
                                                 <div className="text-sm font-medium">{record.fleet.assignedUser?.name ?? '—'}</div>
-                                                <div className="text-[10px] text-muted-foreground">{record.fleet.assignedUser?.email}</div>
+                                                <div className="text-xs text-muted-foreground">{record.fleet.assignedUser?.email}</div>
                                             </TableCell>
                                             <TableCell><Badge variant="outline" className="font-mono text-xs">{record.fleet.stadium.code}</Badge></TableCell>
                                             <TableCell>
-                                                {record.status === 'PENDING' && <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[9px]">Admin Signature Needed</Badge>}
-                                                {record.status === 'ADMIN_SIGNED' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px]">Awaiting User Signature</Badge>}
+                                                {record.status === 'PENDING' && <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs">Admin Signature Needed</Badge>}
+                                                {record.status === 'ADMIN_SIGNED' && <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">Awaiting User Signature</Badge>}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button size="sm" variant="outline"
@@ -672,8 +672,8 @@ export function HandoverPage() {
 
                 <TabsContent value="log" className="space-y-4">
                     <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border border-muted-foreground/10 w-fit">
-                        <Button type="button" size="sm" variant={logView === 'live' ? 'default' : 'ghost'} className="h-8 rounded-lg text-[10px] font-bold uppercase tracking-wider" onClick={() => setLogView('live')}>Live</Button>
-                        <Button type="button" size="sm" variant={logView === 'filtered' ? 'default' : 'ghost'} className="h-8 rounded-lg text-[10px] font-bold uppercase tracking-wider" onClick={() => setLogView('filtered')}>Filtered / Full History</Button>
+                        <Button type="button" size="sm" variant={logView === 'live' ? 'default' : 'ghost'} className="h-8 rounded-lg text-xs font-bold uppercase tracking-wider" onClick={() => setLogView('live')}>Live</Button>
+                        <Button type="button" size="sm" variant={logView === 'filtered' ? 'default' : 'ghost'} className="h-8 rounded-lg text-xs font-bold uppercase tracking-wider" onClick={() => setLogView('filtered')}>Filtered / Full History</Button>
                     </div>
 
                     {logView === 'live' ? (
@@ -712,11 +712,11 @@ export function HandoverPage() {
                                             <TableRow key={a.id} className="group hover:bg-muted/5 border-muted/50">
                                                 <TableCell className="font-black text-primary font-mono">{a.carNumber}</TableCell>
                                                 <TableCell>
-                                                    <Badge className={`${actionColors[a.action]} shadow-none border-none text-[9px] font-bold px-2 py-0.5`}>{actionLabels[a.action] || a.action}</Badge>
+                                                    <Badge className={`${actionColors[a.action]} shadow-none border-none text-xs font-bold px-2 py-0.5`}>{actionLabels[a.action] || a.action}</Badge>
                                                 </TableCell>
                                                 <TableCell className="font-semibold text-sm">{a.userName}</TableCell>
                                                 <TableCell className="text-muted-foreground text-xs">{a.stadiumName}</TableCell>
-                                                <TableCell className="text-right text-[10px] font-mono text-muted-foreground">{formatDateTime(a.timestamp)}</TableCell>
+                                                <TableCell className="text-right text-xs font-mono text-muted-foreground">{formatDateTime(a.timestamp)}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -763,7 +763,7 @@ export function HandoverPage() {
                                             <TableRow key={h.id}>
                                                 <TableCell className="font-bold font-mono">{h.fleet?.carNumber}</TableCell>
                                                 <TableCell className="text-sm">{h.user?.name}</TableCell>
-                                                <TableCell><Badge className={`${actionColors[h.action]} border-none shadow-none text-[9px]`}>{actionLabels[h.action] || h.action}</Badge></TableCell>
+                                                <TableCell><Badge className={`${actionColors[h.action]} border-none shadow-none text-xs`}>{actionLabels[h.action] || h.action}</Badge></TableCell>
                                                 <TableCell className="text-xs text-muted-foreground">{formatDateTime(h.createdAt)}</TableCell>
                                                 <TableCell className="text-xs max-w-[200px] truncate">{h.conditionNotes || '—'}</TableCell>
                                             </TableRow>
@@ -786,11 +786,11 @@ export function HandoverPage() {
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <CardTitle className="text-lg leading-none mb-1">{s.stadiumName}</CardTitle>
-                                            <Badge variant="outline" className="text-[9px] uppercase font-black">{s.stadiumCode}</Badge>
+                                            <Badge variant="outline" className="text-xs uppercase font-black">{s.stadiumCode}</Badge>
                                         </div>
                                         <div className="text-right">
                                             <span className="text-2xl font-black block">{s.total}</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Total Units</span>
+                                            <span className="text-xs text-muted-foreground uppercase font-bold tracking-tighter">Total Units</span>
                                         </div>
                                     </div>
                                 </CardHeader>
@@ -798,15 +798,15 @@ export function HandoverPage() {
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="p-2.5 rounded-xl bg-green-50 border border-green-100 flex flex-col items-center">
                                             <span className="text-lg font-black text-green-700">{s.available}</span>
-                                            <span className="text-[9px] uppercase font-bold text-green-600">Available</span>
+                                            <span className="text-xs uppercase font-bold text-green-600">Available</span>
                                         </div>
                                         <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-100 flex flex-col items-center">
                                             <span className="text-lg font-black text-amber-700">{s.dispatched}</span>
-                                            <span className="text-[9px] uppercase font-bold text-amber-600">In Use</span>
+                                            <span className="text-xs uppercase font-bold text-amber-600">In Use</span>
                                         </div>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase px-1">
+                                        <div className="flex justify-between text-xs font-bold text-muted-foreground uppercase px-1">
                                             <span>Utilization</span>
                                             <span>{s.total > 0 ? Math.round((s.dispatched/s.total)*100) : 0}%</span>
                                         </div>
@@ -878,11 +878,11 @@ export function HandoverPage() {
                                             <TableCell className="text-sm text-muted-foreground">{cart.carType}</TableCell>
                                             <TableCell>
                                                 <div className="text-sm font-medium">{cart.assignedUser?.name ?? '—'}</div>
-                                                <div className="text-[10px] text-muted-foreground">{cart.assignedUser?.email}</div>
+                                                <div className="text-xs text-muted-foreground">{cart.assignedUser?.email}</div>
                                             </TableCell>
                                             <TableCell><Badge variant="outline" className="font-mono text-xs">{cart.stadium?.code}</Badge></TableCell>
                                             <TableCell>
-                                                <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[9px]">Handback Pending</Badge>
+                                                <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-xs">Handback Pending</Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
@@ -1063,11 +1063,11 @@ export function HandoverPage() {
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Unit Identity</Label>
+                                    <Label className="text-xs font-black uppercase text-muted-foreground">Unit Identity</Label>
                                     <p className="text-xl font-black font-mono">{signingCart?.carNumber}</p>
                                 </div>
                                 <div className="space-y-1">
-                                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Unit Type</Label>
+                                    <Label className="text-xs font-black uppercase text-muted-foreground">Unit Type</Label>
                                     <p className="font-bold">{signingCart?.carType}</p>
                                 </div>
                             </div>

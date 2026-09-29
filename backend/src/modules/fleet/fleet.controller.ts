@@ -25,6 +25,24 @@ const createFleetSchema = z.object({
 
 const updateFleetSchema = createFleetSchema.partial();
 
+/**
+ * Venue Admins may only touch carts at their own venue (and may not move one elsewhere).
+ * Sends the error response and returns true when the request must stop.
+ */
+async function denyOtherVenue(req: AuthRequest, res: Response, targetStadiumId?: string): Promise<boolean> {
+    if (req.user?.role !== 'Admin') return false;
+    const cart = await prisma.fleet.findUnique({ where: { id: req.params['id'] as string }, select: { stadiumId: true } });
+    if (!cart) {
+        res.status(404).json({ error: 'Vehicle not found' });
+        return true;
+    }
+    if (cart.stadiumId !== req.user.stadiumId || (targetStadiumId && targetStadiumId !== req.user.stadiumId)) {
+        res.status(403).json({ error: 'Access denied to this venue' });
+        return true;
+    }
+    return false;
+}
+
 export class FleetController {
     static async getAll(req: AuthRequest, res: Response) {
         try {
@@ -116,6 +134,7 @@ export class FleetController {
     static async update(req: AuthRequest, res: Response) {
         try {
             const validatedData = updateFleetSchema.parse(req.body);
+            if (await denyOtherVenue(req, res, validatedData.stadiumId)) return;
             const vehicle = await fleetService.update(req.params['id'] as string, validatedData);
             res.status(200).json(vehicle);
         } catch (error) {
@@ -129,6 +148,7 @@ export class FleetController {
 
     static async delete(req: AuthRequest, res: Response) {
         try {
+            if (await denyOtherVenue(req, res)) return;
             await fleetService.delete(req.params['id'] as string);
             res.status(204).send();
         } catch (error) {
@@ -139,6 +159,7 @@ export class FleetController {
     static async assignUser(req: AuthRequest, res: Response) {
         try {
             const { userId } = req.body; // null to unassign
+            if (await denyOtherVenue(req, res)) return;
             const vehicle = await fleetService.assignUser(req.params['id'] as string, userId || null);
             res.status(200).json(vehicle);
         } catch (error) {

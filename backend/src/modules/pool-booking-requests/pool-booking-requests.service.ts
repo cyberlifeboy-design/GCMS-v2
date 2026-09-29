@@ -3,7 +3,10 @@ import crypto from 'crypto';
 import { notificationService } from '../notifications/notification.service';
 import { emailService } from '../../services/email.service';
 import { notificationTemplatesService } from '../notification-templates/notification-templates.service';
-import { deriveBookingState } from './booking-state';
+import {
+    deriveBookingState, keyCheckState, keyCollectionDueAt,
+    KEY_COLLECTION_WINDOW_MINUTES, KEY_CHECK_ANSWER_MINUTES,
+} from './booking-state';
 import { getVenueVlm } from '../../services/vlm.service';
 
 export interface CreatePoolBookingRequestData {
@@ -53,7 +56,7 @@ export interface CreateRecurringBookingRequestData {
     slots: BookingSlot[];
 }
 
-const INSTANT_COLLECTION_WINDOW_MINUTES = 10;
+const INSTANT_COLLECTION_WINDOW_MINUTES = KEY_COLLECTION_WINDOW_MINUTES;
 
 function pad(n: number): string {
     return n < 10 ? `0${n}` : `${n}`;
@@ -496,11 +499,18 @@ export class PoolBookingRequestsService {
     async markKeyCollected(id: string) {
         const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
         if (!existing) throw new Error('Booking request not found');
-        if (existing.bookingType !== 'Instant') throw new Error('Only instant bookings track key collection');
         if (existing.status !== 'Approved') throw new Error('Booking is not in an approved state');
         if (existing.keyCollectedAt) return existing;
 
         const collectedAt = new Date();
+        // Scheduled bookings keep their booked window; only Instant ones start the clock now.
+        if (existing.bookingType !== 'Instant') {
+            return prisma.poolBookingRequest.update({
+                where: { id },
+                data: { keyCollectedAt: collectedAt },
+                include: BOOKING_INCLUDE,
+            });
+        }
         const durationMinutes = existing.instantDurationMinutes ?? 60;
         const endMoment = new Date(collectedAt.getTime() + durationMinutes * 60 * 1000);
 
@@ -610,10 +620,11 @@ export class PoolBookingRequestsService {
             include: BOOKING_INCLUDE,
         });
 
+        // Every booking now has the key-collection window (from approval, or from the booked start if later).
         const instantWarningLine =
             updated.bookingType === 'Instant'
                 ? ` Collect the key within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes or this booking will be automatically cancelled and the car returned to the pool.`
-                : '';
+                : ` Collect the key within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes of your start time (${updated.startDate} ${updated.startTime}) or the booking may be cancelled and the car returned to the pool.`;
         if (updated.createdById) {
             const push = await notificationTemplatesService.renderPush('pool_booking_approved', {
                 carNumber: updated.fleet.carNumber,
@@ -921,37 +932,51 @@ export class PoolBookingRequestsService {
 
     /**
      * In-process scan (called on an interval from server.ts, same pattern as
-     * scanReminders): any Approved Instant booking whose key hasn't been collected
-     * within INSTANT_COLLECTION_WINDOW_MINUTES of Admin approval is auto-cancelled,
-     * returning the car to the pool for other requesters.
+     * scanReminders): an Approved booking (any type) whose key wasn't collected within
+     * KEY_COLLECTION_WINDOW_MINUTES of approval / booked start, and which no Admin
+     * answered within KEY_CHECK_ANSWER_MINUTES of the popup, is released back to the pool.
      */
-    async scanInstantExpiry() {
+    async scanKeyCollection() {
         const now = new Date();
         const candidates = await prisma.poolBookingRequest.findMany({
-            where: { status: 'Approved', bookingType: 'Instant', keyCollectedAt: null, reviewedAt: { not: null } },
-            include: BOOKING_INCLUDE,
+            where: { status: 'Approved', keyCollectedAt: null, reviewedAt: { not: null } },
+            select: { id: true, status: true, startDate: true, startTime: true, reviewedAt: true, keyCollectedAt: true },
         });
-
         for (const b of candidates) {
-            if (!b.reviewedAt) continue;
-            const deadline = b.reviewedAt.getTime() + INSTANT_COLLECTION_WINDOW_MINUTES * 60 * 1000;
-            if (now.getTime() < deadline) continue;
+            if (keyCheckState(b, now) === 'release') await this.releaseUncollected(b.id, null);
+        }
+    }
 
-            const claimed = await prisma.poolBookingRequest.updateMany({
-                where: { id: b.id, status: 'Approved', keyCollectedAt: null },
-                data: {
-                    status: 'Cancelled',
-                    autoCancelledAt: now,
-                    reviewComment: `Auto-cancelled — key not collected within ${INSTANT_COLLECTION_WINDOW_MINUTES} minutes of approval.`,
-                },
-            });
-            if (claimed.count === 0) continue; // another replica already claimed/collected it
+    /**
+     * Key was never collected — cancel the booking so the car goes back to the pool.
+     * byUserId = the Admin who answered "No"; null = automatic release by the poller.
+     */
+    async releaseUncollected(id: string, byUserId: string | null) {
+        const now = new Date();
+        const claimed = await prisma.poolBookingRequest.updateMany({
+            where: { id, status: 'Approved', keyCollectedAt: null },
+            data: {
+                status: 'Cancelled',
+                autoCancelledAt: now,
+                reviewComment: byUserId
+                    ? 'Released — Admin confirmed the key was not collected.'
+                    : `Auto-released — key not confirmed collected within ${KEY_COLLECTION_WINDOW_MINUTES} minutes and nobody answered the key check.`,
+                ...(byUserId ? { reviewedById: byUserId } : {}),
+            },
+        });
+        if (claimed.count === 0) {
+            // Another replica / Admin already resolved it (or it was collected meanwhile).
+            if (byUserId) throw new Error('This booking is no longer waiting for key collection');
+            return null;
+        }
+        const b = await prisma.poolBookingRequest.findUniqueOrThrow({ where: { id }, include: BOOKING_INCLUDE });
 
+        {
             const vars = {
                 carNumber: b.fleet.carNumber,
                 requesterName: b.requesterName,
                 stadiumName: b.stadium.name,
-                collectionWindowMinutes: String(INSTANT_COLLECTION_WINDOW_MINUTES),
+                collectionWindowMinutes: String(KEY_COLLECTION_WINDOW_MINUTES),
             };
             const push = await notificationTemplatesService.renderPush('instant_booking_auto_cancelled', vars);
             if (push) {
@@ -973,6 +998,59 @@ export class PoolBookingRequestsService {
                 console.error('Instant booking auto-cancel email failed:', e);
             }
         }
+        return { ...b, derivedState: deriveBookingState(b, now) };
+    }
+
+    /** Admin/SuperAdmin extends an approved booking directly (answering the overdue popup). */
+    async extendByAdmin(id: string, endDate: string, endTime: string) {
+        const existing = await prisma.poolBookingRequest.findUnique({ where: { id } });
+        if (!existing) throw new Error('Booking request not found');
+        if (existing.status !== 'Approved') throw new Error('Only an approved booking can be extended');
+        if (new Date(`${endDate}T${endTime}:00`).getTime() <= Date.now()) throw new Error('The new return time must be in the future');
+
+        const updated = await prisma.poolBookingRequest.update({
+            where: { id },
+            data: {
+                endDate, endTime,
+                // any FA-requested extension is superseded by the Admin's decision
+                extensionStatus: existing.extensionStatus === 'Pending' ? 'Approved' : existing.extensionStatus,
+                reminderSentAt: null, overdueNotifiedAt: null, // window changed — let the poller re-evaluate
+            },
+            include: BOOKING_INCLUDE,
+        });
+        if (updated.faUserId) {
+            await notificationService.create({
+                type: 'PoolBookingExtensionApproved', title: 'Booking extended',
+                message: `${updated.fleet.carNumber} was extended — new return time ${endDate} ${endTime}`,
+                entityType: 'PoolBookingRequest', entityId: id, userId: updated.faUserId,
+            });
+        }
+        return { ...updated, derivedState: deriveBookingState(updated, new Date()) };
+    }
+
+    /**
+     * What the Admin popup must ask about right now, within their scope:
+     * keyChecks — key-collection window passed, awaiting a yes/no (auto-release at autoReleaseAt);
+     * overdue   — past the return time and not returned.
+     */
+    async getAttention(stadiumId?: string) {
+        const now = new Date();
+        const rows = await prisma.poolBookingRequest.findMany({
+            where: { status: 'Approved', ...(stadiumId ? { stadiumId } : {}) },
+            include: BOOKING_INCLUDE,
+            orderBy: { startDate: 'asc' },
+        });
+        const keyChecks = rows
+            .filter((b) => keyCheckState(b, now) === 'ask')
+            .map((b) => ({
+                ...b,
+                derivedState: deriveBookingState(b, now),
+                autoReleaseAt: new Date(keyCollectionDueAt(b)!.getTime() + KEY_CHECK_ANSWER_MINUTES * 60_000),
+            }));
+        const overdue = rows
+            .map((b) => ({ ...b, derivedState: deriveBookingState(b, now) }))
+            .filter((b) => b.derivedState === 'Overdue' && keyCheckState(b, now) === null);
+        return { keyChecks, overdue };
     }
 }
 

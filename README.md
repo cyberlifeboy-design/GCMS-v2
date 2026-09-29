@@ -101,9 +101,18 @@ Shared pool carts are booked (not just checked out) through an approval workflow
 live availability — designed for short-duration shared use across departments.
 
 - **Pool Cart Marking**: Admin/SuperAdmin toggle `isPool` on any fleet cart via the Manage Pool dialog; blocked if an active booking exists
+- **Key collection & overdue popups** (all booking types): the key is due 10 min after
+  approval (or after the booked start, if later). Admin/SuperAdmin get a "Was the key
+  collected?" popup on any page — Yes starts the trip timer, No releases the car, no answer
+  within 5 min auto-releases it. Past the return time, an "Extend?" popup offers Extend /
+  Mark returned / Ask later (unanswered stays Overdue). Booking cards show booked, approved
+  and key-collected times with live countdowns. The backend runs in `Asia/Qatar` time
+  (`TZ` in `backend/Dockerfile`) because booking times are venue wall-clock strings.
 - **Booking Form** (`/book-pool`, **login required** since the 2026-09-29 security
-  review — reached from the sidebar "Book a Pool Cart"; requester name/email are locked to
-  the signed-in account; `POST /pool-booking-requests[/instant|/recurring]`, capped at 20
+  review — an in-app page reached from the sidebar "Book a Pool Cart", hidden when
+  Bookings are disabled in Settings; name/email/phone/venue/department pre-filled from the
+  account, venue + department locked for everyone except SuperAdmin;
+  `POST /pool-booking-requests[/instant|/recurring]`, capped at 20
   submissions/hour per account): pick a venue (active venues only) → an FA
   assigned to that venue (active FAs only) → schedule (single day or a recurring daily
   window across a date range) → the form then shows only the carts genuinely free for

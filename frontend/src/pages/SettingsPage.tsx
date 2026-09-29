@@ -17,6 +17,7 @@ import { NotificationTemplatesPanel } from '@/components/settings/NotificationTe
 import { DocumentsLibraryPage } from '@/pages/DocumentsLibraryPage';
 import { useAuthStore, ExportPreferences } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -436,6 +437,7 @@ export function SettingsPage() {
             fd.append('smtpFromEmail', smtpFromEmail);
             fd.append('smtpFromName', smtpFromName);
             await settingsApi.update(fd);
+            useSettingsStore.getState().fetchSettings(); // sidebar reflects feature toggles right away
             toast.success('System settings saved');
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to save system settings');

@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { settingsApi } from '@/lib/api';
 import { LayoutDashboard, Car, ArrowLeftRight, Wrench, Users, FileText, Settings, Menu, X, MapPin, Building2, UsersRound, Inbox, Calendar, Clock, Bell, UserCircle, Layers, ShieldAlert, UserPlus, LogOut, GraduationCap, BookOpen } from 'lucide-react';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { BookingAttentionWatcher } from '@/components/bookings/BookingAttentionWatcher';
 import { formatDate } from '@/lib/dateUtils';
 
 function UserMenu() {
@@ -123,7 +124,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [branding, setBranding] = useState<{ tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string }>({});
 
-    const { fetchSettings, enableTrainings, enablePolicies } = useSettingsStore();
+    const { fetchSettings, enableTrainings, enablePolicies, enableBookings, enableCarRequests } = useSettingsStore();
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -147,6 +148,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         // SuperAdmin can always see & manage these tabs, even when toggled off for everyone else
         if (item.pageKey === 'trainings' && !enableTrainings && user.role !== 'SuperAdmin') return false;
         if (item.pageKey === 'policies' && !enablePolicies && user.role !== 'SuperAdmin') return false;
+        // Booking / dedicated-request forms disappear for everyone (SuperAdmin re-enables them in Settings)
+        if (item.href === '/book-pool' && !enableBookings) return false;
+        if (item.href === '/request' && !enableCarRequests) return false;
         // SuperAdmin, FA, Contracts, and MaintenanceTeam are never page-restricted
         if (user.role === 'SuperAdmin' || user.role === 'FA' || user.role === 'Contracts' || user.role === 'MaintenanceTeam') return true;
         // Dashboard and Account Settings are always accessible
@@ -162,6 +166,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
     return (
         <div className="flex h-screen overflow-hidden flex-col">
+            <BookingAttentionWatcher />
             {/* Header Branding */}
             {branding.headerUrl && (
                 <div className="w-full h-12 bg-muted overflow-hidden flex-shrink-0 border-b">

@@ -669,6 +669,40 @@
 > effectively shared by all users) and add an Azure Front Door/WAF rate rule for the
 > anonymous endpoints that must stay public (login, access request).
 
+> ### 2026-09-29 (later) — Fleet/Handover/Bookings round (same branch, same deploy)
+>
+> - **Fleet page duplicates ("147 pages") fixed:** `CartTable` was a component declared
+>   inside `FleetPage`'s render, so every state change remounted the table (scroll reset,
+>   infinite-scroll sentinel detached) and `loadFleet` read a stale `page` — pages were
+>   skipped or re-fetched and appended again. Now rendered as a plain function, page passed
+>   explicitly, rows de-duplicated by id. Verified with 50 carts: 50 rows, 50 unique.
+> - **Add Cart:** Admin's venue shown by name and locked; "VAP (Vehicle Access Pass)";
+>   SuperAdmin department list labelled `LOG (ABS)`; picking a department pre-selects its
+>   focal point when that person is an FA at the venue.
+> - **Security (same class as the pentest):** cart update / delete / assign had no venue
+>   check — an Admin could edit, move or delete another venue's carts by id. Now 403.
+> - **Handover Cycle** page uses the standard full-width layout and readable text sizes.
+> - **Book a Pool Cart / Request Dedicated Carts** are normal pages inside the app shell;
+>   name/email/phone/venue/department pre-filled from the account (venue + department
+>   locked for everyone but SuperAdmin, enforced server-side). Hidden from the sidebar
+>   (and route-guarded) when the SuperAdmin disables Bookings / Car Requests in Settings.
+> - **Bookings timers + Admin popups (all booking types):** key due 10 min after approval
+>   (or after the booked start, if later). Admin/SuperAdmin popup "Was the key collected?"
+>   — Yes starts the trip timer, No releases the car; unanswered for 5 min → auto-released
+>   (only within 60 min of the deadline, so older bookings from before this change are never
+>   mass-cancelled). At the return time: "Extend?" popup — Extend (admin sets new time),
+>   Mark returned, or Ask later; unanswered → stays Overdue. New endpoints:
+>   `GET /pool-booking-requests/attention`, `PATCH /:id/release`, `POST /:id/extend`.
+>   Cards show booked / approved / key-collected times with live countdowns.
+> - **Timezone fix (pre-existing bug):** the backend ran in UTC while booking times are
+>   Qatar wall-clock strings, so Active/Overdue, reminders and the new key deadlines were
+>   3 h late on Azure. `backend/Dockerfile` now sets `ENV TZ=Asia/Qatar`.
+>   **Also check the App Service has no conflicting `TZ` / `WEBSITE_TIME_ZONE` app setting.**
+> - Access requests: approving an existing account now moves venue **and** department
+>   together (previously only department changed).
+>
+> Still no schema change — same two image rebuilds + restarts as the entry above.
+
 ---
 
 ## 0. Purpose & Scope

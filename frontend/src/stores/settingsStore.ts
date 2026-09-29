@@ -7,6 +7,8 @@ interface SettingsState {
     enableTrainings: boolean;
     enablePolicies: boolean;
     allowDocumentDownloads: boolean;
+    enableBookings: boolean;
+    enableCarRequests: boolean;
     isLoading: boolean;
     fetchSettings: () => Promise<void>;
 }
@@ -17,6 +19,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     enableTrainings: true,
     enablePolicies: true,
     allowDocumentDownloads: true,
+    enableBookings: true,
+    enableCarRequests: true,
     isLoading: false,
     fetchSettings: async () => {
         set({ isLoading: true });
@@ -29,6 +33,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
                 enableTrainings: settings.enableTrainings ?? true,
                 enablePolicies: settings.enablePolicies ?? true,
                 allowDocumentDownloads: settings.allowDocumentDownloads ?? true,
+                enableBookings: settings.enableBookings ?? true,
+                enableCarRequests: settings.enableCarRequests ?? true,
             });
         } catch (error) {
             console.error('Failed to fetch system settings:', error);

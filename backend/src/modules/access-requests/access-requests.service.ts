@@ -202,8 +202,9 @@ export class AccessRequestsService {
                     grantedPages: JSON.stringify([]),
                 },
             });
-        } else if (user.departmentId !== departmentId) {
-            user = await prisma.user.update({ where: { id: user.id }, data: { departmentId } });
+        } else if (user.departmentId !== departmentId || user.stadiumId !== existing.stadiumId) {
+            // Venue and department move together — the approved venue is the only one they may access.
+            user = await prisma.user.update({ where: { id: user.id }, data: { departmentId, stadiumId: existing.stadiumId } });
         }
 
         const request = await prisma.accessRequest.update({

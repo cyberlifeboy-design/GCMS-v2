@@ -43,6 +43,13 @@ function HomeRedirect() {
 
 import { useEffect } from 'react';
 import { useThemeStore } from '@/stores/themeStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+
+/** Sends users home when the SuperAdmin has switched the feature off in Settings. */
+function FeatureGuard({ flag, children }: { flag: 'enableBookings' | 'enableCarRequests'; children: React.ReactNode }) {
+    const enabled = useSettingsStore(s => s[flag]);
+    return enabled ? <>{children}</> : <Navigate to="/" replace />;
+}
 
 function AppContent() {
     const { user } = useAuthStore();
@@ -61,12 +68,6 @@ function AppContent() {
             </div>
         }>
             <Routes>
-                {/* Booking / car-request forms: login required (security review 2026-09-29).
-                    Full-page layout kept, so they sit outside MainLayout. */}
-                <Route path="/request" element={<ProtectedRoute><PublicRequestPage /></ProtectedRoute>} />
-                <Route path="/request/track" element={<ProtectedRoute><TrackRequestPage /></ProtectedRoute>} />
-                <Route path="/book-pool" element={<ProtectedRoute><PoolBookingRequestPage /></ProtectedRoute>} />
-
                 {/* Public: emailed status links — the unguessable token is the credential */}
                 <Route path="/request/confirm/:token" element={<RequestConfirmationPage />} />
                 <Route path="/book-pool/confirm/:token" element={<PoolBookingRequestPage />} />
@@ -100,6 +101,10 @@ function AppContent() {
                                     <Route path="/bookings" element={<PageGuard pageKey="bookings"><BookingsPage /></PageGuard>} />
                                     <Route path="/trainings" element={<PageGuard pageKey="trainings"><TrainingsPage /></PageGuard>} />
                                     <Route path="/policies" element={<PageGuard pageKey="policies"><PolicyProceduresPage /></PageGuard>} />
+                                    {/* Booking / car-request forms (login required, security review 2026-09-29) */}
+                                    <Route path="/book-pool" element={<FeatureGuard flag="enableBookings"><PoolBookingRequestPage /></FeatureGuard>} />
+                                    <Route path="/request" element={<FeatureGuard flag="enableCarRequests"><PublicRequestPage /></FeatureGuard>} />
+                                    <Route path="/request/track" element={<FeatureGuard flag="enableCarRequests"><TrackRequestPage /></FeatureGuard>} />
                                     <Route path="/usage-history" element={<UsageHistoryPage />} />
                                     <Route path="/my-reports" element={<MyReportsPage />} />
                                     <Route path="/profile" element={<ProfilePage />} />

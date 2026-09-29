@@ -36,8 +36,12 @@ interface Branding {
 
 export function PublicRequestPage() {
     const [searchParams] = useSearchParams();
-    const stadiumIdParam = searchParams.get('stadium');
-    const departmentIdParam = searchParams.get('department');
+    const { user } = useAuthStore();
+    // Everyone but SuperAdmin requests for their own venue/department (enforced server-side
+    // too); otherwise a ?stadium=/?department= link can still pre-select them.
+    const isSuperAdmin = user?.role === 'SuperAdmin';
+    const stadiumIdParam = (!isSuperAdmin && user?.stadiumId) || searchParams.get('stadium');
+    const departmentIdParam = (!isSuperAdmin && user?.departmentId) || searchParams.get('department');
 
     // When dept param is set without stadium, we'll resolve it
     const isStadiumLocked = !!stadiumIdParam;
@@ -54,7 +58,6 @@ export function PublicRequestPage() {
     const [loadingInitial, setLoadingInitial] = useState(true);
     const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
 
-    const { user } = useAuthStore();
     const [formData, setFormData] = useState({
         requesterName: user?.name ?? '',
         requesterEmail: user?.email ?? '',
@@ -170,7 +173,7 @@ export function PublicRequestPage() {
 
     if (loadingInitial) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="flex items-center justify-center py-16">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
         );
@@ -179,7 +182,7 @@ export function PublicRequestPage() {
     if (submitted) {
         const trackingUrl = `${window.location.origin}/request/confirm/${requestToken}`;
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="flex items-center justify-center py-8">
                 <Card className="max-w-md w-full shadow-lg">
                     <CardContent className="pt-8 pb-6 text-center">
                         <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
@@ -235,46 +238,21 @@ export function PublicRequestPage() {
     const selectedStadium = stadiums.find(s => s.id === formData.stadiumId);
     const selectedDept = departments.find(d => d.id === formData.departmentId);
 
+    // Rendered inside MainLayout (login required), so no standalone header/footer chrome.
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            {/* Header branding */}
-            {branding.headerUrl ? (
-                <div className="w-full bg-white border-b">
-                    <img src={branding.headerUrl} alt="Header" className="w-full max-h-32 object-contain" />
-                </div>
-            ) : (
-                <div
-                    className="w-full py-6 px-6 flex items-center gap-3"
-                    style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
-                >
-                    <Link to="/" aria-label="Back to dashboard" className="inline-block">
-                        <img
-                            src={branding.logoUrl || '/branding/sc-logo.png'}
-                            alt="Logo"
-                            className="h-16 object-contain cursor-pointer"
-                            style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' }}
-                            onError={(e) => {
-                                const img = e.target as HTMLImageElement;
-                                if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
-                                else img.style.display = 'none';
-                            }}
-                        />
-                    </Link>
-                </div>
-            )}
-
-            <div className="flex-1 py-8 px-4">
-                <div className="max-w-2xl mx-auto">
-                    <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold">Car Request Form</h1>
-                        <p className="text-muted-foreground mt-2">
+        <div>
+            <div>
+                <div className="max-w-2xl">
+                    <div className="mb-6">
+                        <h1 className="text-3xl font-bold">Request Dedicated Carts</h1>
+                        <p className="text-muted-foreground mt-1">
                             Submit a request for golf carts for your department
                         </p>
                         {(isStadiumLocked || isDeptLocked) && (
-                            <div className="mt-3 flex items-center justify-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-2 inline-flex mx-auto">
+                            <div className="mt-3 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-2 w-fit">
                                 <Lock className="w-4 h-4" />
                                 <span>
-                                    {isDeptLocked ? 'Department and stadium pre-selected by link' : 'Stadium pre-selected by link'}
+                                    {isDeptLocked ? 'Venue and department pre-filled from your account' : 'Venue pre-filled from your account'}
                                 </span>
                             </div>
                         )}
@@ -508,18 +486,6 @@ export function PublicRequestPage() {
                 </Card>
                     )}
             </div>
-
-            {/* Footer branding */}
-            {(branding.footerUrl || branding.footerText) && (
-                <div className="w-full mt-8 border-t bg-white py-4 px-6 text-center">
-                    {branding.footerUrl && (
-                        <img src={branding.footerUrl} alt="Footer" className="h-12 object-contain mx-auto mb-2" />
-                    )}
-                    {branding.footerText && (
-                        <p className="text-sm text-muted-foreground">{branding.footerText}</p>
-                    )}
-                </div>
-            )}
         </div>
     </div>
     );
@@ -672,9 +638,9 @@ export function TrackRequestPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8 px-4">
-            <div className="max-w-2xl mx-auto space-y-6">
-                <div className="text-center">
+        <div>
+            <div className="max-w-2xl space-y-6">
+                <div>
                     <h1 className="text-2xl font-bold">Track Your Request</h1>
                     <p className="text-muted-foreground mt-1">
                         Enter the number of a request you submitted.

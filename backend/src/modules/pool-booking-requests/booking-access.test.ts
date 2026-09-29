@@ -87,15 +87,27 @@ describe('booking / car-request submission access control', () => {
         }));
     });
 
+    it('rejects a booking at another venue or department (non-SuperAdmin)', async () => {
+        for (const body of [{ stadiumId: 's2', departmentId: 'd1' }, { stadiumId: 's1', departmentId: 'd2' }]) {
+            const res = await request(app)
+                .post('/api/v1/pool-booking-requests/instant')
+                .set('Authorization', `Bearer ${token()}`)
+                .send({ fleetId: 'f1', requesterPhone: '123', ...body });
+            expect(res.status).toBe(400);
+        }
+        expect(createInstant).not.toHaveBeenCalled();
+    });
+
     it('caps submissions per account (20/hour)', async () => {
         const send = () => request(app)
             .post('/api/v1/pool-booking-requests/instant')
             .set('Authorization', `Bearer ${token()}`)
             .send({ stadiumId: 's1', fleetId: 'f1', departmentId: 'd1', requesterPhone: '123' });
-        // One shared budget across bookings + car requests: the two tests above already spent 2 of 20.
+        // One shared budget across bookings + car requests: the tests above already spent 4 of 20
+        // (2 accepted + 2 rejected-by-venue — the limiter counts attempts, before validation).
         const statuses: number[] = [];
-        for (let i = 0; i < 19; i++) statuses.push((await send()).status);
-        expect(statuses.filter((s) => s === 201)).toHaveLength(18);
+        for (let i = 0; i < 17; i++) statuses.push((await send()).status);
+        expect(statuses.filter((s) => s === 201)).toHaveLength(16);
         expect(statuses.at(-1)).toBe(429);
     });
 });

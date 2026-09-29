@@ -558,6 +558,13 @@ export const poolBookingRequestsApi = {
         apiClient.patch(`/pool-booking-requests/${id}/return`),
     markKeyCollected: (id: string) =>
         apiClient.patch(`/pool-booking-requests/${id}/collect`),
+    // Admin/SuperAdmin key-check + overdue popups
+    getAttention: () =>
+        apiClient.get('/pool-booking-requests/attention'),
+    release: (id: string) =>
+        apiClient.patch(`/pool-booking-requests/${id}/release`),
+    extendByAdmin: (id: string, endDate: string, endTime: string) =>
+        apiClient.post(`/pool-booking-requests/${id}/extend`, { endDate, endTime }),
     requestExtension: (id: string, endDate: string, endTime: string) =>
         apiClient.post(`/pool-booking-requests/${id}/extension`, { endDate, endTime }),
     reviewExtension: (id: string, approve: boolean) =>

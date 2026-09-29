@@ -127,6 +127,14 @@ passed through from the SSO callback. The invitation-link path keeps its existin
 server-side lock to the invite's email. Anything else returns 401.
 Files: `access-requests.controller.ts`, `MicrosoftCallbackPage.tsx`, `AccessRequestPage.tsx`.
 
+### A3 — Venue Admin could modify other venues' carts — **High → Fixed**
+`PUT /fleet/:id`, `DELETE /fleet/:id` and `POST /fleet/:id/assign` checked only the role,
+not the venue, so an Admin could edit, move, reassign or delete any venue's cart by id
+(IDOR). All three now return 403 unless the cart is at the Admin's own venue, and an update
+can't move a cart to another venue. Bookings and car requests now also enforce the
+account's venue and department server-side for everyone except SuperAdmin.
+File: `backend/src/modules/fleet/fleet.controller.ts`.
+
 ### A2 — Login limiter could lock out all users — **Medium → Fixed**
 See F2: the IP-only key combined with the shared proxy IP meant 5 failed logins from anyone
 could block password and SSO sign-in for everyone for 15 minutes. It is now keyed per

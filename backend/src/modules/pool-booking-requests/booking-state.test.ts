@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveBookingState, BookingWindow } from './booking-state';
+import { deriveBookingState, BookingWindow, keyCheckState } from './booking-state';
 
 const base: BookingWindow = {
   status: 'Approved',
@@ -41,5 +41,26 @@ describe('deriveBookingState', () => {
     const multi = { ...base, startDate: '2026-06-10', endDate: '2026-06-14' };
     expect(deriveBookingState(multi, at('2026-06-12T03:00:00'))).toBe('Active');
     expect(deriveBookingState(multi, at('2026-06-14T17:30:00'))).toBe('Overdue');
+  });
+});
+
+describe('keyCheckState', () => {
+  const k = { status: 'Approved', startDate: '2026-06-10', startTime: '09:00', reviewedAt: at('2026-06-10T08:00:00'), keyCollectedAt: null };
+
+  it('counts from the booked start when approval came earlier', () => {
+    expect(keyCheckState(k, at('2026-06-10T09:09:00'))).toBe('waiting');
+    expect(keyCheckState(k, at('2026-06-10T09:10:00'))).toBe('ask');
+    expect(keyCheckState(k, at('2026-06-10T09:15:00'))).toBe('release');
+    expect(keyCheckState(k, at('2026-06-10T10:15:00'))).toBe('stale');
+  });
+
+  it('counts from approval when approved after the start (instant bookings)', () => {
+    expect(keyCheckState({ ...k, reviewedAt: at('2026-06-10T12:00:00') }, at('2026-06-10T12:09:59'))).toBe('waiting');
+    expect(keyCheckState({ ...k, reviewedAt: at('2026-06-10T12:00:00') }, at('2026-06-10T12:12:00'))).toBe('ask');
+  });
+
+  it('is null once the key is collected or the booking is not approved', () => {
+    expect(keyCheckState({ ...k, keyCollectedAt: at('2026-06-10T09:05:00') }, at('2026-06-10T09:20:00'))).toBeNull();
+    expect(keyCheckState({ ...k, status: 'Pending', reviewedAt: null }, at('2026-06-10T09:20:00'))).toBeNull();
   });
 });

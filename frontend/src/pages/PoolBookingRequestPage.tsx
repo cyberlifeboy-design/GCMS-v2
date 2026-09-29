@@ -174,25 +174,27 @@ function BookingConfirmationView({ token }: { token: string }) {
                                     Ensure the car is returned to the charging station once you are done, and hand
                                     back the key to the venue's logistics representative.
                                 </p>
-                                {booking.bookingType === 'Instant' && !booking.keyCollectedAt && (
+                                {!booking.keyCollectedAt && (
                                     <>
                                         <p className="font-medium text-amber-800">
-                                            If the key is not collected within 10 minutes of approval, this booking
-                                            will be automatically cancelled and the car returned to the pool due to
+                                            {booking.bookingType === 'Instant'
+                                                ? 'If the key is not collected within 10 minutes of approval'
+                                                : `If the key is not collected within 10 minutes of your start time (${booking.startDate} ${booking.startTime})`}
+                                            , this booking may be cancelled and the car returned to the pool due to
                                             demand from other users.
                                         </p>
                                         <ConfirmCollectedButton token={token} onConfirmed={() => setBooking({ ...booking, keyCollectedAt: new Date().toISOString() })} />
                                     </>
                                 )}
-                                {booking.bookingType === 'Instant' && booking.keyCollectedAt && (
+                                {booking.keyCollectedAt && (
                                     <p className="text-emerald-700">Key collection confirmed — enjoy your booking.</p>
                                 )}
                             </div>
                         )}
-                        {booking.status === 'Cancelled' && booking.bookingType === 'Instant' && (
+                        {booking.status === 'Cancelled' && booking.autoCancelledAt && (
                             <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
-                                This instant booking was automatically cancelled because the key was not collected in
-                                time, and the car has returned to the pool. You're welcome to submit a new request.
+                                This booking was cancelled because the key was not collected in time, and the car has
+                                returned to the pool. You're welcome to submit a new request.
                             </div>
                         )}
                         {booking.reviewComment && (
@@ -231,6 +233,10 @@ export function PoolBookingRequestPage() {
 
 function NewPoolBookingRequestView() {
     const { user } = useAuthStore();
+    // Everyone but SuperAdmin books at their own venue/department (enforced server-side too).
+    const isSuperAdmin = user?.role === 'SuperAdmin';
+    const lockedStadiumId = isSuperAdmin ? '' : (user?.stadiumId ?? '');
+    const lockedDepartmentId = isSuperAdmin ? '' : (user?.departmentId ?? '');
     const [loadingInitial, setLoadingInitial] = useState(true);
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
     const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
@@ -252,9 +258,9 @@ function NewPoolBookingRequestView() {
     const [slots, setSlots] = useState<BookingSlot[]>([newSlot(), newSlot()]);
 
     const [formData, setFormData] = useState({
-        stadiumId: '',
+        stadiumId: lockedStadiumId,
         requesterPhone: user?.phone ?? '',
-        departmentId: '',
+        departmentId: lockedDepartmentId,
         bookingType: 'Single' as 'Single' | 'Daily' | 'Recurring',
         startDate: '',
         endDate: '', // Daily only
@@ -441,7 +447,7 @@ function NewPoolBookingRequestView() {
 
     if (loadingInitial) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="flex items-center justify-center py-16">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
         );
@@ -450,7 +456,7 @@ function NewPoolBookingRequestView() {
     if (submitted) {
         const trackingUrls = requestTokens.map((t) => `${window.location.origin}/book-pool/confirm/${t}`);
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="flex items-center justify-center py-8">
                 <Card className="max-w-md w-full shadow-lg">
                     <CardContent className="pt-8 pb-6 text-center">
                         <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
@@ -491,8 +497,8 @@ function NewPoolBookingRequestView() {
                                     setRequestTokens([]);
                                     setSlots([newSlot(), newSlot()]);
                                     setFormData({
-                                        stadiumId: '', requesterPhone: user?.phone ?? '',
-                                        departmentId: '', bookingType: 'Single', startDate: '', endDate: '',
+                                        stadiumId: lockedStadiumId, requesterPhone: user?.phone ?? '',
+                                        departmentId: lockedDepartmentId, bookingType: 'Single', startDate: '', endDate: '',
                                         startTime: '', endTime: '', fleetId: '', purpose: '',
                                         instantDurationMinutes: durationOptions[0] ?? 60,
                                     });
@@ -507,41 +513,17 @@ function NewPoolBookingRequestView() {
         );
     }
 
+    // Rendered inside MainLayout (login required), so no standalone header/footer chrome.
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            {branding.headerUrl ? (
-                <div className="w-full bg-white border-b">
-                    <img src={branding.headerUrl} alt="Header" className="w-full max-h-32 object-contain" />
-                </div>
-            ) : (
-                <div
-                    className="w-full py-6 px-6 flex items-center gap-3"
-                    style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
-                >
-                    <Link to="/" aria-label="Back to dashboard" className="inline-block">
-                        <img
-                            src={branding.logoUrl || '/branding/sc-logo.png'}
-                            alt="Logo"
-                            className="h-16 object-contain cursor-pointer"
-                            style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' }}
-                            onError={(e) => {
-                                const img = e.target as HTMLImageElement;
-                                if (img.src !== window.location.origin + '/branding/sc-logo.png') img.src = '/branding/sc-logo.png';
-                                else img.style.display = 'none';
-                            }}
-                        />
-                    </Link>
-                </div>
-            )}
-
-            <div className="flex-1 py-8 px-4">
-                <div className="max-w-2xl mx-auto">
-                    <div className="text-center mb-8">
+        <div>
+            <div>
+                <div className="max-w-2xl">
+                    <div className="mb-6">
                         <h1 className="text-3xl font-bold">Book a Pool Cart</h1>
-                        <p className="text-muted-foreground mt-2">Request a shared pool cart at a venue — subject to admin approval</p>
+                        <p className="text-muted-foreground mt-1">Request a shared pool cart — subject to admin approval</p>
                     </div>
 
-                    <div className="flex justify-center gap-3 mb-6">
+                    <div className="flex gap-3 mb-6">
                         <Button
                             type="button"
                             variant={mode === 'schedule' ? 'default' : 'outline'}
@@ -596,6 +578,7 @@ function NewPoolBookingRequestView() {
                                     </Label>
                                     <Select
                                         value={formData.stadiumId}
+                                        disabled={!!lockedStadiumId}
                                         onValueChange={(value) =>
                                             setFormData({ ...formData, stadiumId: value, departmentId: '', fleetId: '' })
                                         }
@@ -646,6 +629,7 @@ function NewPoolBookingRequestView() {
                                                     <Label htmlFor="departmentId">Department *</Label>
                                                     <Select
                                                         value={formData.departmentId}
+                                                        disabled={!!lockedDepartmentId}
                                                         onValueChange={(value) => setFormData({ ...formData, departmentId: value })}
                                                     >
                                                         <SelectTrigger>
@@ -969,13 +953,6 @@ function NewPoolBookingRequestView() {
                     )}
                 </div>
             </div>
-
-            {(branding.footerUrl || branding.footerText) && (
-                <div className="w-full mt-8 border-t bg-white py-4 px-6 text-center">
-                    {branding.footerUrl && <img src={branding.footerUrl} alt="Footer" className="h-12 object-contain mx-auto mb-2" />}
-                    {branding.footerText && <p className="text-sm text-muted-foreground">{branding.footerText}</p>}
-                </div>
-            )}
         </div>
     );
 }

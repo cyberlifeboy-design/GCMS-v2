@@ -61,6 +61,16 @@ export class RequestsController {
 
             const validatedData = createRequestSchema.parse(req.body);
 
+            // Everyone but SuperAdmin requests for their own venue/department.
+            const u = req.user!;
+            if (u.role !== 'SuperAdmin' && (
+                (u.stadiumId && validatedData.stadiumId !== u.stadiumId) ||
+                (u.departmentId && validatedData.departmentId !== u.departmentId)
+            )) {
+                res.status(403).json({ error: 'You can only request carts for your own venue and department.' });
+                return;
+            }
+
             // Validate that at least one cart type is requested
             const totalRequested = 
                 validatedData.cargoCount +

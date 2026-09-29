@@ -142,7 +142,7 @@ export function FleetPage() {
     const [fleet, setFleet] = useState<FleetCart[]>([]);
     const [myCarts, setMyCarts] = useState<FleetCart[]>([]);
     const [faUsers, setFaUsers] = useState<Array<{ id: string; name: string; email: string; departmentId?: string; department?: { id: string; name: string; code?: string } }>>([]);
-    const [departments, setDepartments] = useState<Array<{ id: string; name: string; code?: string; stadiumId: string }>>([]);
+    const [departments, setDepartments] = useState<Array<{ id: string; name: string; code?: string; stadiumId: string; stadium?: { code?: string }; focalPointId?: string | null }>>([]);
     const [stadiums, setStadiums] = useState<Array<{ id: string; name: string; code: string }>>([]);
     const [loading, setLoading] = useState(true);
     const [stadiumsLoading, setStadiumsLoading] = useState(false);
@@ -198,14 +198,16 @@ export function FleetPage() {
         setSearchParams(params, { replace: true });
     }, [statusFilter, carTypeFilter, stadiumFilter, departmentFilter, page, setSearchParams]);
 
-    const loadFleet = async (resetPage = true) => {
+    // nextPage is passed explicitly: reading `page` here gave the stale (pre-setPage)
+    // value, so infinite scroll re-fetched the same page and appended duplicates.
+    const loadFleet = async (resetPage = true, nextPage = 1) => {
         try {
             if (resetPage) {
                 setLoading(true);
             } else {
                 setLoadingMore(true);
             }
-            const currentPage = resetPage ? 1 : page;
+            const currentPage = resetPage ? 1 : nextPage;
             const params: Record<string, unknown> = {
                 ...(statusFilter !== 'all' && { status: statusFilter }),
                 ...(carTypeFilter.length > 0 && { carType: carTypeFilter.join(',') }),
@@ -220,7 +222,11 @@ export function FleetPage() {
                 setFleet(newItems);
                 setPage(1);
             } else {
-                setFleet(prev => [...prev, ...newItems]);
+                // Guard against any overlap (e.g. a cart added between page loads).
+                setFleet(prev => {
+                    const seen = new Set(prev.map(c => c.id));
+                    return [...prev, ...newItems.filter((c: FleetCart) => !seen.has(c.id))];
+                });
             }
             if (res.data.pagination) {
                 const p = res.data.pagination;
@@ -252,8 +258,10 @@ export function FleetPage() {
             if (stadiumId) params.stadiumId = stadiumId;
             const res = await usersApi.getAll(params);
             setFaUsers(res.data.data || []);
+            return (res.data.data || []) as typeof faUsers;
         } catch (e) {
             console.error(e);
+            return [];
         }
     };
 
@@ -298,7 +306,7 @@ export function FleetPage() {
                 if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
                     const nextPage = page + 1;
                     setPage(nextPage);
-                    loadFleet(false);
+                    loadFleet(false, nextPage);
                 }
             },
             { threshold: 0.5 }
@@ -328,6 +336,17 @@ export function FleetPage() {
             await loadFAUsers(stadiumId);
             await loadDepartments(stadiumId);
         }
+    };
+
+    // Picking a department pre-selects its focal point FA; for SuperAdmin it also sets the
+    // venue when none was chosen yet (the department list spans every venue until then).
+    const handleDepartmentChange = async (departmentId: string) => {
+        const dept = departments.find(d => d.id === departmentId);
+        const stadiumId = dept && !formData.stadiumId ? dept.stadiumId : formData.stadiumId;
+        const fas = stadiumId !== formData.stadiumId && stadiumId ? await loadFAUsers(stadiumId) : faUsers;
+        // Only pre-select the focal point when they're an FA at this venue (it can be an Admin).
+        const focalFa = fas.find(u => u.id === dept?.focalPointId);
+        setFormData(d => ({ ...d, stadiumId, departmentId, assignedUserId: focalFa?.id || '' }));
     };
 
     // Filtered FA users based on currently selected department in form
@@ -595,7 +614,10 @@ export function FleetPage() {
         }
     };
 
-    const CartTable = ({ data }: { data: FleetCart[] }) => (
+    // Called as a plain function, NOT used as <CartTable/>: a component declared inside render
+    // is a new type every render, so React remounted the whole table on each state change —
+    // resetting scroll and detaching the infinite-scroll sentinel (missing/duplicate pages).
+    const renderCartTable = (data: FleetCart[]) => (
         <div className="flex flex-col">
             <div className="max-h-[600px] overflow-y-auto">
                 <Table>
@@ -630,7 +652,7 @@ export function FleetPage() {
                                     <span className={statusColors[cart.status]}>{cart.status}</span>
                                 </TableCell>
                                 <TableCell>
-                                    {cart.requiresVAP && <span title="Requires VAP"><Shield className="w-4 h-4 text-amber-500" /></span>}
+                                    {cart.requiresVAP && <span title="Requires VAP (Vehicle Access Pass)"><Shield className="w-4 h-4 text-amber-500" /></span>}
                                 </TableCell>
                                 <TableCell>{cart.assignedUser?.name || <span className="text-muted-foreground">—</span>}</TableCell>
                                 <TableCell>{cart.department?.code || cart.department?.name || <span className="text-muted-foreground">—</span>}</TableCell>
@@ -784,7 +806,7 @@ export function FleetPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">
-                            <CartTable data={filteredFleet} />
+                            {renderCartTable(filteredFleet)}
                         </CardContent>
                     </Card>
                 )}
@@ -804,7 +826,7 @@ export function FleetPage() {
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0">
-                                <CartTable data={filteredMyCarts} />
+                                {renderCartTable(filteredMyCarts)}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -843,7 +865,7 @@ export function FleetPage() {
                             ) : (
                                 <div className="space-y-2">
                                     <Label>Stadium</Label>
-                                    <Input value={stadiums.find(s => s.id === user?.stadiumId)?.name || 'Your assigned venue'} disabled className="bg-muted" />
+                                    <Input value={user?.stadium?.name || stadiums.find(s => s.id === user?.stadiumId)?.name || 'Your assigned venue'} disabled className="bg-muted" />
                                     <p className="text-xs text-muted-foreground">Carts are created at your assigned venue</p>
                                     <input type="hidden" name="stadiumId" value={user?.stadiumId || ''} />
                                 </div>
@@ -882,16 +904,13 @@ export function FleetPage() {
                             <input type="checkbox" id="requiresVAP" checked={formData.requiresVAP}
                                 onChange={e => setFormData(d => ({ ...d, requiresVAP: e.target.checked }))}
                                 className="w-4 h-4 rounded" />
-                            <Label htmlFor="requiresVAP" className="cursor-pointer">Requires VAP (VIP Access Pass)</Label>
+                            <Label htmlFor="requiresVAP" className="cursor-pointer">Requires VAP (Vehicle Access Pass)</Label>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="departmentId">Department</Label>
                             <Select
                                 value={formData.departmentId || '__none__'}
-                                onValueChange={v => {
-                                    const newDeptId = v === '__none__' ? '' : v;
-                                    setFormData(d => ({ ...d, departmentId: newDeptId, assignedUserId: '' }));
-                                }}
+                                onValueChange={v => handleDepartmentChange(v === '__none__' ? '' : v)}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select department (optional)" />
@@ -902,7 +921,11 @@ export function FleetPage() {
                                         .filter(d => !formData.stadiumId || d.stadiumId === formData.stadiumId)
                                         .map(d => (
                                             <SelectItem key={d.id} value={d.id}>
-                                                {d.code ? `${d.code} – ${d.name}` : d.name}
+                                                {/* SuperAdmin sees every venue's copy of a department, so tag it with the
+                                                    venue code (LOG (ABS)); a venue Admin only ever sees their own. */}
+                                                {isSuperAdmin && d.stadium?.code
+                                                    ? `${d.code || d.name} (${d.stadium.code})`
+                                                    : (d.code || d.name)}
                                             </SelectItem>
                                         ))}
                                 </SelectContent>

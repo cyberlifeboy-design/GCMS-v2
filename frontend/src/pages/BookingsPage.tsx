@@ -29,6 +29,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { BOOKINGS_CHANGED_EVENT } from '@/components/bookings/BookingAttentionWatcher';
 
 interface Booking {
     id: string;
@@ -92,7 +93,7 @@ function formatCountdown(b: Booking): { text: string; tone: Tone } {
         return { text: `${formatElapsed((now - end.getTime()) / 60000)} overdue`, tone: 'red' };
     }
     if (b.derivedState === 'Active') {
-        if (b.bookingType === 'Instant' && b.keyCollectedAt) {
+        if (b.keyCollectedAt) {
             const end = combineDateTime(b.endDate, b.endTime);
             const remainingMin = (end.getTime() - now) / 60000;
             return { text: `${formatElapsed(remainingMin)} remaining`, tone: remainingMin <= 15 ? 'amber' : 'green' };
@@ -159,7 +160,7 @@ function BookerDetail({ b }: { b: Booking }) {
                 {b.bookingType === 'Instant' && ' — no schedule chosen, key must be collected within 10 min of approval'}
             </div>
             {b.bookingType !== 'Instant' && <div>Window: {b.startDate} {b.startTime} → {b.endDate} {b.endTime}</div>}
-            {b.bookingType === 'Instant' && (
+            {b.status !== 'Pending' && (
                 <div>
                     Key collected:{' '}
                     <b>{b.keyCollectedAt ? new Date(b.keyCollectedAt).toLocaleString() : 'Not yet'}</b>
@@ -184,6 +185,7 @@ function BookingCard({
     onToggleExpand,
     onMarkReturned,
     onMarkCollected,
+    onRelease,
     onExtend,
     onReviewExtension,
 }: {
@@ -196,28 +198,35 @@ function BookingCard({
     onToggleExpand?: () => void;
     onMarkReturned?: () => void;
     onMarkCollected?: () => void;
+    onRelease?: () => void;
     onExtend?: () => void;
     onReviewExtension?: (approve: boolean) => void;
 }) {
-    // Instant bookings' remaining-time text needs to tick on its own — the page's
-    // periodic data refresh isn't frequent enough for a "counting down" feel.
-    const isInstantRunning = b.bookingType === 'Instant' && !!b.keyCollectedAt && b.derivedState === 'Active';
+    // Live timers tick on their own — the page's data refresh isn't frequent enough for a countdown.
+    const isLive = b.derivedState === 'Active' || b.derivedState === 'Overdue';
+    const isRunning = !!b.keyCollectedAt && b.derivedState === 'Active';
     const [, forceTick] = useState(0);
     useEffect(() => {
-        if (!isInstantRunning) return;
-        const id = setInterval(() => forceTick((n) => n + 1), 30_000);
+        if (!isLive) return;
+        const id = setInterval(() => forceTick((n) => n + 1), 15_000);
         return () => clearInterval(id);
-    }, [isInstantRunning]);
+    }, [isLive]);
 
     const cd = formatCountdown(b);
     const hasActions = mode === 'live';
-    const instantProgressPct = (() => {
-        if (!isInstantRunning || !b.instantDurationMinutes) return null;
-        const collectedAt = new Date(b.keyCollectedAt!).getTime();
-        const totalMs = b.instantDurationMinutes * 60_000;
-        const elapsedMs = Date.now() - collectedAt;
-        return Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
+    const awaitingKey = b.status === 'Approved' && !b.keyCollectedAt;
+    const runningProgressPct = (() => {
+        if (!isRunning) return null;
+        const from = new Date(b.keyCollectedAt!).getTime();
+        const totalMs = combineDateTime(b.endDate, b.endTime).getTime() - from;
+        if (totalMs <= 0) return null;
+        return Math.min(100, Math.max(0, ((Date.now() - from) / totalMs) * 100));
     })();
+    const ago = (s: string) => `${formatElapsed((Date.now() - new Date(s).getTime()) / 60000)} ago`;
+    // Key is due 10 min after approval, or after the booked start if later (mirrors the server rule).
+    const keyDueAt = b.reviewedAt
+        ? new Date(Math.max(new Date(b.reviewedAt).getTime(), combineDateTime(b.startDate, b.startTime).getTime()) + 10 * 60_000)
+        : null;
 
     return (
         <div className={`rounded-xl border p-4 ${toneCardCls[cd.tone]}`}>
@@ -239,17 +248,33 @@ function BookingCard({
                                 Extension requested → {b.extensionRequestedEndDate} {b.extensionRequestedEndTime}
                             </p>
                         )}
+                        {/* Timeline: booked → approved → key collected */}
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                            <span title={new Date(b.createdAt).toLocaleString()}>Booked {ago(b.createdAt)}</span>
+                            {b.reviewedAt && <span title={new Date(b.reviewedAt).toLocaleString()}>Approved {ago(b.reviewedAt)}</span>}
+                            {b.keyCollectedAt ? (
+                                <span className="text-emerald-700 font-medium" title={new Date(b.keyCollectedAt).toLocaleString()}>
+                                    <Clock className="inline w-3 h-3 mr-0.5" />Key collected {ago(b.keyCollectedAt)}
+                                </span>
+                            ) : awaitingKey && keyDueAt && (
+                                <span className={keyDueAt.getTime() < Date.now() ? 'text-red-700 font-medium' : 'text-amber-700 font-medium'}>
+                                    Key not collected — {keyDueAt.getTime() < Date.now()
+                                        ? `due ${formatElapsed((Date.now() - keyDueAt.getTime()) / 60000)} ago`
+                                        : `due in ${formatElapsed((keyDueAt.getTime() - Date.now()) / 60000)}`}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div className="shrink-0 text-right">
                     <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${toneChipCls[cd.tone]}`}>
                         {cd.text}
                     </span>
-                    {instantProgressPct != null && (
+                    {runningProgressPct != null && (
                         <div className="mt-1.5 w-24 h-1.5 rounded-full bg-muted overflow-hidden">
                             <div
-                                className={`h-full rounded-full transition-all ${instantProgressPct >= 85 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                style={{ width: `${instantProgressPct}%` }}
+                                className={`h-full rounded-full transition-all ${runningProgressPct >= 85 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${runningProgressPct}%` }}
                             />
                         </div>
                     )}
@@ -262,14 +287,24 @@ function BookingCard({
                             {expanded ? 'Hide details' : 'Details'}
                         </button>
                     )}
-                    {hasActions && canManage && b.bookingType === 'Instant' && !b.keyCollectedAt && (
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={onMarkCollected}>
-                            Confirm Key Collected
+                    {hasActions && canManage && awaitingKey && (
+                        <>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={onMarkCollected}>
+                                Confirm Key Collected
+                            </Button>
+                            <Button size="sm" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" disabled={busy} onClick={onRelease}>
+                                <Ban className="w-4 h-4 mr-1" /> Key Not Collected — Release
+                            </Button>
+                        </>
+                    )}
+                    {hasActions && canManage && !awaitingKey && (
+                        <Button size="sm" variant="outline" disabled={busy} onClick={onMarkReturned}>
+                            <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
                         </Button>
                     )}
                     {hasActions && canManage && (
-                        <Button size="sm" variant="outline" disabled={busy} onClick={onMarkReturned}>
-                            <Undo2 className="w-4 h-4 mr-1" /> Mark Returned
+                        <Button size="sm" variant="outline" disabled={busy} onClick={onExtend}>
+                            <Clock className="w-4 h-4 mr-1" /> Extend
                         </Button>
                     )}
                     {hasActions && canManage && b.extensionStatus === 'Pending' && (
@@ -528,6 +563,26 @@ function LiveBookingsPanel({
         }
     }, [mode, stadiumId]);
     useEffect(() => { load(); }, [load]);
+    // Keep states (Upcoming → Active → Overdue) current, and refresh after popup actions.
+    useEffect(() => {
+        const id = setInterval(load, 60_000);
+        window.addEventListener(BOOKINGS_CHANGED_EVENT, load);
+        return () => { clearInterval(id); window.removeEventListener(BOOKINGS_CHANGED_EVENT, load); };
+    }, [load]);
+
+    const release = async (id: string) => {
+        setBusy(id);
+        try {
+            await poolBookingRequestsApi.release(id);
+            toast.success('Car released back to the pool');
+            load();
+            onChanged?.();
+        } catch (e: any) {
+            toast.error(e.response?.data?.error || 'Failed to release booking');
+        } finally {
+            setBusy(null);
+        }
+    };
 
     const markReturned = async (id: string) => {
         setBusy(id);
@@ -561,8 +616,14 @@ function LiveBookingsPanel({
         if (!extendTarget || !extendDate || !extendTime) return;
         setBusy(extendTarget.id);
         try {
-            await poolBookingRequestsApi.requestExtension(extendTarget.id, extendDate, extendTime);
-            toast.success('Extension requested — waiting for Admin approval');
+            // Admin/SuperAdmin extend directly; an FA's extension still needs their approval.
+            if (canManage) {
+                await poolBookingRequestsApi.extendByAdmin(extendTarget.id, extendDate, extendTime);
+                toast.success(`Extended to ${extendDate} ${extendTime}`);
+            } else {
+                await poolBookingRequestsApi.requestExtension(extendTarget.id, extendDate, extendTime);
+                toast.success('Extension requested — waiting for Admin approval');
+            }
             setExtendTarget(null);
             load();
             onChanged?.();
@@ -610,6 +671,7 @@ function LiveBookingsPanel({
                                 onToggleExpand={() => setExpanded(expanded === b.id ? null : b.id)}
                                 onMarkReturned={() => markReturned(b.id)}
                                 onMarkCollected={() => markCollected(b.id)}
+                                onRelease={() => release(b.id)}
                                 onExtend={() => { setExtendTarget(b); setExtendDate(b.endDate); setExtendTime(b.endTime); }}
                                 onReviewExtension={(approve) => reviewExtension(b.id, approve)}
                             />
@@ -621,8 +683,12 @@ function LiveBookingsPanel({
             <Dialog open={!!extendTarget} onOpenChange={o => !o && setExtendTarget(null)}>
                 <DialogContent className="max-w-sm">
                     <DialogHeader>
-                        <DialogTitle>Request Extension — {extendTarget?.fleet?.carNumber}</DialogTitle>
-                        <DialogDescription>Pick the new return date/time. An Admin or SuperAdmin must approve it before it takes effect.</DialogDescription>
+                        <DialogTitle>{canManage ? 'Extend Booking' : 'Request Extension'} — {extendTarget?.fleet?.carNumber}</DialogTitle>
+                        <DialogDescription>
+                            {canManage
+                                ? 'Pick the new return date/time. The booking is extended immediately.'
+                                : 'Pick the new return date/time. An Admin or SuperAdmin must approve it before it takes effect.'}
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3">
                         <div className="space-y-1">
@@ -637,7 +703,7 @@ function LiveBookingsPanel({
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setExtendTarget(null)}>Cancel</Button>
                         <Button onClick={submitExtension} disabled={busy === extendTarget?.id || !extendDate || !extendTime}>
-                            Submit Request
+                            {canManage ? 'Extend' : 'Submit Request'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

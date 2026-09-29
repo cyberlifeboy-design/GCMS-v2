@@ -19,11 +19,11 @@ function startPoolBookingReminderLoop() {
     console.log(`⏰ Pool booking reminder loop started (checks every ${POOL_REMINDER_POLL_MS / 1000}s, warns ${POOL_REMINDER_MINUTES_BEFORE}min before due)`);
 
     setInterval(() => {
-        poolBookingRequestsService.scanInstantExpiry().catch((err) => {
-            console.error('Instant booking expiry scan failed:', err);
+        poolBookingRequestsService.scanKeyCollection().catch((err) => {
+            console.error('Key-collection scan failed:', err);
         });
     }, INSTANT_EXPIRY_POLL_MS);
-    console.log(`⏰ Instant booking expiry loop started (checks every ${INSTANT_EXPIRY_POLL_MS / 1000}s)`);
+    console.log(`⏰ Key-collection loop started (checks every ${INSTANT_EXPIRY_POLL_MS / 1000}s)`);
 }
 
 async function startServer() {
