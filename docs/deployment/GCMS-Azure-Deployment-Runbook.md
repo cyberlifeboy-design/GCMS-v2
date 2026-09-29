@@ -2,13 +2,20 @@
 
 **Prepared:** 2026-09-11 | **Updated:** 2026-09-20 | **Branch:** `main` | **Target:** Azure App Service (containers) — see below
 
-> ## ⚠️ 2026-09-29: Security review #1 fixes committed — **pending Azure deploy**
-> Broken Access Control + Missing Rate Limiting remediation (booking/request forms moved
-> behind login, identity from the account, per-account submission cap). See the
-> **"2026-09-29 — Security review #1 remediation"** entry at the end of the addendum log
-> for the deploy commands and verification. Until deployed, the status below is current.
+> ## ✅ Current status (2026-09-29, night): Security review #1 fixes + Fleet/Bookings round deployed — `8c18304` live
+> Both images rebuilt from `main` @ `8c18304` via Cloud Shell (`az acr build` runs
+> **`nae`** backend, **`naf`** frontend with the MSAL build-args) and both App Services
+> restarted — the new containers took ~4 min to start serving after the restart.
+> Verified live: `health/ready` ok; all 11 formerly-anonymous / new protected endpoints →
+> **401** (incl. the 4 the pentest used); forged `POST /public/access-requests` without a
+> Microsoft token → 401; `/book-pool` signed-out → redirects to `/login`; login page shows
+> only SSO / Sign In / Forgot Password. No conflicting `TZ`/`WEBSITE_TIME_ZONE` app setting.
+> **Open:** (1) pentest junk rows (Pending, 27–29 Sep) still in the DEV DB — needs the SSH
+> route (Advanced-tool-site allow-list must include the operator's current IP) and a human
+> to run the clean-up; (2) signed-in UI walk-through on the live site not yet done.
+> See the two **2026-09-29** entries at the end of the addendum log.
 >
-> ## ✅ Current status (2026-09-20, evening): Trainings/Policy library + UX round deployed — both App Services Healthy, no open blockers
+> ## (previous) Status (2026-09-20, evening): Trainings/Policy library + UX round deployed — both App Services Healthy, no open blockers
 >
 > Latest commit live on both images: `1df63d8` (backend rebuilt ACR run `nac`, frontend
 > `nad`). Skip straight to the **"2026-09-20 (evening) — GitHub push + Trainings/Policy
@@ -702,6 +709,32 @@
 >   together (previously only department changed).
 >
 > Still no schema change — same two image rebuilds + restarts as the entry above.
+
+> ### 2026-09-29 (night) — Deployed `8c18304` to Azure DEV
+>
+> PIM role active; Cloud Shell (Bash, ephemeral) opened from the Portal. Commands were
+> typed via browser automation this time (not blocked):
+> `git clone --depth 1` → `az acr build` backend (run **nae**, ~5 min, Chromium layer) →
+> frontend (run **naf**, with both `VITE_MSAL_*` build-args) → `az webapp restart` both →
+> `az webapp config appsettings list ... TZ/WEBSITE_TIME_ZONE` returned nothing (good — the
+> image's `ENV TZ=Asia/Qatar` applies).
+>
+> **Gotcha:** after `az webapp restart` the old containers kept serving for ~4 minutes
+> (health `ok` the whole time, old bundle hash). Don't verify on the first 200 — poll until
+> the frontend bundle hash changes (`index-LpxSNKYZ.js` → `index-V3YEiIHm.js` this time)
+> and the old endpoint flips (`POST /public/requests` 400 → 401).
+>
+> **Live verification (all passed):** see the status banner at the top.
+>
+> **Not done — pentest junk clean-up:** `.../scm.../webssh/host` returned **403** — the
+> Advanced tool site allow-list doesn't include the current operator IP (it changes between
+> sessions: `178.153.84.182` on 09-19, `176.202.180.199` now). Automated bulk deletion
+> against the live DB is also refused by the assistant's safety policy, so this must be
+> done by a person: add the current IP (Networking → Access Restrictions → Advanced tool
+> site → Add `<ip>/32` → **Save**), SSH in, `export DATABASE_URL=...`, preview then delete
+> `PoolBookingRequest` (Pending, `createdById` null) and `CarRequest` (Pending) created
+> 2026-09-27 → 2026-09-29 20:42 UTC, plus `Notification` rows whose `entityId` points at
+> them. Back up first; check the preview for genuine requests before deleting.
 
 ---
 

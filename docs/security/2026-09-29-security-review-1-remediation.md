@@ -6,7 +6,7 @@
 | **Source** | Cyberhive Consulting — "Urgent Critical - Broken Access Control & Missing Rate Limiting Vulnerabilities - GCMS Application" (email + evidence archive, 4 screenshots) |
 | **Target tested** | Azure DEV — `app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net` |
 | **Code baseline** | `main` @ `9ba0a74` (identical code to the deployed `1df63d8` images; `9ba0a74` is docs-only) — local Docker stack, GitHub `origin/main` and Azure confirmed in sync before changes |
-| **Status** | Fixed in code, tested locally; **pending Azure deploy** |
+| **Status** | Fixed, tested, and **deployed to Azure DEV** (`8c18304`, 2026-09-29) — live checks passed; pentest junk data clean-up pending |
 
 ---
 
@@ -155,6 +155,7 @@ IP + account.
 | Browser, signed out | `/book-pool` and `/request` → redirected to `/login`; login page shows only Sign In / SSO / Forgot Password |
 | Browser, signed in | sidebar shows "Book a Pool Cart" and "Request Dedicated Carts"; pages load |
 | Azure baseline (pre-deploy) | `health/ready` ok; anonymous `POST /public/requests` → 400 (body processed, i.e. still exposed — expected until deploy) |
+| **Azure after deploy (`8c18304`)** | `health/ready` ok; 11 protected endpoints (incl. the 4 tested by Cyberhive) → **401** anonymously; forged access request without Microsoft token → **401**; `/book-pool` signed out → redirected to `/login`; login page shows only SSO / Sign In / Forgot Password; public stadium/settings data → 200 |
 
 **Post-deploy re-test for the security team:** replay the original Burp requests. They
 should return `401` (old URLs). Authenticated floods should return `429` after 20
@@ -181,7 +182,7 @@ submissions per account per hour.
    change and no `prisma db push`. Exact commands are in
    `docs/deployment/GCMS-Azure-Deployment-Runbook.md` → "2026-09-29 — Security review #1
    remediation".
-2. **Data clean-up (DEV DB):** purge the ~4,300 pentest junk rows (`PoolBookingRequest` /
+2. **Data clean-up (DEV DB) — NOT YET DONE (needs a person with SSH access, see runbook 2026-09-29 night entry):** purge the ~4,300 pentest junk rows (`PoolBookingRequest` /
    `CarRequest`, status `Pending`, created 2026-09-29, fuzz payloads in the name field).
    Also purge the 2,050 junk car requests previously logged as ERR-004 in the 2026-09-27
    test pass. Run from the backend SSH console after review, and back up first.
