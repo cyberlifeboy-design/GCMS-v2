@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, CheckCircle, XCircle, Mail, Phone, MapPin, Car, Plus, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Stadium {
     id: string;
@@ -208,7 +209,7 @@ function BookingConfirmationView({ token }: { token: string }) {
                         )}
                         <div className="pt-2">
                             <Button asChild variant="outline" className="w-full">
-                                <Link to="/login">Close</Link>
+                                <Link to="/">Close</Link>
                             </Button>
                         </div>
                     </CardContent>
@@ -229,6 +230,7 @@ export function PoolBookingRequestPage() {
 }
 
 function NewPoolBookingRequestView() {
+    const { user } = useAuthStore();
     const [loadingInitial, setLoadingInitial] = useState(true);
     const [stadiums, setStadiums] = useState<Stadium[]>([]);
     const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
@@ -251,9 +253,7 @@ function NewPoolBookingRequestView() {
 
     const [formData, setFormData] = useState({
         stadiumId: '',
-        requesterName: '',
-        requesterEmail: '',
-        requesterPhone: '',
+        requesterPhone: user?.phone ?? '',
         departmentId: '',
         bookingType: 'Single' as 'Single' | 'Daily' | 'Recurring',
         startDate: '',
@@ -381,8 +381,6 @@ function NewPoolBookingRequestView() {
                 const res = await poolBookingRequestsApi.createInstantPublic({
                     stadiumId: formData.stadiumId,
                     fleetId: formData.fleetId,
-                    requesterName: formData.requesterName,
-                    requesterEmail: formData.requesterEmail,
                     requesterPhone: formData.requesterPhone,
                     departmentId: formData.departmentId,
                     purpose: formData.purpose || undefined,
@@ -408,8 +406,6 @@ function NewPoolBookingRequestView() {
                 const res = await poolBookingRequestsApi.createRecurringPublic({
                     stadiumId: formData.stadiumId,
                     fleetId: formData.fleetId,
-                    requesterName: formData.requesterName,
-                    requesterEmail: formData.requesterEmail,
                     requesterPhone: formData.requesterPhone,
                     departmentId: formData.departmentId,
                     purpose: formData.purpose || undefined,
@@ -424,8 +420,6 @@ function NewPoolBookingRequestView() {
             const res = await poolBookingRequestsApi.createPublic({
                 stadiumId: formData.stadiumId,
                 fleetId: formData.fleetId,
-                requesterName: formData.requesterName,
-                requesterEmail: formData.requesterEmail,
                 requesterPhone: formData.requesterPhone,
                 departmentId: formData.departmentId,
                 bookingType: 'Single',
@@ -488,7 +482,7 @@ function NewPoolBookingRequestView() {
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button asChild variant="outline" className="flex-1">
-                                <Link to="/login">Close</Link>
+                                <Link to="/">Close</Link>
                             </Button>
                             <Button
                                 className="flex-1"
@@ -497,7 +491,7 @@ function NewPoolBookingRequestView() {
                                     setRequestTokens([]);
                                     setSlots([newSlot(), newSlot()]);
                                     setFormData({
-                                        stadiumId: '', requesterName: '', requesterEmail: '', requesterPhone: '',
+                                        stadiumId: '', requesterPhone: user?.phone ?? '',
                                         departmentId: '', bookingType: 'Single', startDate: '', endDate: '',
                                         startTime: '', endTime: '', fleetId: '', purpose: '',
                                         instantDurationMinutes: durationOptions[0] ?? 60,
@@ -524,7 +518,7 @@ function NewPoolBookingRequestView() {
                     className="w-full py-6 px-6 flex items-center gap-3"
                     style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
                 >
-                    <Link to="/login" aria-label="Back to login" className="inline-block">
+                    <Link to="/" aria-label="Back to dashboard" className="inline-block">
                         <img
                             src={branding.logoUrl || '/branding/sc-logo.png'}
                             alt="Logo"
@@ -628,22 +622,12 @@ function NewPoolBookingRequestView() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div className="space-y-2">
                                                     <Label htmlFor="requesterName">Your Name *</Label>
-                                                    <Input
-                                                        id="requesterName"
-                                                        value={formData.requesterName}
-                                                        onChange={(e) => setFormData({ ...formData, requesterName: e.target.value })}
-                                                        required
-                                                    />
+                                                    {/* Locked to the signed-in account — the server ignores any other value. */}
+                                                    <Input id="requesterName" value={user?.name ?? ''} readOnly disabled />
                                                 </div>
                                                 <div className="space-y-2">
                                                     <Label htmlFor="requesterEmail">Email Address *</Label>
-                                                    <Input
-                                                        id="requesterEmail"
-                                                        type="email"
-                                                        value={formData.requesterEmail}
-                                                        onChange={(e) => setFormData({ ...formData, requesterEmail: e.target.value })}
-                                                        required
-                                                    />
+                                                    <Input id="requesterEmail" type="email" value={user?.email ?? ''} readOnly disabled />
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, Mail, Phone, Building, MapPin, Lock } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Stadium {
     id: string;
@@ -53,10 +54,11 @@ export function PublicRequestPage() {
     const [loadingInitial, setLoadingInitial] = useState(true);
     const [branding, setBranding] = useState<Branding>({ tournamentName: 'GCMS', logoUrl: null, headerUrl: null, footerUrl: null, footerText: null });
 
+    const { user } = useAuthStore();
     const [formData, setFormData] = useState({
-        requesterName: '',
-        requesterEmail: '',
-        requesterPhone: '',
+        requesterName: user?.name ?? '',
+        requesterEmail: user?.email ?? '',
+        requesterPhone: user?.phone ?? '',
         accreditationNumber: '',
         // The public request form only ever requests dedicated cars — pool/shared
         // cars are booked (with live availability) from the separate /book-pool page.
@@ -143,8 +145,6 @@ export function PublicRequestPage() {
 
         try {
             const res = await requestsApi.createPublic({
-                requesterName: formData.requesterName,
-                requesterEmail: formData.requesterEmail,
                 requesterPhone: formData.requesterPhone || undefined,
                 accreditationNumber: formData.accreditationNumber || undefined,
                 requestType: formData.requestType,
@@ -205,7 +205,7 @@ export function PublicRequestPage() {
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button asChild variant="outline" className="flex-1">
-                                <Link to="/login">Close</Link>
+                                <Link to="/">Close</Link>
                             </Button>
                             <Button
                                 className="flex-1"
@@ -214,7 +214,8 @@ export function PublicRequestPage() {
                                     setRequestToken('');
                                     setRequestNumber(null);
                                     setFormData({
-                                        requesterName: '', requesterEmail: '', requesterPhone: '', accreditationNumber: '',
+                                        requesterName: user?.name ?? '', requesterEmail: user?.email ?? '',
+                                        requesterPhone: user?.phone ?? '', accreditationNumber: '',
                                         requestType: 'dedicated',
                                         stadiumId: stadiumIdParam || '', departmentId: departmentIdParam || '',
                                         cargoCount: 0, fourSeaterCount: 0, sixSeaterCount: 0, accessibilityCount: 0,
@@ -246,7 +247,7 @@ export function PublicRequestPage() {
                     className="w-full py-6 px-6 flex items-center gap-3"
                     style={{ background: 'linear-gradient(135deg, #0d2a4a 0%, #143b66 45%, #2e2e30 100%)' }}
                 >
-                    <Link to="/login" aria-label="Back to login" className="inline-block">
+                    <Link to="/" aria-label="Back to dashboard" className="inline-block">
                         <img
                             src={branding.logoUrl || '/branding/sc-logo.png'}
                             alt="Logo"
@@ -310,24 +311,12 @@ export function PublicRequestPage() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label htmlFor="requesterName">Your Name *</Label>
-                                            <Input
-                                                id="requesterName"
-                                                value={formData.requesterName}
-                                                onChange={(e) => setFormData({ ...formData, requesterName: e.target.value })}
-                                                placeholder="John Doe"
-                                                required
-                                            />
+                                            {/* Locked to the signed-in account — the server ignores any other value. */}
+                                            <Input id="requesterName" value={formData.requesterName} readOnly disabled />
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="requesterEmail">Email Address *</Label>
-                                            <Input
-                                                id="requesterEmail"
-                                                type="email"
-                                                value={formData.requesterEmail}
-                                                onChange={(e) => setFormData({ ...formData, requesterEmail: e.target.value })}
-                                                placeholder="john@department.org"
-                                                required
-                                            />
+                                            <Input id="requesterEmail" type="email" value={formData.requesterEmail} readOnly disabled />
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -598,7 +587,7 @@ function RequestStatusCard({ request }: { request: any }) {
                 )}
                 <div className="pt-2">
                     <Button asChild variant="outline" className="w-full">
-                        <Link to="/login">Close</Link>
+                        <Link to="/">Close</Link>
                     </Button>
                 </div>
             </CardContent>
@@ -660,10 +649,9 @@ export function RequestConfirmationPage() {
     );
 }
 
-/** Public "track my request" lookup by request number + the requester's own email. */
+/** "Track my request" — looks up one of the signed-in user's own requests by number. */
 export function TrackRequestPage() {
     const [requestNumber, setRequestNumberInput] = useState('');
-    const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [request, setRequest] = useState<any>(null);
@@ -674,7 +662,7 @@ export function TrackRequestPage() {
         setError(null);
         setRequest(null);
         try {
-            const res = await requestsApi.trackPublic(parseInt(requestNumber, 10), email);
+            const res = await requestsApi.trackPublic(parseInt(requestNumber, 10));
             setRequest(res.data.data);
         } catch (err: any) {
             setError(err.response?.data?.error || 'No matching request found');
@@ -689,12 +677,12 @@ export function TrackRequestPage() {
                 <div className="text-center">
                     <h1 className="text-2xl font-bold">Track Your Request</h1>
                     <p className="text-muted-foreground mt-1">
-                        Enter your request number and the email you submitted with.
+                        Enter the number of a request you submitted.
                     </p>
                 </div>
                 <Card>
                     <CardContent className="pt-6">
-                        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 items-end">
                             <div className="space-y-2">
                                 <Label htmlFor="trackNumber">Request Number</Label>
                                 <Input
@@ -704,16 +692,7 @@ export function TrackRequestPage() {
                                     placeholder="e.g. 42"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="trackEmail">Email</Label>
-                                <Input
-                                    id="trackEmail" type="email" required
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="you@department.org"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
+                            <div>
                                 <Button type="submit" className="w-full" disabled={loading}>
                                     {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Searching...</> : 'Track Request'}
                                 </Button>

@@ -101,7 +101,10 @@ Shared pool carts are booked (not just checked out) through an approval workflow
 live availability — designed for short-duration shared use across departments.
 
 - **Pool Cart Marking**: Admin/SuperAdmin toggle `isPool` on any fleet cart via the Manage Pool dialog; blocked if an active booking exists
-- **Public Booking Form** (`/book-pool`): pick a venue (active venues only) → an FA
+- **Booking Form** (`/book-pool`, **login required** since the 2026-09-29 security
+  review — reached from the sidebar "Book a Pool Cart"; requester name/email are locked to
+  the signed-in account; `POST /pool-booking-requests[/instant|/recurring]`, capped at 20
+  submissions/hour per account): pick a venue (active venues only) → an FA
   assigned to that venue (active FAs only) → schedule (single day or a recurring daily
   window across a date range) → the form then shows only the carts genuinely free for
   that exact window and lets the requester pick one
@@ -245,7 +248,7 @@ cumulative warnings — distinct from the standalone print-form above.
 - **Notifications**: Configure maintenance alert emails
 - **Handover Settings**: Timeout thresholds, default stadium
 - **Handover T&C**: Rich text editor (TipTap) for bilingual EN/AR Terms & Conditions title and body; dynamic checkbox manager (add/edit/remove confirmation checkboxes with EN+AR labels)
-- **Feature Toggles**: Enable/disable maintenance reports, handover photos, and whether the "Submit a Request" button appears on the login page
+- **Feature Toggles**: Enable/disable maintenance reports, handover photos, and whether car requests are open (the request/booking forms are no longer on the login page — they're sidebar pages behind login)
 - **System Announcements**: Display time-bound announcements
 - **Export Preferences**: User-specific default export format
 
@@ -615,8 +618,9 @@ GCMS-v2/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/public/requests` | POST | Submit public request |
-| `/public/requests/:token` | GET | View request by token |
+| `/requests` | POST | Submit a car request as the signed-in user (any role; requester name/email taken from the account; 20 submissions/hour per account, shared with bookings) |
+| `/requests/track?number=N` | GET | Look up one of the signed-in user's own requests |
+| `/public/requests/:token` | GET | View request by emailed token (public) |
 | `/requests` | GET | List all requests (Admin) |
 | `/requests/:id` | GET | Get request by ID |
 | `/requests/:id/approve` | POST | Approve request |

@@ -31,7 +31,8 @@ export function MicrosoftCallbackPage() {
                 } else {
                     navigate('/access-request', {
                         replace: true,
-                        state: { email: outcome.email, name: outcome.name, source: 'sso' },
+                        // idToken lets the backend verify the email instead of trusting the form.
+                        state: { email: outcome.email, name: outcome.name, source: 'sso', idToken: result.idToken },
                     });
                 }
             } catch (err) {

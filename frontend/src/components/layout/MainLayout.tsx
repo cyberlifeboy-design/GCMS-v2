@@ -98,6 +98,9 @@ const navItems = [
     { name: 'Fleet Management', href: '/fleet-management', icon: UsersRound, roles: ['SuperAdmin', 'Admin', 'Contracts', 'MaintenanceTeam'], pageKey: 'fleet' },
     { name: 'Handover Management', href: '/handover', icon: ArrowLeftRight, roles: ['SuperAdmin', 'Admin', 'FA'], pageKey: 'handover' },
     { name: 'Bookings', href: '/bookings', icon: Layers, roles: ['SuperAdmin', 'Admin', 'FA', 'Observer'], pageKey: 'bookings' },
+    // Booking / car-request forms (moved behind login, security review 2026-09-29) — open to every signed-in role.
+    { name: 'Book a Pool Cart', href: '/book-pool', icon: Calendar, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA', 'Contracts', 'MaintenanceTeam'], pageKey: null },
+    { name: 'Request Dedicated Carts', href: '/request', icon: Inbox, roles: ['SuperAdmin', 'Admin', 'Observer', 'FA', 'Contracts', 'MaintenanceTeam'], pageKey: null },
     { name: 'Usage History', href: '/usage-history', icon: Clock, roles: ['FA'], pageKey: null },
     { name: 'My Reports', href: '/my-reports', icon: FileText, roles: ['FA'], pageKey: null },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['SuperAdmin', 'Admin', 'Observer', 'Contracts', 'MaintenanceTeam'], pageKey: 'maintenance' },

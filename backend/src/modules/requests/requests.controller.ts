@@ -10,20 +10,20 @@ import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Width
 import { renderPdf, buildAggregateReference } from '../../services/pdf.service';
 import { section, esc } from '../../services/html-pdf.service';
 
+// requesterName/requesterEmail come from the signed-in account, never the body.
+const cartCount = z.number().int().min(0).max(200).default(0);
 const createRequestSchema = z.object({
-    requesterName: z.string().min(1, 'Name is required'),
-    requesterEmail: z.string().email('Valid email is required'),
-    requesterPhone: z.string().optional(),
-    accreditationNumber: z.string().optional(),
+    requesterPhone: z.string().max(32).optional(),
+    accreditationNumber: z.string().max(64).optional(),
     requestType: z.enum(['dedicated', 'pool-shared']).default('pool-shared'),
-    departmentId: z.string().min(1, 'Department is required'),
-    stadiumId: z.string().min(1, 'Stadium is required'),
-    cargoCount: z.number().int().min(0).default(0),
-    fourSeaterCount: z.number().int().min(0).default(0),
-    sixSeaterCount: z.number().int().min(0).default(0),
-    accessibilityCount: z.number().int().min(0).default(0),
-    justification: z.string().min(1, 'Please explain why your department needs these carts'),
-    notes: z.string().optional(),
+    departmentId: z.string().min(1, 'Department is required').max(64),
+    stadiumId: z.string().min(1, 'Stadium is required').max(64),
+    cargoCount: cartCount,
+    fourSeaterCount: cartCount,
+    sixSeaterCount: cartCount,
+    accessibilityCount: cartCount,
+    justification: z.string().min(1, 'Please explain why your department needs these carts').max(2000),
+    notes: z.string().max(2000).optional(),
 });
 
 const emailRequesterSchema = z.object({
@@ -43,10 +43,10 @@ const updateQuantitiesSchema = z.object({
 
 export class RequestsController {
     /**
-     * Public endpoint: Create a new car request
-     * POST /api/v1/public/requests
+     * Create a new car request as the signed-in user
+     * POST /api/v1/requests
      */
-    static async createPublic(req: Request, res: Response) {
+    static async createPublic(req: AuthRequest, res: Response) {
         try {
             const settings = await settingsService.get();
             if (settings.enableCarRequests === false) {
@@ -75,7 +75,11 @@ export class RequestsController {
                 return;
             }
 
-            const request = await requestsService.createRequest(validatedData);
+            const request = await requestsService.createRequest({
+                ...validatedData,
+                requesterName: req.user!.name || req.user!.email,
+                requesterEmail: req.user!.email,
+            });
             res.status(201).json({
                 message: 'Request submitted successfully',
                 data: request,
@@ -112,15 +116,15 @@ export class RequestsController {
     }
 
     /**
-     * Public endpoint: Track a request by its request number + the requester's own email
-     * GET /api/v1/public/requests/track?number=123&email=jane@dept.org
+     * Track one of the signed-in user's own requests by its request number
+     * GET /api/v1/requests/track?number=123
      */
-    static async trackPublic(req: Request, res: Response) {
+    static async trackPublic(req: AuthRequest, res: Response) {
         try {
             const number = parseInt(String(req.query.number || ''), 10);
-            const email = String(req.query.email || '').trim();
-            if (!number || !email) {
-                res.status(400).json({ error: 'Request number and email are required' });
+            const email = req.user!.email;
+            if (!number) {
+                res.status(400).json({ error: 'Request number is required' });
                 return;
             }
 

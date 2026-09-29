@@ -61,11 +61,14 @@ function AppContent() {
             </div>
         }>
             <Routes>
-                {/* Public routes (no auth) */}
-                <Route path="/request" element={<PublicRequestPage />} />
+                {/* Booking / car-request forms: login required (security review 2026-09-29).
+                    Full-page layout kept, so they sit outside MainLayout. */}
+                <Route path="/request" element={<ProtectedRoute><PublicRequestPage /></ProtectedRoute>} />
+                <Route path="/request/track" element={<ProtectedRoute><TrackRequestPage /></ProtectedRoute>} />
+                <Route path="/book-pool" element={<ProtectedRoute><PoolBookingRequestPage /></ProtectedRoute>} />
+
+                {/* Public: emailed status links — the unguessable token is the credential */}
                 <Route path="/request/confirm/:token" element={<RequestConfirmationPage />} />
-                <Route path="/request/track" element={<TrackRequestPage />} />
-                <Route path="/book-pool" element={<PoolBookingRequestPage />} />
                 <Route path="/book-pool/confirm/:token" element={<PoolBookingRequestPage />} />
 
                 <Route path="/login" element={<LoginPage />} />

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { RequestsController } from './requests.controller';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/rbac.middleware';
+import { submissionLimiter } from '../../middleware/rateLimit.middleware';
 import { prisma } from '../../config/database';
 
 const router = Router();
@@ -10,11 +11,8 @@ const router = Router();
 // Public routes (no authentication required)
 // ============================================
 
-// POST /api/v1/public/requests - Submit a car request
-router.post('/public/requests', (req: Request, res: Response) => RequestsController.createPublic(req, res));
-
-// GET /api/v1/public/requests/track - Look up a request by its number + requester email
-router.get('/public/requests/track', (req: Request, res: Response) => RequestsController.trackPublic(req, res));
+// Submitting and tracking a car request require login (security review 2026-09-29) —
+// see the authenticated routes below. Only the emailed token link stays public.
 
 // GET /api/v1/public/requests/:token - View request by token (confirmation page)
 router.get('/public/requests/:token', (req: Request, res: Response) => RequestsController.getByTokenPublic(req, res));
@@ -56,6 +54,13 @@ router.get('/public/departments', async (req: Request, res: Response) => {
 
 // Apply authentication to all routes below
 router.use(authenticate);
+
+// POST /api/v1/requests - Submit a car request as the signed-in user (any role)
+router.post('/requests', submissionLimiter, (req: Request, res: Response) => RequestsController.createPublic(req as any, res));
+
+// GET /api/v1/requests/track?number=N - Look up one of the signed-in user's own requests.
+// Registered before '/requests/:id' so "track" is never captured as an id.
+router.get('/requests/track', (req: Request, res: Response) => RequestsController.trackPublic(req as any, res));
 
 // GET /api/v1/requests - Get all requests (filtered by role)
 router.get('/requests', requireRole('SuperAdmin', 'Admin', 'Observer'), (req: Request, res: Response) => RequestsController.getAll(req as any, res));

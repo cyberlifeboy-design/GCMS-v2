@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { publicSettingsApi } from '@/lib/api';
 import { msalEnabled, ensureMsalInitialized, msalInstance, MICROSOFT_LOGIN_SCOPES } from '@/lib/msal';
-import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ShieldCheck, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,10 +14,6 @@ export function LoginPage() {
     const [error, setError] = useState('');
     const [branding, setBranding] = useState<{
         tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string;
-        enableCarRequests?: boolean;
-        requestWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
-        enableBookings?: boolean;
-        bookingWindow?: { isOpen: boolean; opensAt: string | null; closesAt: string | null; message: string | null };
     }>({});
     const { login, isLoading } = useAuthStore();
     const navigate = useNavigate();
@@ -178,51 +173,9 @@ export function LoginPage() {
                             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</> : 'Sign In'}
                         </button>
 
-                        {(() => {
-                            const bw = branding.bookingWindow;
-                            const bookingsEnabled = branding.enableBookings !== false;
-                            const bookingsOpen = bw ? bw.isOpen : true;
-                            // Disabled OR the window isn't open — the button must not appear at
-                            // all, not just be shown unclickable.
-                            if (!bookingsEnabled || !bookingsOpen) return null;
-                            return (
-                                <Button
-                                    asChild
-                                    variant="default"
-                                    className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                >
-                                    <Link to="/book-pool">Bookings</Link>
-                                </Button>
-                            );
-                        })()}
                     </form>
-
-                    {(() => {
-                        const w = branding.requestWindow;
-                        const open = w ? w.isOpen : true;
-                        const requestsEnabled = branding.enableCarRequests !== false;
-                        // Disabled OR the window isn't open — the button must not appear at
-                        // all, not just be shown unclickable. Tracking an already-submitted
-                        // request still works while the toggle itself is on, regardless of window.
-                        const showRequestButton = requestsEnabled && open;
-                        if (!showRequestButton && !requestsEnabled) return null;
-                        return (
-                            <div className="mt-5 space-y-2">
-                                {showRequestButton && (
-                                    <Button asChild variant="secondary" className="w-full">
-                                        <Link to="/request">Submit a Request</Link>
-                                    </Button>
-                                )}
-                                {requestsEnabled && (
-                                    <p className="text-xs text-center">
-                                        <Link to="/request/track" className="text-[#143b66] hover:underline font-semibold">
-                                            Track a request
-                                        </Link>
-                                    </p>
-                                )}
-                            </div>
-                        );
-                    })()}
+                    {/* Bookings / car requests moved behind login (security review 2026-09-29) —
+                        reachable from the sidebar after signing in. */}
                 </div>
             </div>
 

@@ -738,8 +738,6 @@ function FAInstantBookingModal({ open, onOpenChange, user, onBooked }: {
             await poolBookingRequestsApi.createInstantPublic({
                 stadiumId: user.stadiumId,
                 fleetId,
-                requesterName: user.name,
-                requesterEmail: user.email,
                 requesterPhone: user.phone || '',
                 departmentId: user.departmentId,
                 purpose: purpose || undefined,

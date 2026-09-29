@@ -343,10 +343,8 @@ export const publicDataApi = {
 
 // Car Requests (public and admin)
 export const requestsApi = {
-    // Public endpoints (no auth)
+    // Submit/track require login — requester name/email come from the signed-in account.
     createPublic: (data: {
-        requesterName: string;
-        requesterEmail: string;
         requesterPhone?: string;
         accreditationNumber?: string;
         requestType?: string;
@@ -358,11 +356,11 @@ export const requestsApi = {
         accessibilityCount: number;
         justification?: string;
         notes?: string;
-    }) => axios.post(`${API_URL}/public/requests`, data),
+    }) => apiClient.post('/requests', data),
     getByTokenPublic: (token: string) =>
         axios.get(`${API_URL}/public/requests/${token}`),
-    trackPublic: (requestNumber: number, email: string) =>
-        axios.get(`${API_URL}/public/requests/track`, { params: { number: requestNumber, email } }),
+    trackPublic: (requestNumber: number) =>
+        apiClient.get('/requests/track', { params: { number: requestNumber } }),
 
     // Admin endpoints (auth required)
     getAll: (params?: Record<string, unknown>) =>
@@ -400,6 +398,7 @@ export const accessRequestsApi = {
         stadiumId: string;
         departmentId: string;
         invitationToken?: string;
+        idToken?: string;
     }) => axios.post(`${API_URL}/public/access-requests`, data),
     getByTokenPublic: (token: string) =>
         axios.get(`${API_URL}/public/access-requests/${token}`),
@@ -500,24 +499,22 @@ export const poolBookingsApi = {
 // Pool Booking Requests (public submission + admin/FA review — replaces the old
 // no-approval immediate-checkout PoolBooking flow for new bookings)
 export const poolBookingRequestsApi = {
-    // Public endpoints — apiClient still attaches a Bearer token automatically
-    // when the caller happens to be logged in, so createdById gets captured.
-    // Deprecated — the public form now uses publicDataApi.getDepartments instead.
+    // Submission + availability require login; requester name/email come from the
+    // signed-in account server-side. Only the emailed token links below are public.
+    // Deprecated — the booking form now uses publicDataApi.getDepartments instead.
     getFAs: (stadiumId: string) =>
-        apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/fas`),
+        apiClient.get(`/pool-booking-requests/venues/${stadiumId}/fas`),
     getAvailableCarts: (
         stadiumId: string,
         params: { startDate: string; endDate: string; startTime: string; endTime: string; excludeBookingId?: string },
-    ) => apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/available-carts`, { params }),
+    ) => apiClient.get(`/pool-booking-requests/venues/${stadiumId}/available-carts`, { params }),
     getAvailableCartsMulti: (stadiumId: string, slots: { date: string; startTime: string; endTime: string }[]) =>
-        apiClient.post(`/public/pool-booking-requests/venues/${stadiumId}/available-carts-multi`, { slots }),
+        apiClient.post(`/pool-booking-requests/venues/${stadiumId}/available-carts-multi`, { slots }),
     getInstantAvailableCarts: (stadiumId: string) =>
-        apiClient.get(`/public/pool-booking-requests/venues/${stadiumId}/instant-available-carts`),
+        apiClient.get(`/pool-booking-requests/venues/${stadiumId}/instant-available-carts`),
     createPublic: (data: {
         stadiumId: string;
         fleetId: string;
-        requesterName: string;
-        requesterEmail: string;
         requesterPhone: string;
         departmentId: string;
         bookingType: 'Single';
@@ -526,27 +523,23 @@ export const poolBookingRequestsApi = {
         startTime: string;
         endTime: string;
         purpose?: string;
-    }) => apiClient.post('/public/pool-booking-requests', data),
+    }) => apiClient.post('/pool-booking-requests', data),
     createRecurringPublic: (data: {
         stadiumId: string;
         fleetId: string;
-        requesterName: string;
-        requesterEmail: string;
         requesterPhone: string;
         departmentId: string;
         purpose?: string;
         slots: { date: string; startTime: string; endTime: string }[];
-    }) => apiClient.post('/public/pool-booking-requests/recurring', data),
+    }) => apiClient.post('/pool-booking-requests/recurring', data),
     createInstantPublic: (data: {
         stadiumId: string;
         fleetId: string;
-        requesterName: string;
-        requesterEmail: string;
         requesterPhone: string;
         departmentId: string;
         purpose?: string;
         instantDurationMinutes?: number;
-    }) => apiClient.post('/public/pool-booking-requests/instant', data),
+    }) => apiClient.post('/pool-booking-requests/instant', data),
     getByTokenPublic: (token: string) =>
         apiClient.get(`/public/pool-booking-requests/${token}`),
     markKeyCollectedPublic: (token: string) =>

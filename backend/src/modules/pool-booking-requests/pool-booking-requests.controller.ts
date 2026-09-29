@@ -8,30 +8,32 @@ import { resolveStadiumScope, resolveDepartmentScope } from '../reports/reports.
 import { bookingHistoryPdf, buildAggregateReference } from '../../services/pdf.service';
 import { settingsService } from '../settings/settings.service';
 
+// requesterName/requesterEmail are NOT accepted from the body — they come from the
+// signed-in account (see requesterIdentity), so a caller can't book in someone else's name.
+const idField = z.string().min(1).max(64);
+const phone = z.string().trim().min(1).max(32);
+const purpose = z.string().max(1000).optional();
+
 const createSchema = z.object({
-    stadiumId: z.string().min(1),
-    fleetId: z.string().min(1),
-    requesterName: z.string().min(1),
-    requesterEmail: z.string().email(),
-    requesterPhone: z.string().min(1),
-    departmentId: z.string().min(1),
+    stadiumId: idField,
+    fleetId: idField,
+    requesterPhone: phone,
+    departmentId: idField,
     bookingType: z.literal('Single'),
-    startDate: z.string().min(1),
-    endDate: z.string().min(1),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate must be YYYY-MM-DD'),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be YYYY-MM-DD'),
     startTime: z.string().regex(/^\d{2}:\d{2}$/, 'startTime must be HH:mm'),
     endTime: z.string().regex(/^\d{2}:\d{2}$/, 'endTime must be HH:mm'),
-    purpose: z.string().optional(),
+    purpose,
 });
 
 const createInstantSchema = z.object({
-    stadiumId: z.string().min(1),
-    fleetId: z.string().min(1),
-    requesterName: z.string().min(1),
-    requesterEmail: z.string().email(),
-    requesterPhone: z.string().min(1),
-    departmentId: z.string().min(1),
-    purpose: z.string().optional(),
-    instantDurationMinutes: z.coerce.number().int().positive().default(60),
+    stadiumId: idField,
+    fleetId: idField,
+    requesterPhone: phone,
+    departmentId: idField,
+    purpose,
+    instantDurationMinutes: z.coerce.number().int().positive().max(24 * 60).default(60),
 });
 
 const bookingSlotSchema = z.object({
@@ -41,15 +43,24 @@ const bookingSlotSchema = z.object({
 });
 
 const createRecurringSchema = z.object({
-    stadiumId: z.string().min(1),
-    fleetId: z.string().min(1),
-    requesterName: z.string().min(1),
-    requesterEmail: z.string().email(),
-    requesterPhone: z.string().min(1),
-    departmentId: z.string().min(1),
-    purpose: z.string().optional(),
-    slots: z.array(bookingSlotSchema).min(2, 'Add at least two dates for a recurring booking'),
+    stadiumId: idField,
+    fleetId: idField,
+    requesterPhone: phone,
+    departmentId: idField,
+    purpose,
+    slots: z.array(bookingSlotSchema)
+        .min(2, 'Add at least two dates for a recurring booking')
+        .max(62, 'A recurring booking can cover at most 62 dates'),
 });
+
+/** The signed-in account is the requester — never trust a name/email from the body. */
+function requesterIdentity(req: AuthRequest) {
+    return {
+        requesterName: req.user!.name || req.user!.email,
+        requesterEmail: req.user!.email,
+        createdById: req.user!.userId,
+    };
+}
 
 const approveSchema = z.object({
     comment: z.string().optional(),
@@ -111,7 +122,7 @@ export class PoolBookingRequestsController {
         return true;
     }
 
-    /** POST /api/v1/public/pool-booking-requests */
+    /** POST /api/v1/pool-booking-requests (login required) */
     static async createPublic(req: AuthRequest, res: Response) {
         try {
             if (!(await PoolBookingRequestsController.assertBookingsOpen(res))) return;
@@ -134,7 +145,7 @@ export class PoolBookingRequestsController {
                 res.status(400).json({ error: hoursError });
                 return;
             }
-            const booking = await poolBookingRequestsService.create({ ...data, createdById: req.user?.userId });
+            const booking = await poolBookingRequestsService.create({ ...data, ...requesterIdentity(req) });
             res.status(201).json({ message: 'Booking request submitted', data: booking });
         } catch (error) {
             const err = error as Error & { code?: string; status?: number; conflict?: unknown };
@@ -161,7 +172,7 @@ export class PoolBookingRequestsController {
     }
 
     /**
-     * POST /api/v1/public/pool-booking-requests/instant — no date/time chosen; the
+     * POST /api/v1/pool-booking-requests/instant — no date/time chosen; the
      * requester wants any currently-free pool car right now, subject to admin approval.
      */
     static async createInstantPublic(req: AuthRequest, res: Response) {
@@ -169,7 +180,7 @@ export class PoolBookingRequestsController {
             if (!(await PoolBookingRequestsController.assertBookingsOpen(res))) return;
 
             const data = createInstantSchema.parse(req.body);
-            const booking = await poolBookingRequestsService.createInstant({ ...data, createdById: req.user?.userId });
+            const booking = await poolBookingRequestsService.createInstant({ ...data, ...requesterIdentity(req) });
             res.status(201).json({ message: 'Instant booking request submitted', data: booking });
         } catch (error) {
             const err = error as Error & { code?: string; status?: number };
@@ -191,7 +202,7 @@ export class PoolBookingRequestsController {
     }
 
     /**
-     * POST /api/v1/public/pool-booking-requests/recurring — one cart, several
+     * POST /api/v1/pool-booking-requests/recurring — one cart, several
      * independent date/time slots. See PoolBookingRequestsService.createRecurring.
      */
     static async createRecurringPublic(req: AuthRequest, res: Response) {
@@ -206,7 +217,7 @@ export class PoolBookingRequestsController {
                     return;
                 }
             }
-            const result = await poolBookingRequestsService.createRecurring({ ...data, createdById: req.user?.userId });
+            const result = await poolBookingRequestsService.createRecurring({ ...data, ...requesterIdentity(req) });
             res.status(201).json({ message: 'Recurring booking request submitted', data: result });
         } catch (error) {
             const err = error as Error & { code?: string; status?: number; conflict?: unknown };

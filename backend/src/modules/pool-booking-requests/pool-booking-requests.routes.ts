@@ -1,38 +1,44 @@
 import { Router, Request, Response } from 'express';
 import { PoolBookingRequestsController } from './pool-booking-requests.controller';
-import { authenticate, optionalAuth } from '../../middleware/auth.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/rbac.middleware';
+import { submissionLimiter } from '../../middleware/rateLimit.middleware';
 
 const router = Router();
 
 // ============================================
-// Public routes (no authentication required)
-// optionalAuth attaches req.user when a valid token IS present, so a
-// logged-in FA/Admin/SuperAdmin submitting from the in-app Bookings page
-// still gets createdById recorded — without requiring a login to submit.
+// Booking submission + availability — login required (security review 2026-09-29:
+// the old unauthenticated /public/* versions let anyone submit bookings in any
+// SC/LOC user's name and flood the queue). Requester name/email are taken from the
+// signed-in account in the controller, never from the request body.
 // ============================================
 
-router.post('/public/pool-booking-requests', optionalAuth, (req: Request, res: Response) =>
+router.post('/pool-booking-requests', authenticate, submissionLimiter, (req: Request, res: Response) =>
     PoolBookingRequestsController.createPublic(req as any, res),
 );
-router.post('/public/pool-booking-requests/instant', optionalAuth, (req: Request, res: Response) =>
+router.post('/pool-booking-requests/instant', authenticate, submissionLimiter, (req: Request, res: Response) =>
     PoolBookingRequestsController.createInstantPublic(req as any, res),
 );
-router.post('/public/pool-booking-requests/recurring', optionalAuth, (req: Request, res: Response) =>
+router.post('/pool-booking-requests/recurring', authenticate, submissionLimiter, (req: Request, res: Response) =>
     PoolBookingRequestsController.createRecurringPublic(req as any, res),
 );
-router.get('/public/pool-booking-requests/venues/:stadiumId/fas', (req: Request, res: Response) =>
+router.get('/pool-booking-requests/venues/:stadiumId/fas', authenticate, (req: Request, res: Response) =>
     PoolBookingRequestsController.getFAsPublic(req, res),
 );
-router.get('/public/pool-booking-requests/venues/:stadiumId/available-carts', (req: Request, res: Response) =>
+router.get('/pool-booking-requests/venues/:stadiumId/available-carts', authenticate, (req: Request, res: Response) =>
     PoolBookingRequestsController.getAvailableCartsPublic(req, res),
 );
-router.post('/public/pool-booking-requests/venues/:stadiumId/available-carts-multi', (req: Request, res: Response) =>
+router.post('/pool-booking-requests/venues/:stadiumId/available-carts-multi', authenticate, (req: Request, res: Response) =>
     PoolBookingRequestsController.getAvailableCartsMultiPublic(req, res),
 );
-router.get('/public/pool-booking-requests/venues/:stadiumId/instant-available-carts', (req: Request, res: Response) =>
+router.get('/pool-booking-requests/venues/:stadiumId/instant-available-carts', authenticate, (req: Request, res: Response) =>
     PoolBookingRequestsController.getInstantAvailableCartsPublic(req, res),
 );
+
+// ============================================
+// Tracking links (emailed to the requester) — stay public: the 256-bit random
+// token is the credential.
+// ============================================
 router.patch('/public/pool-booking-requests/:token/collect', (req: Request, res: Response) =>
     PoolBookingRequestsController.markKeyCollectedPublic(req, res),
 );

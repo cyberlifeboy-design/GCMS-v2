@@ -4,6 +4,7 @@ import { accessRequestsService } from './access-requests.service';
 import { invitationsService } from '../invitations/invitations.service';
 import { invitationErrorMessage } from '../invitations/invitations.controller';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { verifyMicrosoftToken } from '../../services/microsoft-auth.service';
 
 const createAccessRequestSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -12,6 +13,8 @@ const createAccessRequestSchema = z.object({
     stadiumId: z.string().min(1, 'Venue is required'),
     departmentId: z.string().min(1, 'Department is required'),
     invitationToken: z.string().optional(),
+    // SSO path: the Microsoft ID token from the sign-in that returned NOT_REGISTERED.
+    idToken: z.string().optional(),
 });
 
 const reviewSchema = z.object({ reviewNotes: z.string().optional(), departmentId: z.string().optional() });
@@ -46,6 +49,16 @@ export class AccessRequestsController {
                 email = invitation.email; // server-side lock — the invite's email always wins
                 invitationId = invitation.id;
                 source = 'invite';
+            } else {
+                // Without an invite, the email must be proven by Microsoft sign-in — otherwise
+                // anyone could file access requests in any SC/LOC user's name
+                // (same class as security review 2026-09-29, Finding 1).
+                try {
+                    email = (await verifyMicrosoftToken(data.idToken ?? '')).email;
+                } catch {
+                    res.status(401).json({ error: 'Please sign in with your SC/LOC Microsoft account first, then submit this request.' });
+                    return;
+                }
             }
 
             const request = await accessRequestsService.createRequest({

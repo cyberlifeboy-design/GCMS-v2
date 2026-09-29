@@ -2,6 +2,12 @@
 
 **Prepared:** 2026-09-11 | **Updated:** 2026-09-20 | **Branch:** `main` | **Target:** Azure App Service (containers) — see below
 
+> ## ⚠️ 2026-09-29: Security review #1 fixes committed — **pending Azure deploy**
+> Broken Access Control + Missing Rate Limiting remediation (booking/request forms moved
+> behind login, identity from the account, per-account submission cap). See the
+> **"2026-09-29 — Security review #1 remediation"** entry at the end of the addendum log
+> for the deploy commands and verification. Until deployed, the status below is current.
+>
 > ## ✅ Current status (2026-09-20, evening): Trainings/Policy library + UX round deployed — both App Services Healthy, no open blockers
 >
 > Latest commit live on both images: `1df63d8` (backend rebuilt ACR run `nac`, frontend
@@ -604,6 +610,64 @@
 > shows the empty-state + Upload button, and the new Settings tab renders correctly.
 > Running `db push` (not `db seed`) this time means **demo account passwords were not
 > reset** — unlike some earlier sessions' entries, no rotation warning needed here.
+
+> ### 2026-09-29 — Security review #1 remediation (Broken Access Control + Missing Rate Limiting)
+>
+> **Trigger:** external pentest (Cyberhive, email "Urgent Critical - Broken Access
+> Control & Missing Rate Limiting Vulnerabilities") against the Azure dev frontend:
+> (1) anyone could `POST /api/v1/public/pool-booking-requests` / `/public/requests`
+> without logging in, with any `requesterEmail` (demonstrated as `k.hameed@sc.qa`);
+> (2) ~4,300 bogus bookings/requests (431 pages, SQLi-fuzz payloads) went through the
+> global 100 req/min limiter. Pre-deploy baseline check: anonymous
+> `POST /api/v1/public/requests` on Azure returned **400** (body processed = reachable).
+>
+> **Fix (code):**
+> - Booking + car-request submission, availability lookups and request tracking moved
+>   off `/public/*` to authenticated routes: `POST /pool-booking-requests`,
+>   `/pool-booking-requests/instant`, `/pool-booking-requests/recurring`,
+>   `GET|POST /pool-booking-requests/venues/:stadiumId/...`, `POST /requests`,
+>   `GET /requests/track?number=N`. The old `/public/*` create URLs now return **401**.
+> - Requester name/email are stamped from the signed-in account (`req.user`); any
+>   `requesterName`/`requesterEmail` in the body is ignored. Track only finds the caller's
+>   own requests.
+> - New `submissionLimiter`: 20 submissions/hour **per account** (shared across bookings
+>   and car requests), keyed on user id — not IP, which is shared/spoofable behind Azure
+>   ARR + nginx. Input caps added (field lengths, cart counts ≤ 200, recurring ≤ 62 dates,
+>   instant duration ≤ 24h).
+> - `authLimiter` (login/SSO/forgot/reset) re-keyed to IP + target email so one client
+>   behind a shared proxy IP can't lock everyone out of sign-in.
+> - Same flaw class fixed on `POST /public/access-requests`: without an invitation token
+>   the email now comes from a verified Microsoft ID token (passed through from the SSO
+>   callback), not the form.
+> - Frontend: `/book-pool`, `/request`, `/request/track` wrapped in `ProtectedRoute`;
+>   Bookings / Submit a Request / Track buttons removed from the login page; new sidebar
+>   items "Book a Pool Cart" and "Request Dedicated Carts" (all roles). Emailed token
+>   links (`/book-pool/confirm/:token`, `/request/confirm/:token`) stay public — 256-bit
+>   random tokens.
+> - Regression test `backend/src/modules/pool-booking-requests/booking-access.test.ts`
+>   (anonymous → 401, spoofed identity ignored, 429 after 20). 97/97 backend tests pass.
+>
+> **No schema change** — no `prisma db push` needed. Deploy = rebuild both images +
+> restart, via the usual Cloud Shell path (PIM activation first if expired):
+> ```bash
+> git clone --depth 1 https://github.com/cyberlifeboy-design/GCMS-v2.git gcms-sec1 && cd gcms-sec1
+> SHA=$(git rev-parse --short HEAD)
+> (cd backend && az acr build --registry acrgcmsdevqc001 --image gcms-backend:$SHA --image gcms-backend:latest .)
+> (cd frontend && az acr build --registry acrgcmsdevqc001 --image gcms-frontend:$SHA --image gcms-frontend:latest \
+>   --build-arg VITE_MSAL_TENANT_ID=993ca615-6bd5-4d1c-8a7b-a1a99efc64b7 \
+>   --build-arg VITE_MSAL_CLIENT_ID=a073e36b-4a7c-4ac1-a005-6a20c3cd173b .)
+> az webapp restart --name app-gcms-be-dev-qc-001 --resource-group rg-gcms-dev-qc-001
+> az webapp restart --name app-gcms-fe-dev-qc-001 --resource-group rg-gcms-dev-qc-001
+> ```
+> **Post-deploy verification:** anonymous `POST <fe>/api/v1/public/requests` and
+> `POST <fe>/api/v1/pool-booking-requests/instant` → **401**; `/book-pool` in a private
+> window → redirects to `/login`; logged-in booking shows name/email locked; health/ready ok.
+>
+> **Open follow-ups (not code):** purge the pentest's junk rows from the dev DB (all
+> `Pending`, created 2026-09-29, fuzz payloads in `requesterName`); confirm what `req.ip`
+> resolves to behind ARR→nginx→ARR (if it's the nginx hop, the global 100/min limiter is
+> effectively shared by all users) and add an Azure Front Door/WAF rate rule for the
+> anonymous endpoints that must stay public (login, access request).
 
 ---
 

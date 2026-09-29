@@ -12,7 +12,7 @@ interface Stadium { id: string; name: string; code: string }
 interface Department { id: string; name: string; code?: string; stadiumId: string }
 
 export function AccessRequestPage() {
-    const location = useLocation() as { state?: { email?: string; name?: string; source?: 'sso' } };
+    const location = useLocation() as { state?: { email?: string; name?: string; source?: 'sso'; idToken?: string } };
     const [searchParams] = useSearchParams();
     const inviteToken = searchParams.get('invite') || undefined;
 
@@ -64,6 +64,7 @@ export function AccessRequestPage() {
             const res = await accessRequestsApi.createPublic({
                 name, email, phone: phone || undefined, stadiumId, departmentId,
                 invitationToken: inviteToken,
+                idToken: location.state?.idToken,
             });
             setSubmitted({ requestNumber: res.data.data.requestNumber });
         } catch (err: any) {
