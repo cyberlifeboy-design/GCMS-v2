@@ -2,6 +2,9 @@
 
 **Prepared:** 2026-09-11 | **Updated:** 2026-09-20 | **Branch:** `main` | **Target:** Azure App Service (containers) — see below
 
+> **2026-09-30:** SC/LOC Microsoft sign-in fixed (`aa5c1b6`, frontend run `nag`) — verified
+> live; see the 2026-09-30 entry at the end of the addendum log.
+>
 > ## ✅ Current status (2026-09-29, night): Security review #1 fixes + Fleet/Bookings round deployed — `8c18304` live
 > Both images rebuilt from `main` @ `8c18304` via Cloud Shell (`az acr build` runs
 > **`nae`** backend, **`naf`** frontend with the MSAL build-args) and both App Services
@@ -735,6 +738,27 @@
 > `PoolBookingRequest` (Pending, `createdById` null) and `CarRequest` (Pending) created
 > 2026-09-27 → 2026-09-29 20:42 UTC, plus `Notification` rows whose `entityId` points at
 > them. Back up first; check the preview for genuine requests before deleting.
+
+> ### 2026-09-30 — SC/LOC (Microsoft) sign-in fixed and deployed (`aa5c1b6`)
+>
+> **Symptom:** "Sign in with your SC/LOC account" went to Microsoft and silently came back
+> to `/login` — nobody could sign in with SSO. **Root cause:** `frontend/src/lib/msal.ts`
+> left MSAL's `navigateToLoginRequestUrl` at its default `true`, so on landing at
+> `/auth/microsoft/callback` MSAL bounced the browser back to `/login` (where the login
+> started) to finish there — but only the callback page processes the response.
+> **Fix:** `navigateToLoginRequestUrl: false`. Entra side was already correct: app
+> registration **GCMS-DEV-Entra-Login** (client `a073e36b-…`), SPA redirect URI
+> `https://app-gcms-fe-dev-qc-001-hvdabbawhjcnfhc0.qatarcentral-01.azurewebsites.net/auth/microsoft/callback`;
+> backend app settings `MSAL_TENANT_ID` / `MSAL_CLIENT_ID` present.
+> **Deploy:** frontend only — Cloud Shell `az acr build` run **nag** (with both `VITE_MSAL_*`
+> build-args) + `az webapp restart`; bundle `index-V3YEiIHm.js` → `index-C_E9_Efs.js`
+> (~3 min after restart).
+> **Verified live:** SSO round trip with an SC account completes; an unregistered SC user
+> lands on **Request account access** with name pre-filled from Microsoft and the email
+> locked ("Verified — this can't be changed"). Registered users go straight to the dashboard.
+> **Browser-automation note:** a CDP mouse click on the SSO button doesn't start the
+> redirect under the Claude-in-Chrome extension; a scripted `button.click()` does — this is
+> a test-harness quirk, real users are unaffected.
 
 ---
 
