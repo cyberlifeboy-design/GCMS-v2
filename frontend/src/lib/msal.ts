@@ -12,6 +12,10 @@ const msalConfig: Configuration = {
         clientId: clientId || '00000000-0000-0000-0000-000000000000',
         authority: `https://login.microsoftonline.com/${tenantId || 'common'}`,
         redirectUri: '/auth/microsoft/callback',
+        // Finish the sign-in ON the callback page. The default (true) makes MSAL bounce the
+        // browser back to /login first, where nothing processes the response — the SSO
+        // login silently did nothing and the user landed back on the login page.
+        navigateToLoginRequestUrl: false,
     },
     cache: {
         cacheLocation: 'sessionStorage',
