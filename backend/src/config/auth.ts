@@ -18,7 +18,12 @@ export const authConfig = {
         accessTokenSecret: getJwtSecret('JWT_ACCESS_SECRET', 'access'),
         refreshTokenSecret: getJwtSecret('JWT_REFRESH_SECRET', 'refresh'),
         accessTokenExpiry: '15m' as const, // 15 minutes
-        refreshTokenExpiry: '7d' as const, // 7 days
+    },
+    // One active session per account (VAPT #3). A session ends after SESSION_IDLE_MINUTES
+    // without user activity, or SESSION_MAX_HOURS after sign-in regardless (VAPT #5).
+    session: {
+        idleMs: Number(process.env.SESSION_IDLE_MINUTES || 15) * 60_000,
+        maxMs: Number(process.env.SESSION_MAX_HOURS || 8) * 3_600_000,
     },
     bcrypt: {
         saltRounds: 10,

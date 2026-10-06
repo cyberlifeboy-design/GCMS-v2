@@ -32,15 +32,16 @@ export function AccessRequestPage() {
     const [error, setError] = useState('');
     const [submitted, setSubmitted] = useState<{ requestNumber: number } | null>(null);
 
-    useEffect(() => {
-        accessRequestsApi.getPublicStadiums().then(res => setStadiums(res.data?.data || [])).catch(() => {});
-    }, []);
+    const ssoIdToken = location.state?.idToken;
 
     useEffect(() => {
-        setDepartmentId('');
+        accessRequestsApi.getPublicStadiums({ invite: inviteToken, idToken: ssoIdToken }).then(res => setStadiums(res.data?.data || [])).catch(() => {});
+    }, [inviteToken, ssoIdToken]);
+
+    useEffect(() => {
         if (!stadiumId) { setDepartments([]); return; }
-        accessRequestsApi.getPublicDepartments(stadiumId).then(res => setDepartments(res.data?.data || [])).catch(() => {});
-    }, [stadiumId]);
+        accessRequestsApi.getPublicDepartments(stadiumId, { invite: inviteToken, idToken: ssoIdToken }).then(res => setDepartments(res.data?.data || [])).catch(() => {});
+    }, [stadiumId, inviteToken, ssoIdToken]);
 
     useEffect(() => {
         if (!inviteToken) return;
@@ -149,7 +150,7 @@ export function AccessRequestPage() {
 
                     <div className="space-y-1.5">
                         <Label>Venue</Label>
-                        <Select value={stadiumId} onValueChange={setStadiumId}>
+                        <Select value={stadiumId} onValueChange={v => { setStadiumId(v); setDepartmentId(''); }}>
                             <SelectTrigger><SelectValue placeholder="Select a venue" /></SelectTrigger>
                             <SelectContent>
                                 {stadiums.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}

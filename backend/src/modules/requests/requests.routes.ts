@@ -1,9 +1,11 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { RequestsController } from './requests.controller';
-import { authenticate } from '../../middleware/auth.middleware';
+import { authenticate, AuthRequest } from '../../middleware/auth.middleware';
 import { requireRole } from '../../middleware/rbac.middleware';
 import { submissionLimiter } from '../../middleware/rateLimit.middleware';
 import { prisma } from '../../config/database';
+import { invitationsService } from '../invitations/invitations.service';
+import { verifyMicrosoftToken } from '../../services/microsoft-auth.service';
 
 const router = Router();
 
@@ -17,8 +19,24 @@ const router = Router();
 // GET /api/v1/public/requests/:token - View request by token (confirmation page)
 router.get('/public/requests/:token', (req: Request, res: Response) => RequestsController.getByTokenPublic(req, res));
 
-// GET /api/v1/public/stadiums - List active stadiums for public request form
-router.get('/public/stadiums', async (_req: Request, res: Response) => {
+// Venue/department lists are not anonymous (VAPT #4): a signed-in user, or someone on the
+// account-request page holding a valid invitation (X-Invite-Token) or a verified SC/LOC
+// Microsoft ID token (X-MS-Id-Token, issued by the SSO sign-in that found no account).
+const lookupAccess = async (req: Request, res: Response, next: NextFunction) => {
+    const invite = req.get('X-Invite-Token');
+    const idToken = req.get('X-MS-Id-Token');
+    if (!invite && !idToken) return authenticate(req as AuthRequest, res, next);
+    try {
+        if (invite) await invitationsService.validateForSubmission(invite);
+        else await verifyMicrosoftToken(idToken!);
+        next();
+    } catch {
+        res.status(401).json({ error: 'Not authorized' });
+    }
+};
+
+// GET /api/v1/public/stadiums - List active stadiums (signed-in or account-request page)
+router.get('/public/stadiums', lookupAccess, async (_req: Request, res: Response) => {
     try {
         const stadiums = await prisma.stadium.findMany({
             where: { isActive: true },
@@ -31,8 +49,8 @@ router.get('/public/stadiums', async (_req: Request, res: Response) => {
     }
 });
 
-// GET /api/v1/public/departments?stadiumId=xxx - List active departments for public form
-router.get('/public/departments', async (req: Request, res: Response) => {
+// GET /api/v1/public/departments?stadiumId=xxx - List active departments (same access)
+router.get('/public/departments', lookupAccess, async (req: Request, res: Response) => {
     try {
         const { stadiumId } = req.query;
         const where: Record<string, unknown> = { isActive: true };

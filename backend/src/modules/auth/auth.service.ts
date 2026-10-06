@@ -9,15 +9,6 @@ import { notificationTemplatesService } from '../notification-templates/notifica
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'FA' | 'Observer';
 
-interface RegisterData {
-    name: string;
-    email: string;
-    password: string;
-    role: UserRole;
-    phone?: string;
-    stadiumId?: string;
-}
-
 interface LoginData {
     email: string;
     password: string;
@@ -32,42 +23,6 @@ interface TokenPayload {
 }
 
 export class AuthService {
-    static async register(data: RegisterData) {
-        const existingUser = await prisma.user.findUnique({
-            where: { email: data.email },
-        });
-
-        if (existingUser) {
-            throw new Error('User with this email already exists');
-        }
-
-        const passwordHash = await bcrypt.hash(data.password, authConfig.bcrypt.saltRounds);
-
-        const user = await prisma.user.create({
-            data: {
-                name: data.name,
-                email: data.email,
-                passwordHash,
-                role: data.role,
-                phone: data.phone,
-                stadiumId: data.stadiumId,
-            },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                phone: true,
-                isActive: true,
-                exportFormat: true,
-                stadiumId: true,
-                createdAt: true,
-            },
-        });
-
-        return user;
-    }
-
     static async login(data: LoginData) {
         const user = await prisma.user.findUnique({
             where: { email: data.email },
@@ -95,34 +50,7 @@ export class AuthService {
             throw new Error('Invalid email or password');
         }
 
-        const tokenPayload: TokenPayload = {
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-            stadiumId: user.stadiumId || undefined,
-            departmentId: user.departmentId || undefined,
-        };
-
-        const accessToken = jwt.sign(tokenPayload, authConfig.jwt.accessTokenSecret, {
-            expiresIn: '15m',
-        } as any);
-
-        const refreshToken = jwt.sign(
-            { userId: user.id },
-            authConfig.jwt.refreshTokenSecret,
-            { expiresIn: '7d' } as any
-        );
-
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-
-        await prisma.refreshToken.create({
-            data: {
-                token: refreshToken,
-                userId: user.id,
-                expiresAt,
-            },
-        });
+        const { accessToken, refreshToken } = await AuthService.issueSession(user);
 
         return {
             accessToken,
@@ -197,20 +125,7 @@ export class AuthService {
             }
         }
 
-        const tokenPayload: TokenPayload = {
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-            stadiumId: user.stadiumId || undefined,
-            departmentId: user.departmentId || undefined,
-        };
-
-        const accessToken = jwt.sign(tokenPayload, authConfig.jwt.accessTokenSecret, { expiresIn: '15m' } as any);
-        const refreshToken = jwt.sign({ userId: user.id }, authConfig.jwt.refreshTokenSecret, { expiresIn: '7d' } as any);
-
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-        await prisma.refreshToken.create({ data: { token: refreshToken, userId: user.id, expiresAt } });
+        const { accessToken, refreshToken } = await AuthService.issueSession(user);
 
         return {
             accessToken,
@@ -232,12 +147,44 @@ export class AuthService {
         };
     }
 
+    /**
+     * Starts the account's only session (VAPT #3): every earlier session is revoked, so
+     * another device signed in as this user is logged out on its next request. The
+     * RefreshToken row IS the session — its id travels in the access token as `sid`,
+     * and its expiresAt is the idle deadline that `authenticate` slides forward.
+     */
+    static async issueSession(user: { id: string; email: string; role: string; stadiumId: string | null; departmentId: string | null }) {
+        // Opaque 256-bit random token: validity lives in the DB row, not in the token itself
+        // (fits the VARCHAR(191) column; a JWT with a jti does not).
+        const refreshToken = crypto.randomBytes(32).toString('hex');
+
+        const [, session] = await prisma.$transaction([
+            prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+            prisma.refreshToken.create({ data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + authConfig.session.idleMs) } }),
+        ]);
+
+        return { accessToken: AuthService.signAccessToken(user, session.id), refreshToken };
+    }
+
+    static signAccessToken(user: { id: string; email: string; role: string; stadiumId: string | null; departmentId: string | null }, sid: string) {
+        const payload: TokenPayload & { sid: string } = {
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            stadiumId: user.stadiumId || undefined,
+            departmentId: user.departmentId || undefined,
+            sid,
+        };
+        return jwt.sign(payload, authConfig.jwt.accessTokenSecret, { expiresIn: authConfig.jwt.accessTokenExpiry });
+    }
+
+    /** True once a session is past its idle deadline or its absolute lifetime. */
+    static isSessionExpired(session: { expiresAt: Date; createdAt: Date }, now = Date.now()) {
+        return session.expiresAt.getTime() <= now || session.createdAt.getTime() + authConfig.session.maxMs <= now;
+    }
+
     static async refreshAccessToken(refreshToken: string) {
         try {
-            const payload = jwt.verify(refreshToken, authConfig.jwt.refreshTokenSecret) as {
-                userId: string;
-            };
-
             const storedToken = await prisma.refreshToken.findUnique({
                 where: { token: refreshToken },
                 include: { user: true },
@@ -247,24 +194,17 @@ export class AuthService {
                 throw new Error('Invalid refresh token');
             }
 
-            if (storedToken.expiresAt < new Date()) {
+            // Refreshing does not count as activity — only real requests slide the idle deadline.
+            if (AuthService.isSessionExpired(storedToken)) {
                 await prisma.refreshToken.delete({ where: { id: storedToken.id } });
                 throw new Error('Refresh token expired');
             }
 
-            const tokenPayload: TokenPayload = {
-                userId: storedToken.user.id,
-                email: storedToken.user.email,
-                role: storedToken.user.role,
-                stadiumId: storedToken.user.stadiumId || undefined,
-                departmentId: storedToken.user.departmentId || undefined,
-            };
+            if (!storedToken.user.isActive || storedToken.user.isBlocked) {
+                throw new Error('Account disabled');
+            }
 
-            const accessToken = jwt.sign(tokenPayload, authConfig.jwt.accessTokenSecret, {
-                expiresIn: '15m',
-            } as any);
-
-            return { accessToken };
+            return { accessToken: AuthService.signAccessToken(storedToken.user, storedToken.id) };
         } catch (error) {
             throw new Error('Invalid or expired refresh token');
         }
@@ -278,6 +218,13 @@ export class AuthService {
         } else {
             await prisma.refreshToken.deleteMany({ where: { userId } });
         }
+    }
+
+    /** Ends every session of the account except `keepSessionId` (credential change / disable). */
+    static async revokeSessions(userId: string, keepSessionId?: string) {
+        await prisma.refreshToken.deleteMany({
+            where: { userId, ...(keepSessionId ? { id: { not: keepSessionId } } : {}) },
+        });
     }
 
     static async forgotPassword(email: string) {
@@ -326,6 +273,7 @@ export class AuthService {
                 resetPasswordExpires: null,
             },
         });
+        await AuthService.revokeSessions(user.id);
 
         return { message: 'Password reset successful' };
     }
@@ -361,7 +309,7 @@ export class AuthService {
         };
     }
 
-    static async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    static async changePassword(userId: string, currentPassword: string, newPassword: string, currentSessionId?: string) {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new Error('User not found');
 
@@ -373,5 +321,6 @@ export class AuthService {
             where: { id: userId },
             data: { passwordHash, mustChangePassword: false },
         });
+        await AuthService.revokeSessions(userId, currentSessionId);
     }
 }

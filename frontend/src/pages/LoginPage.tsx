@@ -11,7 +11,10 @@ export function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [error, setError] = useState('');
+    const [error, setError] = useState(() =>
+        new URLSearchParams(window.location.search).get('reason') === 'session'
+            ? 'Your session ended (inactivity, or this account signed in on another device). Please sign in again.'
+            : '');
     const [branding, setBranding] = useState<{
         tournamentName?: string; logoUrl?: string; headerUrl?: string; footerUrl?: string; footerText?: string;
     }>({});

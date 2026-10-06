@@ -271,7 +271,6 @@ Admin Reviews:
 | POST | `/auth/login` | Login with email/password |
 | POST | `/auth/logout` | Logout user |
 | POST | `/auth/refresh` | Refresh access token |
-| POST | `/auth/register` | Register new user (SuperAdmin only) |
 
 ### Fleet
 | Method | Endpoint | Description |

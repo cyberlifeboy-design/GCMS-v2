@@ -760,6 +760,25 @@
 > redirect under the Claude-in-Chrome extension; a scripted `button.click()` does — this is
 > a test-harness quirk, real users are unaffected.
 
+> ### 2026-10-06 — VAPT Observations v1.0 remediation (ready to deploy, NOT yet deployed)
+>
+> Full write-up: `docs/security/2026-10-06-vapt-v1.0-remediation.md`. #1/#2 were already
+> live (`5f592e7`); this release fixes #3 (single session per account), #4
+> (`/public/stadiums` + `/public/departments` now 401 for anonymous callers) and #5 (15 min idle /
+> 8 h absolute session expiry, server-side), plus an Admin→SuperAdmin escalation via
+> `POST /users/bulk` and the removed `POST /auth/register`, and dependency upgrades
+> (xlsx → SheetJS 0.20.3 from `cdn.sheetjs.com`, so the ACR build needs outbound HTTPS there).
+>
+> **No schema change.** Same Cloud Shell commands as the 2026-09-29 entry (fresh clone dir,
+> e.g. `gcms-vapt1`), both images + both restarts. Optional backend app settings:
+> `SESSION_IDLE_MINUTES`, `SESSION_MAX_HOURS`. **Every user must sign in again** once after
+> the deploy (old tokens carry no session id).
+>
+> **Post-deploy verification:** anonymous `GET <fe>/api/v1/public/stadiums` and
+> `/public/departments` → **401**; `GET <fe>/api/v1` → `{"message":"GCMS API v1"}` only;
+> sign in in browser A, then in browser B → A's next click lands on
+> `/login?reason=session` with the "session ended" message; leave a tab idle 15 min → same.
+
 ---
 
 ## 0. Purpose & Scope

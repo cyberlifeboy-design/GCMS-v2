@@ -2,15 +2,6 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { z } from 'zod';
 
-const registerSchema = z.object({
-    name: z.string().min(2).max(100),
-    email: z.string().email(),
-    password: z.string().min(8).max(100),
-    role: z.enum(['SuperAdmin', 'Admin', 'FA', 'Observer']),
-    phone: z.string().optional(),
-    stadiumId: z.string().optional(),
-});
-
 const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(1),
@@ -39,22 +30,6 @@ const microsoftLoginSchema = z.object({
 });
 
 export class AuthController {
-    static async register(req: Request, res: Response): Promise<void> {
-        try {
-            const validatedData = registerSchema.parse(req.body);
-            const user = await AuthService.register(validatedData);
-            res.status(201).json({ message: 'User registered successfully', user });
-        } catch (error) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: 'Validation error', details: error.errors });
-            } else if (error instanceof Error) {
-                res.status(400).json({ error: error.message });
-            } else {
-                res.status(500).json({ error: 'Registration failed' });
-            }
-        }
-    }
-
     static async login(req: Request, res: Response): Promise<void> {
         try {
             const validatedData = loginSchema.parse(req.body);
@@ -188,7 +163,7 @@ export class AuthController {
                 return;
             }
             const validatedData = changePasswordSchema.parse(req.body);
-            await AuthService.changePassword(authUser.userId, validatedData.currentPassword, validatedData.newPassword);
+            await AuthService.changePassword(authUser.userId, validatedData.currentPassword, validatedData.newPassword, authUser.sessionId);
             res.status(200).json({ message: 'Password changed successfully' });
         } catch (error) {
             if (error instanceof z.ZodError) {

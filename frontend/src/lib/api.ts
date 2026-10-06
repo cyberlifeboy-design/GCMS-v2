@@ -9,11 +9,25 @@ export const apiClient = axios.create({
     timeout: 30000,
 });
 
+// Session idle timeout (VAPT #5) is enforced server-side; only requests made while the user
+// is actually interacting count as activity. Requests fired with no input in the last
+// 2 minutes (timers/polls on an unattended tab) are marked background so they don't
+// keep the session alive.
+let lastUserInput = Date.now();
+if (typeof window !== 'undefined') {
+    for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+        window.addEventListener(evt, () => { lastUserInput = Date.now(); }, { capture: true, passive: true });
+    }
+}
+
 // Attach access token to every request
 apiClient.interceptors.request.use((config) => {
     const token = localStorage.getItem('accessToken');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (Date.now() - lastUserInput > 2 * 60_000) {
+        config.headers['X-Background'] = '1';
     }
     return config;
 });
@@ -24,30 +38,31 @@ apiClient.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // Skip auth redirect for public endpoints
-        const publicEndpoints = ['/auth/login', '/auth/microsoft', '/auth/forgot-password', '/auth/reset-password', '/public/'];
-        const isPublicEndpoint = publicEndpoints.some(ep => originalRequest.url?.includes(ep));
+        // Skip auth redirect for public endpoints (the venue/department lookups need login now)
+        const publicEndpoints = ['/auth/login', '/auth/microsoft', '/auth/forgot-password', '/auth/reset-password'];
+        const isPublicEndpoint = publicEndpoints.some(ep => originalRequest.url?.includes(ep))
+            || /\/public\/(?!stadiums|departments)/.test(originalRequest.url || '');
 
         // Don't redirect if already on login page
         const isLoginPage = window.location.pathname === '/login' ||
                             window.location.pathname === '/forgot-password' ||
                             window.location.pathname.startsWith('/reset-password');
 
-        if (error.response?.status === 401 && !originalRequest._retry && !isPublicEndpoint && !isLoginPage) {
+        // Never signed in (e.g. the account-request page): nothing to refresh, let the caller handle it.
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (error.response?.status === 401 && refreshToken && !originalRequest._retry && !isPublicEndpoint && !isLoginPage) {
             originalRequest._retry = true;
             try {
-                const refreshToken = localStorage.getItem('refreshToken');
-                if (!refreshToken) {
-                    throw new Error('No refresh token');
-                }
                 const res = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
                 localStorage.setItem('accessToken', res.data.accessToken);
                 originalRequest.headers.Authorization = `Bearer ${res.data.accessToken}`;
                 return apiClient(originalRequest);
             } catch {
+                // Session ended: idle timeout, signed in elsewhere, or revoked.
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
-                window.location.href = '/login';
+                localStorage.removeItem('auth-storage');
+                window.location.href = '/login?reason=session';
             }
         }
         return Promise.reject(error);
@@ -336,10 +351,18 @@ export const publicSettingsApi = {
     getBranding: () => axios.get(`${API_URL}/settings/public`),
 };
 
+// Venue/department lists — signed-in only (VAPT #4).
 export const publicDataApi = {
-    getStadiums: () => axios.get(`${API_URL}/public/stadiums`),
-    getDepartments: (stadiumId?: string) => axios.get(`${API_URL}/public/departments`, { params: stadiumId ? { stadiumId } : {} }),
+    getStadiums: () => apiClient.get('/public/stadiums'),
+    getDepartments: (stadiumId?: string) => apiClient.get('/public/departments', { params: stadiumId ? { stadiumId } : {} }),
 };
+
+// Proof the account-request page may read the lists: an invitation or a verified SC/LOC sign-in.
+type LookupProof = { invite?: string; idToken?: string };
+const lookupHeaders = (p: LookupProof = {}) => ({
+    ...(p.invite ? { 'X-Invite-Token': p.invite } : {}),
+    ...(p.idToken ? { 'X-MS-Id-Token': p.idToken } : {}),
+});
 
 // Car Requests (public and admin)
 export const requestsApi = {
@@ -387,10 +410,11 @@ export const requestsApi = {
 
 // Account access requests (SSO self-service + invitation-originated)
 export const accessRequestsApi = {
-    // Public endpoints (no auth)
-    getPublicStadiums: () => axios.get(`${API_URL}/public/stadiums`),
-    getPublicDepartments: (stadiumId: string) =>
-        axios.get(`${API_URL}/public/departments`, { params: { stadiumId } }),
+    // Lookups: signed-in users send their Bearer token; the account-request page sends proof.
+    getPublicStadiums: (proof?: LookupProof) =>
+        apiClient.get('/public/stadiums', { headers: lookupHeaders(proof) }),
+    getPublicDepartments: (stadiumId: string, proof?: LookupProof) =>
+        apiClient.get('/public/departments', { params: { stadiumId }, headers: lookupHeaders(proof) }),
     createPublic: (data: {
         name: string;
         email: string;

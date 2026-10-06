@@ -107,26 +107,9 @@ app.get('/api/v1/health/ready', async (req: Request, res: Response) => {
 });
 
 // API v1 routes
-app.get('/api/v1', (req: Request, res: Response) => {
-    res.json({
-        message: 'GCMS API v1',
-        endpoints: {
-            health: '/health',
-            auth: '/api/v1/auth',
-            fleet: '/api/v1/fleet',
-            handover: '/api/v1/handover',
-            maintenance: '/api/v1/maintenance',
-            users: '/api/v1/users',
-            reports: '/api/v1/reports',
-            stadiums: '/api/v1/stadiums',
-            settings: '/api/v1/settings',
-            departments: '/api/v1/departments',
-            requests: '/api/v1/requests',
-            notifications: '/api/v1/notifications',
-            announcements: '/api/v1/announcements',
-            publicRequests: '/api/v1/public/requests',
-        },
-    });
+// No endpoint map here — it only helps someone map the API (VAPT #4).
+app.get('/api/v1', (_req: Request, res: Response) => {
+    res.json({ message: 'GCMS API v1' });
 });
 
 // Storage proxy - serve files via the active storage driver (local/MinIO/Azure Blob),

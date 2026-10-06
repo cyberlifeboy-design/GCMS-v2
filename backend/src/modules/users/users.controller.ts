@@ -169,6 +169,7 @@ export class UsersController {
                     return;
                 }
                 validatedData.stadiumId = req.user.stadiumId;
+                validatedData.assignAllStadiums = false;
             }
 
             const user = await usersService.create(validatedData as any);
@@ -209,6 +210,11 @@ export class UsersController {
                     res.status(403).json({ error: 'Admin cannot change role' });
                     return;
                 }
+                // ...nor move the FA to another venue or widen their access.
+                delete validatedData.stadiumId;
+                delete validatedData.assignAllStadiums;
+                delete validatedData.grantedPages;
+                delete validatedData.venueReportAccess;
             }
 
             // Only SuperAdmin can update passwords
@@ -303,6 +309,15 @@ export class UsersController {
                 assignAllStadiums: z.boolean().optional(),
             }));
             const users = schema.parse(req.body);
+
+            // Same rule as create(): Admin may only add FA users at their own venue.
+            if (req.user?.role === 'Admin') {
+                if (users.some(u => u.role !== 'FA')) {
+                    res.status(403).json({ error: 'Admin can only create FA users' });
+                    return;
+                }
+                users.forEach(u => { u.stadiumId = req.user!.stadiumId; u.assignAllStadiums = false; });
+            }
 
             const result = await usersService.bulkCreate(users as any);
             res.status(201).json({

@@ -4,14 +4,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 
+const realUser = {
+    id: 'u1', email: 'real.user@sc.qa', name: 'Real User', phone: '5550000',
+    role: 'FA', stadiumId: 's1', departmentId: 'd1', isActive: true, isBlocked: false,
+};
 vi.mock('../../config/database', () => ({
     prisma: {
         auditLog: { create: vi.fn(async () => ({})) },
-        user: {
-            findUnique: vi.fn(async () => ({
-                id: 'u1', email: 'real.user@sc.qa', name: 'Real User', phone: '5550000',
-                role: 'FA', stadiumId: 's1', departmentId: 'd1', isActive: true, isBlocked: false,
-            })),
+        user: { findUnique: vi.fn(async () => realUser) },
+        refreshToken: {
+            findUnique: vi.fn(async () => ({ id: 'sess1', userId: 'u1', createdAt: new Date(), expiresAt: new Date(Date.now() + 600_000), user: realUser })),
+            update: vi.fn(async () => ({})),
         },
     },
     checkDatabaseConnection: vi.fn(async () => true),
@@ -36,7 +39,7 @@ import jwt from 'jsonwebtoken';
 import { authConfig } from '../../config/auth';
 import app from '../../app';
 
-const token = () => jwt.sign({ userId: 'u1', email: 'real.user@sc.qa', role: 'FA' }, authConfig.jwt.accessTokenSecret);
+const token = () => jwt.sign({ userId: 'u1', email: 'real.user@sc.qa', role: 'FA', sid: 'sess1' }, authConfig.jwt.accessTokenSecret);
 const spoof = { requesterName: 'Victim', requesterEmail: 'k.hameed@sc.qa' };
 
 describe('booking / car-request submission access control', () => {

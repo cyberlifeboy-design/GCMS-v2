@@ -259,6 +259,11 @@ export class UsersService {
             },
         });
 
+        // An admin password reset or disabling the account ends the user's sessions.
+        if (password || user.isBlocked || !user.isActive) {
+            await prisma.refreshToken.deleteMany({ where: { userId: id } });
+        }
+
         return {
             ...user,
             exportPreferences: user.exportPreferences ? JSON.parse(user.exportPreferences as string) : null,

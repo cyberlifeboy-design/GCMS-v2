@@ -1,17 +1,9 @@
 import { Router } from 'express';
 import { AuthController } from './auth.controller';
 import { authenticate } from '../../middleware/auth.middleware';
-import { requireRole } from '../../middleware/rbac.middleware';
 import { authLimiter } from '../../middleware/rateLimit.middleware';
 
 const router = Router();
-
-/**
- * @route   POST /api/v1/auth/register
- * @desc    Register a new user (Admin only)
- * @access  Private (Admin)
- */
-router.post('/register', authenticate, requireRole('Admin'), AuthController.register);
 
 /**
  * @route   POST /api/v1/auth/login
