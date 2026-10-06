@@ -1,7 +1,15 @@
 # GCMS — Azure Deployment & Migration Runbook
 
-**Prepared:** 2026-09-11 | **Updated:** 2026-09-20 | **Branch:** `main` | **Target:** Azure App Service (containers) — see below
+**Prepared:** 2026-09-11 | **Updated:** 2026-10-06 | **Branch:** `main` | **Target:** Azure App Service (containers) — see below
 
+> ## ⏳ Pending deploy (2026-10-06): VAPT Observations v1.0 fixes — `main` is ahead of Azure
+> Live is still `8c18304` (backend `nae`) + `aa5c1b6` (frontend `nag`). `main` now carries the
+> VAPT v1.0 remediation (single session, session expiry, private venue lookups, Admin→SuperAdmin
+> escalation fix, dependency upgrades). **No schema change** — rebuild both images + restart both
+> App Services; every user signs in again once. Commands + post-deploy checks: the
+> **2026-10-06** entry at the end of the addendum log; findings/fixes:
+> `docs/security/2026-10-06-vapt-v1.0-remediation.md`.
+>
 > **2026-09-30:** SC/LOC Microsoft sign-in fixed (`aa5c1b6`, frontend run `nag`) — verified
 > live; see the 2026-09-30 entry at the end of the addendum log.
 >
@@ -769,8 +777,19 @@
 > `POST /users/bulk` and the removed `POST /auth/register`, and dependency upgrades
 > (xlsx → SheetJS 0.20.3 from `cdn.sheetjs.com`, so the ACR build needs outbound HTTPS there).
 >
-> **No schema change.** Same Cloud Shell commands as the 2026-09-29 entry (fresh clone dir,
-> e.g. `gcms-vapt1`), both images + both restarts. Optional backend app settings:
+> **No schema change.** Portal → activate PIM role if expired → Cloud Shell (Bash):
+> ```bash
+> git clone --depth 1 https://github.com/cyberlifeboy-design/GCMS-v2.git gcms-vapt1 && cd gcms-vapt1
+> SHA=$(git rev-parse --short HEAD)
+> (cd backend && az acr build --registry acrgcmsdevqc001 --image gcms-backend:$SHA --image gcms-backend:latest .)
+> (cd frontend && az acr build --registry acrgcmsdevqc001 --image gcms-frontend:$SHA --image gcms-frontend:latest \
+>   --build-arg VITE_MSAL_TENANT_ID=993ca615-6bd5-4d1c-8a7b-a1a99efc64b7 \
+>   --build-arg VITE_MSAL_CLIENT_ID=a073e36b-4a7c-4ac1-a005-6a20c3cd173b .)
+> az webapp restart --name app-gcms-be-dev-qc-001 --resource-group rg-gcms-dev-qc-001
+> az webapp restart --name app-gcms-fe-dev-qc-001 --resource-group rg-gcms-dev-qc-001
+> ```
+> Remember the new containers take ~4 min to start serving — poll until `GET <fe>/api/v1`
+> returns only `{"message":"GCMS API v1"}` before verifying. Optional backend app settings:
 > `SESSION_IDLE_MINUTES`, `SESSION_MAX_HOURS`. **Every user must sign in again** once after
 > the deploy (old tokens carry no session id).
 >
@@ -971,8 +990,8 @@ az containerapp create \
     DATABASE_URL=secretref:database-url \
     JWT_ACCESS_SECRET=secretref:jwt-access-secret \
     JWT_REFRESH_SECRET=secretref:jwt-refresh-secret \
-    JWT_EXPIRES_IN=7d \
-    JWT_REFRESH_EXPIRES_IN=30d \
+    SESSION_IDLE_MINUTES=15 \
+    SESSION_MAX_HOURS=8 \
     CORS_ORIGIN=https://gcms.yourdomain.com \
     STORAGE_DRIVER=azure-blob \
     AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-conn \
@@ -1181,7 +1200,7 @@ Two independent safety nets:
 | `PORT` | Yes | `3005` — must match `--target-port` in Step 5.2 |
 | `DATABASE_URL` | Yes | Postgres connection string, `sslmode=require` |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Yes | Random secrets — app refuses to boot without them in production |
-| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | No | Token lifetimes, default `7d` / `30d` |
+| `SESSION_IDLE_MINUTES` / `SESSION_MAX_HOURS` | No | Session inactivity timeout / absolute lifetime, default `15` / `8` (2026-10-06, VAPT #3/#5). Access tokens are fixed at 15 min; the old `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` were never read by the code and are ignored |
 | `CORS_ORIGIN` | Yes | Comma-separated list of allowed origins — must match your real domain |
 | `STORAGE_DRIVER` | Yes in prod | `local` \| `minio` \| `azure-blob` — must be `azure-blob` for this deployment |
 | `AZURE_STORAGE_CONNECTION_STRING` | Yes (if azure-blob) | From the storage account created in Step 5.1 |

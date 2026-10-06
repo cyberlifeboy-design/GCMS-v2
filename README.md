@@ -36,14 +36,18 @@ GCMS is a comprehensive fleet management system designed for golf cart operation
 - **Maintenance Tracking**: Full workflow from issue report → Admin escalation → Contracts quotation request → Maintenance quotation submission (QAR) → Contracts approval/rejection → resolution; PDF report generation with embedded photos
 - **Incident Report**: Standalone bilingual HTML incident report form with system logo, vehicle inspection checklist, and print-to-PDF
 - **Reporting**: Export reports in Excel, PDF, or Word formats
-- **Public Request System**: Allow department leads to request carts without login
+- **Car Request System**: Signed-in users request dedicated carts (requester identity taken from the account)
 - **System Configuration**: Comprehensive settings for customization
 
 ## Features
 
 ### 🔐 Authentication & Authorization
 
-- **JWT-based authentication** with refresh tokens
+- **JWT-based authentication** (15-minute access tokens) backed by **server-side sessions**
+- **One active session per account** — signing in on another device ends the previous session (VAPT #3)
+- **Session expiry** — 15 min inactivity / 8 h absolute (`SESSION_IDLE_MINUTES`, `SESSION_MAX_HOURS`); sessions are revoked on logout, password change/reset, deactivation and blocking (VAPT #5)
+- **Rate limiting** — 20 submissions/hour per account, 5 sign-in attempts per 15 min per IP + account, 100 requests/min per IP
+- **Microsoft (SC/LOC) sign-in** via Entra ID, alongside email/password
 - **Password reset** via email
 - **Role-based access control** (RBAC) with six roles:
   - **SuperAdmin**: Full system access, stadium management, all stadiums visibility
@@ -225,9 +229,9 @@ cumulative warnings — distinct from the standalone print-form above.
 - **Signed Handover Forms (FA)**: "My Reports" page includes a "Signed Handover Forms" card listing all the FA's completed/returned forms with Cart#, type, venue, status badge, signed date, and "View & PDF" button
 - **Handover Forms Tab (Admin)**: Admin "Reports" page includes a "Handover Forms" tab with search, filter, paginated table, and "View & PDF" per row
 
-### 📝 Car Request System (Public)
+### 📝 Car Request System
 
-- **Public Request Form**: Department leads can request *dedicated* carts without login — themed to match the corporate MDS portal (mds.sc.qa) login look. Pool/shared carts are booked separately via the live-availability Booking page.
+- **Request Form (sign-in required)**: Department leads request *dedicated* carts from "Request Dedicated Carts" inside the app; name/email come from the signed-in account (security review 2026-09-29). Pool/shared carts are booked separately via "Book a Pool Cart".
 - **Business Justification**: Required field explaining why the department needs the carts
 - **Request Link Generator**: SuperAdmin creates shareable links
 - **Approval Workflow**: Admin/SuperAdmin approves or rejects requests; can also email the requester directly from the request detail view to ask for more information
@@ -561,12 +565,24 @@ GCMS-v2/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/auth/login` | POST | User login |
-| `/auth/logout` | POST | User logout |
-| `/auth/refresh` | POST | Refresh access token |
+| `/auth/login` | POST | User login — starts a new session and ends any other session of the account |
+| `/auth/microsoft` | POST | Sign in with a verified Microsoft (SC/LOC) ID token |
+| `/auth/logout` | POST | User logout (ends the session server-side) |
+| `/auth/refresh` | POST | New access token while the session is still valid (does not count as activity) |
 | `/auth/me` | GET | Get current user |
+| `/auth/change-password` | POST | Change own password (other sessions are ended) |
 | `/auth/forgot-password` | POST | Request password reset |
-| `/auth/reset-password` | POST | Reset password with token |
+| `/auth/reset-password` | POST | Reset password with token (all sessions are ended) |
+
+Every authenticated request is checked against its server-side session. Rejections return
+`401` with `code: "SESSION_ENDED"` (signed in elsewhere / logged out / revoked) or
+`code: "SESSION_EXPIRED"` (idle or absolute timeout). Requests sent with `X-Background: 1`
+(background polling) don't count as activity.
+
+### Lookups (`/public/stadiums`, `/public/departments`)
+
+Not anonymous (VAPT #4): they need a signed-in user, or — for the account-request page — a valid
+invitation token in `X-Invite-Token` or a server-verified Microsoft ID token in `X-MS-Id-Token`.
 
 ### Fleet (`/fleet`)
 
@@ -770,8 +786,10 @@ AuditLog
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `DATABASE_URL` | PostgreSQL or SQLite connection string | Yes |
-| `JWT_SECRET` | JWT signing secret | Yes |
-| `JWT_REFRESH_SECRET` | Refresh token secret | Yes |
+| `JWT_ACCESS_SECRET` | Access-token signing secret | Yes |
+| `JWT_REFRESH_SECRET` | Required at boot in production (legacy; refresh tokens are now opaque DB-backed values) | Yes |
+| `SESSION_IDLE_MINUTES` | Inactivity timeout, default `15` | No |
+| `SESSION_MAX_HOURS` | Absolute session lifetime, default `8` | No |
 | `CORS_ORIGIN` | Allowed CORS origin(s) | Yes |
 | `MINIO_ENDPOINT` | MinIO endpoint | Prod only |
 | `MINIO_PORT` | MinIO port | Prod only |

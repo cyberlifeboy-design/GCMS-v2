@@ -32,7 +32,7 @@
 | **Database** | PostgreSQL (via Prisma ORM) |
 | **Storage** | MinIO (photos & branding) |
 | **Frontend** | React 18 + Vite + Tailwind CSS + Zustand |
-| **Auth** | JWT (access + refresh tokens) |
+| **Auth** | JWT access tokens (15 min) + server-side sessions: one per account, 15 min idle / 8 h absolute expiry |
 | **Ports** | Backend: 3005, Frontend (Vite dev): 3000 |
 
 ---

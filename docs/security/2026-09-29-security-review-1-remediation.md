@@ -172,7 +172,7 @@ submissions per account per hour.
 | R3 | Audit log records the leftmost `X-Forwarded-For` value, which the client controls | Low | Record the proxy-derived client IP once R1 is resolved. |
 | R4 | `/api/v1/storage/:bucket/:file` (signatures and photos) is unauthenticated | Low | Filenames carry a 64-bit random token (fixed 2026-09-19), so they aren't practically enumerable. Optionally move to signed URLs. |
 | R5 | Access tokens stored in `localStorage` | Low | Standard SPA trade-off; mitigated by the strict CSP (`script-src 'self'`). Revisit if any third-party script is ever added. |
-| R6 | Public read endpoints `/public/stadiums`, `/public/departments`, `/settings/public` | Info | Needed by the login and access-request pages; they return names/codes only. Accepted. |
+| R6 | Public read endpoints `/public/stadiums`, `/public/departments`, `/settings/public` | Info | ~~Accepted~~ **Superseded 2026-10-06:** VAPT v1.0 #4 rated this Medium; `/public/stadiums` and `/public/departments` now require sign-in or an invite / verified MS token (see `2026-10-06-vapt-v1.0-remediation.md`). `/settings/public` (branding only) stays public for the login page. |
 
 ---
 

@@ -95,8 +95,8 @@ az containerapp create \
     DATABASE_URL=secretref:database-url \
     JWT_ACCESS_SECRET=secretref:jwt-access-secret \
     JWT_REFRESH_SECRET=secretref:jwt-refresh-secret \
-    JWT_EXPIRES_IN=7d \
-    JWT_REFRESH_EXPIRES_IN=30d \
+    SESSION_IDLE_MINUTES=15 \
+    SESSION_MAX_HOURS=8 \
     CORS_ORIGIN=https://gcms.yourdomain.com \
     STORAGE_DRIVER=azure-blob \
     AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-conn \
